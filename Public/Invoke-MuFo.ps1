@@ -310,7 +310,15 @@ function Invoke-MuFo {
                                 Write-Host "What If: Performing Rename Operation"
                                 $renameMap.GetEnumerator() | Format-List
                             } else {
-                                Write-Host "What If: No rename candidates at the current threshold." -ForegroundColor DarkYellow
+                                # If nothing to rename, check for equal-name cases and surface that clearly
+                                $equalCases = $albumComparisons | Where-Object { $_.ProposedName -and [string]::Equals($_.LocalAlbum, $_.ProposedName, [StringComparison]::InvariantCultureIgnoreCase) }
+                                if ($equalCases) {
+                                    foreach ($e in $equalCases) {
+                                        Write-Host ("Nothing to Rename: {0} is the same as {1}" -f $e.LocalAlbum, $e.ProposedName) -ForegroundColor DarkYellow
+                                    }
+                                } else {
+                                    Write-Host "What If: No rename candidates at the current threshold." -ForegroundColor DarkYellow
+                                }
                             }
                         }
 
@@ -321,7 +329,7 @@ function Invoke-MuFo {
                                 try {
                                     $action = 'skip'; $message = ''
                                     if (-not $c.ProposedName) { $message = 'no-proposal'; $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
-                                    if ([string]::Equals($c.LocalAlbum, $c.ProposedName, [StringComparison]::InvariantCultureIgnoreCase)) { $message = 'already-matching'; $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
+                                    if ([string]::Equals($c.LocalAlbum, $c.ProposedName, [StringComparison]::InvariantCultureIgnoreCase)) { Write-Host ("Nothing to Rename: {0} is the same as {1}" -f $c.LocalAlbum, $c.ProposedName) -ForegroundColor DarkYellow; $message = 'already-matching'; $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
                                     $currentPath = [string]$c.LocalPath
                                     $targetPath  = Join-Path -Path $Path -ChildPath $c.ProposedName
                                     if (Test-Path -LiteralPath $targetPath) { Write-Warning ("Skip rename: Target already exists: {0}" -f $targetPath); $message = 'target-exists'; $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
