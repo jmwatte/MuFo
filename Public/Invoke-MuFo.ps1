@@ -277,9 +277,9 @@ function Invoke-MuFo {
                             }
                             $objFull = [PSCustomObject]$rec
                             $records += $objFull
-                            # Concise view for WhatIf/Preview by default
+                            # Default to concise view unless -ShowEverything/-Detailed is set
                             $wantFull = ($ShowEverything -or $Detailed)
-                            if (($WhatIfPreference -or $Preview) -and -not $wantFull) {
+                            if (-not $wantFull) {
                                 $objDisplay = [PSCustomObject]([ordered]@{
                                     Artist        = $objFull.Artist
                                     LocalFolder   = $objFull.LocalFolder
@@ -335,7 +335,7 @@ function Invoke-MuFo {
                                     if ($shouldRename) {
                                         if ($PSCmdlet.ShouldProcess($currentPath, ("Rename to '{0}'" -f $c.ProposedName))) {
                                             Rename-Item -LiteralPath $currentPath -NewName $c.ProposedName -ErrorAction Stop
-                                            Write-Host ("Renamed: '{0}' -> '{1}'" -f $c.LocalAlbum, $c.ProposedName) -ForegroundColor Green
+                                            Write-Verbose ("Renamed: '{0}' -> '{1}'" -f $c.LocalAlbum, $c.ProposedName)
                                             $action = 'rename'; $message = 'renamed'
                                         }
                                     } else {
@@ -344,6 +344,14 @@ function Invoke-MuFo {
                                     }
                                     $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }
                                 } catch { Write-Warning ("Rename failed for '{0}': {1}" -f $c.LocalAlbum, $_.Exception.Message); $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action='error'; Reason=$_.Exception.Message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName } }
+                            }
+                            # Print a concise map of performed renames
+                            $performed = $outcomes | Where-Object { $_.Action -eq 'rename' }
+                            if ($performed) {
+                                $renameMap = [ordered]@{}
+                                foreach ($r in $performed) { $renameMap[[string]$r.LocalPath] = [string]$r.NewFolderName }
+                                Write-Host "Performed Rename Operation"
+                                $renameMap.GetEnumerator() | Format-List
                             }
                             if ($LogTo) {
                                 try {
