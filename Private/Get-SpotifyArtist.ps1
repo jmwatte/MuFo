@@ -27,7 +27,7 @@ function Get-SpotifyArtist {
 
     try {
         # Use Spotishell to search for the artist
-        $results = Search-SpotifyArtist -Query $ArtistName
+        $results = Get-SpotifyArtist -Name $ArtistName
         Write-Verbose "Found $($results.Count) artist results for '$ArtistName'"
 
         if ($results) {
