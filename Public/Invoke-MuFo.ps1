@@ -275,6 +275,28 @@ function Invoke-MuFo {
                             }
                         }
 
+                        # If running in WhatIf or -Preview, and summary requested, print a concise rename map
+                        if ($ShowSummary) {
+                            $isPreview = $Preview -or $WhatIfPreference
+                            if ($isPreview) {
+                                $renameMap = [ordered]@{}
+                                foreach ($c in ($albumComparisons | Sort-Object -Property MatchScore -Descending)) {
+                                    if ($c.ProposedName -and -not [string]::Equals($c.LocalAlbum, $c.ProposedName, [StringComparison]::InvariantCultureIgnoreCase)) {
+                                        # Only include confident suggestions (at/above threshold)
+                                        if ($c.MatchScore -ge $goodThreshold) {
+                                            $renameMap[[string]$c.LocalPath] = [string]$c.ProposedName
+                                        }
+                                    }
+                                }
+                                if ($renameMap.Count -gt 0) {
+                                    Write-Host "What If: Performing Rename Operation"
+                                    $renameMap.GetEnumerator() | Format-List
+                                } else {
+                                    Write-Host "What If: No rename candidates at the current threshold." -ForegroundColor DarkYellow
+                                }
+                            }
+                        }
+
                         # If Preview, skip renames entirely (clean output, no WhatIf chatter)
                         if (-not $Preview) {
                             $outcomes = @()
