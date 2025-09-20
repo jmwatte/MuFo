@@ -77,7 +77,16 @@ function Invoke-MuFo {
 
     begin {
         # Initialization code here
-    Write-Verbose "Starting Invoke-MuFo with Path: $Path, DoIt: $DoIt, ConfidenceThreshold: $ConfidenceThreshold"
+        Write-Verbose "Starting Invoke-MuFo with Path: $Path, DoIt: $DoIt, ConfidenceThreshold: $ConfidenceThreshold"
+        function ConvertTo-SafeFileName {
+            param([Parameter(Mandatory)][string]$Name)
+            $invalid = [IO.Path]::GetInvalidFileNameChars()
+            $chars = $Name.ToCharArray() | ForEach-Object { if ($invalid -contains $_) { ' ' } else { $_ } }
+            $out = -join $chars
+            $out = $out -replace '\s{2,}', ' '
+            $out = $out.Trim().TrimEnd('.')
+            return $out
+        }
         # Connect to Spotify (validate Spotishell setup)
         if (Get-Module -ListAvailable -Name Spotishell) {
             Connect-SpotifyService
@@ -149,6 +158,10 @@ function Invoke-MuFo {
                             # Normalize local name: strip optional leading year and separators, e.g., "1974 - Sheet Music" -> "Sheet Music"
                             $normalizedLocal = $dirName -replace '^[\(\[]?\d{4}[\)\]]?\s*[-–—._ ]\s*',''
                             if ([string]::IsNullOrWhiteSpace($normalizedLocal)) { $normalizedLocal = $dirName }
+                            # Detect if original had year prefix and capture it
+                            $origYear = $null
+                            $m = [regex]::Match($dirName, '^[\(\[]?(?<year>\d{4})[\)\]]?')
+                            if ($m.Success) { $origYear = $m.Groups['year'].Value }
                             foreach ($sa in $spotifyAlbums) {
                                 try {
                                     if (-not $sa) { continue }
@@ -174,12 +187,33 @@ function Invoke-MuFo {
                                     } catch { }
                                 }
                             }
+                            # Build proposed target name based on Spotify album name and available year info
+                            $matchName = if ($best) { [string]$best.Name } else { $null }
+                            $matchType = if ($best) { $best.AlbumType } else { $null }
+                            $matchYear = $null
+                            if ($best -and $best.PSObject.Properties.Match('ReleaseDate').Count -gt 0 -and $best.ReleaseDate) {
+                                $ym = [regex]::Match([string]$best.ReleaseDate, '^(?<y>\d{4})')
+                                if ($ym.Success) { $matchYear = $ym.Groups['y'].Value }
+                            }
+                            $targetBase = if ($matchName) { ConvertTo-SafeFileName $matchName } else { $null }
+                            $proposed = $null
+                            if ($targetBase) {
+                                if ($origYear) {
+                                    $y = if ($matchYear) { $matchYear } else { $origYear }
+                                    $proposed = "${y} - $targetBase"
+                                } else {
+                                    $proposed = $targetBase
+                                }
+                            }
                             $albumComparisons += [PSCustomObject]@{
                                 LocalAlbum  = $dirName
                                 LocalNorm   = $normalizedLocal
-                                MatchName   = if ($best) { $best.Name } else { $null }
-                                MatchType   = if ($best) { $best.AlbumType } else { $null }
+                                LocalPath   = $dir.FullName
+                                MatchName   = $matchName
+                                MatchType   = $matchType
                                 MatchScore  = [math]::Round($bestScore,2)
+                                MatchYear   = $matchYear
+                                ProposedName= $proposed
                             }
                         }
 
@@ -190,6 +224,38 @@ function Invoke-MuFo {
                         foreach ($c in $albumComparisons | Sort-Object -Property MatchScore -Descending) {
                             $color = if ($c.MatchScore -ge $goodThreshold) { 'Green' } elseif ($c.MatchScore -ge $warnThreshold) { 'DarkYellow' } else { 'Red' }
                             Write-Host ("Album: '{0}' (norm '{1}') -> '{2}' ({3}) Score={4}" -f $c.LocalAlbum, $c.LocalNorm, $c.MatchName, $c.MatchType, $c.MatchScore) -ForegroundColor $color
+                        }
+
+                        # Apply rename actions per DoIt mode
+                        foreach ($c in $albumComparisons) {
+                            try {
+                                if (-not $c.ProposedName) { continue }
+                                # Skip if name already matches (case-insensitive)
+                                if ([string]::Equals($c.LocalAlbum, $c.ProposedName, [StringComparison]::InvariantCultureIgnoreCase)) { continue }
+                                $currentPath = [string]$c.LocalPath
+                                $targetPath  = Join-Path -Path $Path -ChildPath $c.ProposedName
+                                if (Test-Path -LiteralPath $targetPath) {
+                                    Write-Warning ("Skip rename: Target already exists: {0}" -f $targetPath)
+                                    continue
+                                }
+
+                                $shouldRename = $false
+                                switch ($DoIt) {
+                                    'Automatic' { $shouldRename = ($c.MatchScore -ge $goodThreshold) }
+                                    'Smart'     { if ($c.MatchScore -ge $goodThreshold) { $shouldRename = $true } else { $resp = Read-Host ("Rename '{0}' -> '{1}'? [y/N]" -f $c.LocalAlbum, $c.ProposedName); if ($resp -match '^(?i)y(es)?$') { $shouldRename = $true } } }
+                                    'Manual'    { $resp = Read-Host ("Rename '{0}' -> '{1}'? [y/N]" -f $c.LocalAlbum, $c.ProposedName); if ($resp -match '^(?i)y(es)?$') { $shouldRename = $true } }
+                                }
+                                if ($shouldRename) {
+                                    if ($PSCmdlet.ShouldProcess($currentPath, ("Rename to '{0}'" -f $c.ProposedName))) {
+                                        Rename-Item -LiteralPath $currentPath -NewName $c.ProposedName -ErrorAction Stop
+                                        Write-Host ("Renamed: '{0}' -> '{1}'" -f $c.LocalAlbum, $c.ProposedName) -ForegroundColor Green
+                                    }
+                                } else {
+                                    Write-Verbose ("Skipped rename for '{0}' (score {1})" -f $c.LocalAlbum, $c.MatchScore)
+                                }
+                            } catch {
+                                Write-Warning ("Rename failed for '{0}': {1}" -f $c.LocalAlbum, $_.Exception.Message)
+                            }
                         }
                     } catch {
                         Write-Warning ("Album verification failed: {0}" -f $_)
