@@ -93,13 +93,10 @@ function Invoke-MuFo {
         [switch]$Preview,
 
         [Parameter(Mandatory = $false)]
-        [switch]$ShowSummary
-        ,
-        [Parameter(Mandatory = $false)]
-    [switch]$Detailed,
+        [switch]$Detailed,
 
-    [Parameter(Mandatory = $false)]
-    [switch]$ShowEverything
+        [Parameter(Mandatory = $false)]
+        [switch]$ShowEverything
     )
 
     begin {
@@ -327,7 +324,7 @@ function Invoke-MuFo {
                                     if ([string]::Equals($c.LocalAlbum, $c.ProposedName, [StringComparison]::InvariantCultureIgnoreCase)) { $message = 'already-matching'; $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
                                     $currentPath = [string]$c.LocalPath
                                     $targetPath  = Join-Path -Path $Path -ChildPath $c.ProposedName
-                                    if (Test-Path -LiteralPath $targetPath) { if ($ShowSummary) { Write-Warning ("Skip rename: Target already exists: {0}" -f $targetPath) }; $message = 'target-exists'; $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
+                                    if (Test-Path -LiteralPath $targetPath) { Write-Warning ("Skip rename: Target already exists: {0}" -f $targetPath); $message = 'target-exists'; $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
 
                                     $shouldRename = $false
                                     switch ($DoIt) {
@@ -338,15 +335,15 @@ function Invoke-MuFo {
                                     if ($shouldRename) {
                                         if ($PSCmdlet.ShouldProcess($currentPath, ("Rename to '{0}'" -f $c.ProposedName))) {
                                             Rename-Item -LiteralPath $currentPath -NewName $c.ProposedName -ErrorAction Stop
-                                            if ($ShowSummary) { Write-Host ("Renamed: '{0}' -> '{1}'" -f $c.LocalAlbum, $c.ProposedName) -ForegroundColor Green }
+                                            Write-Host ("Renamed: '{0}' -> '{1}'" -f $c.LocalAlbum, $c.ProposedName) -ForegroundColor Green
                                             $action = 'rename'; $message = 'renamed'
                                         }
                                     } else {
-                                        if ($ShowSummary) { Write-Verbose ("Skipped rename for '{0}' (score {1})" -f $c.LocalAlbum, $c.MatchScore) }
+                                        Write-Verbose ("Skipped rename for '{0}' (score {1})" -f $c.LocalAlbum, $c.MatchScore)
                                         $action = 'skip'; $message = if ($c.MatchScore -ge $goodThreshold) { 'user-declined' } else { 'below-threshold' }
                                     }
                                     $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }
-                                } catch { if ($ShowSummary) { Write-Warning ("Rename failed for '{0}': {1}" -f $c.LocalAlbum, $_.Exception.Message) }; $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action='error'; Reason=$_.Exception.Message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName } }
+                                } catch { Write-Warning ("Rename failed for '{0}': {1}" -f $c.LocalAlbum, $_.Exception.Message); $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action='error'; Reason=$_.Exception.Message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName } }
                             }
                             if ($LogTo) {
                                 try {
@@ -354,8 +351,8 @@ function Invoke-MuFo {
                                     if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
                                     $payload = [PSCustomObject]@{ Timestamp = (Get-Date).ToString('o'); Path = (Resolve-Path -LiteralPath $Path).Path; Mode = $DoIt; ConfidenceThreshold = $ConfidenceThreshold; Items = $outcomes }
                                     ($payload | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $LogTo -Encoding utf8
-                                    if ($ShowSummary) { Write-Verbose ("Wrote JSON log: {0}" -f $LogTo) }
-                                } catch { if ($ShowSummary) { Write-Warning ("Failed to write log '{0}': {1}" -f $LogTo, $_.Exception.Message) } }
+                                    Write-Verbose ("Wrote JSON log: {0}" -f $LogTo)
+                                } catch { Write-Warning ("Failed to write log '{0}': {1}" -f $LogTo, $_.Exception.Message) }
                             }
                         } else {
                             # Preview-only logging
@@ -365,8 +362,8 @@ function Invoke-MuFo {
                                     if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
                                     $payload = [PSCustomObject]@{ Timestamp = (Get-Date).ToString('o'); Path = (Resolve-Path -LiteralPath $Path).Path; Mode = 'Preview'; ConfidenceThreshold = $ConfidenceThreshold; Items = $records }
                                     ($payload | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $LogTo -Encoding utf8
-                                    if ($ShowSummary) { Write-Verbose ("Wrote JSON log: {0}" -f $LogTo) }
-                                } catch { if ($ShowSummary) { Write-Warning ("Failed to write log '{0}': {1}" -f $LogTo, $_.Exception.Message) } }
+                                    Write-Verbose ("Wrote JSON log: {0}" -f $LogTo)
+                                } catch { Write-Warning ("Failed to write log '{0}': {1}" -f $LogTo, $_.Exception.Message) }
                             }
                         }
                     } catch {
