@@ -127,12 +127,37 @@ function Invoke-MuFo {
                         $albumComparisons = @()
                         foreach ($dir in $localAlbumDirs) {
                             $best = $null; $bestScore = 0; $dirName = [string]$dir.Name
+                            # Normalize local name: strip optional leading year and separators, e.g., "1974 - Sheet Music" -> "Sheet Music"
+                            $normalizedLocal = $dirName -replace '^[\(\[]?\d{4}[\)\]]?\s*[-–—._ ]\s*',''
+                            if ([string]::IsNullOrWhiteSpace($normalizedLocal)) { $normalizedLocal = $dirName }
                             foreach ($sa in $spotifyAlbums) {
-                                $score = Get-StringSimilarity -String1 $dirName -String2 $sa.Name
-                                if ($score -gt $bestScore) { $bestScore = $score; $best = $sa }
+                                try {
+                                    if (-not $sa) { continue }
+                                    $saName = $null
+                                    if ($sa.PSObject.Properties.Match('Name').Count -gt 0) { $saName = $sa.Name }
+                                    elseif ($sa.PSObject.Properties.Match('name').Count -gt 0) { $saName = $sa.name }
+                                    if ($null -eq $saName) { continue }
+                                    if ($saName -is [array]) { $saName = ($saName -join ' ') } else { $saName = [string]$saName }
+                                    $score = Get-StringSimilarity -String1 $normalizedLocal -String2 $saName
+                                    if ($score -gt $bestScore) { $bestScore = $score; $best = $sa }
+                                } catch {
+                                    Write-Verbose ("Album compare skipped due to error: {0}" -f $_.Exception.Message)
+                                    # fallback quick ratio
+                                    try {
+                                        $n1 = $normalizedLocal.ToLowerInvariant().Trim()
+                                        $n2 = ([string]$saName).ToLowerInvariant().Trim()
+                                        if (-not [string]::IsNullOrWhiteSpace($n1) -and -not [string]::IsNullOrWhiteSpace($n2)) {
+                                            $l1 = $n1.Length; $l2 = $n2.Length
+                                            $max = [Math]::Max($l1, $l2)
+                                            if ($max -gt 0) { $fallback = ([Math]::Min($l1, $l2) / $max) } else { $fallback = 0 }
+                                            if ($fallback -gt $bestScore) { $bestScore = $fallback; $best = $sa }
+                                        }
+                                    } catch { }
+                                }
                             }
                             $albumComparisons += [PSCustomObject]@{
                                 LocalAlbum  = $dirName
+                                LocalNorm   = $normalizedLocal
                                 MatchName   = if ($best) { $best.Name } else { $null }
                                 MatchType   = if ($best) { $best.AlbumType } else { $null }
                                 MatchScore  = [math]::Round($bestScore,2)
@@ -142,7 +167,7 @@ function Invoke-MuFo {
                         # Display summary; later we'll wire -DoIt rename/apply
                         foreach ($c in $albumComparisons | Sort-Object -Property MatchScore -Descending) {
                             $color = if ($c.MatchScore -ge 0.9) { 'Green' } elseif ($c.MatchScore -ge 0.75) { 'DarkYellow' } else { 'Red' }
-                            Write-Host ("Album: '{0}' -> '{1}' ({2}) Score={3}" -f $c.LocalAlbum, $c.MatchName, $c.MatchType, $c.MatchScore) -ForegroundColor $color
+                            Write-Host ("Album: '{0}' (norm '{1}') -> '{2}' ({3}) Score={4}" -f $c.LocalAlbum, $c.LocalNorm, $c.MatchName, $c.MatchType, $c.MatchScore) -ForegroundColor $color
                         }
                     } catch {
                         Write-Warning ("Album verification failed: {0}" -f $_)

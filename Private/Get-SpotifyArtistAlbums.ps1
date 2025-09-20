@@ -23,14 +23,29 @@ function Get-SpotifyArtistAlbums {
     )
 
     try {
-        $albumsResult = Get-ArtistAlbums -Id $ArtistId -ErrorAction Stop
+        $albumsResult = Get-ArtistAlbums -Id $ArtistId -Album -ErrorAction Stop
         $items = @()
+        if ($null -eq $albumsResult) { $albumsResult = @() }
+
+        # Spotishell can return:
+        # - An array of album objects
+        # - An array of pages with .Items
+        # - A single object with .Items
+        # - A single object with .Albums.Items
         if ($albumsResult -is [System.Array]) {
-            foreach ($page in $albumsResult) {
-                if ($page.Items) { $items += $page.Items }
+            if (($albumsResult | Select-Object -First 1) -and ($albumsResult[0].PSObject.Properties.Match('Name').Count -gt 0)) {
+                # Direct array of album objects
+                $items = $albumsResult
+            } else {
+                foreach ($page in $albumsResult) {
+                    if ($page.PSObject.Properties.Match('Items').Count -gt 0 -and $page.Items) { $items += $page.Items }
+                    elseif ($page.PSObject.Properties.Match('Albums').Count -gt 0 -and $page.Albums -and $page.Albums.Items) { $items += $page.Albums.Items }
+                }
             }
         } else {
-            if ($albumsResult.Items) { $items = $albumsResult.Items }
+            if ($albumsResult.PSObject.Properties.Match('Items').Count -gt 0 -and $albumsResult.Items) { $items = $albumsResult.Items }
+            elseif ($albumsResult.PSObject.Properties.Match('Albums').Count -gt 0 -and $albumsResult.Albums -and $albumsResult.Albums.Items) { $items = $albumsResult.Albums.Items }
+            elseif ($albumsResult.PSObject.Properties.Match('Name').Count -gt 0) { $items = @($albumsResult) }
         }
         Write-Verbose ("Artist album items collected: {0}" -f (($items | Measure-Object).Count))
 
