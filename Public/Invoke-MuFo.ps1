@@ -14,6 +14,9 @@ function Invoke-MuFo {
 .PARAMETER DoIt
     The mode for applying changes: Automatic, Manual, or Smart.
 
+.PARAMETER ConfidenceThreshold
+    Minimum similarity score [0..1] to consider a match "confident". Used by Smart mode and album colorization. Default 0.9.
+
 .PARAMETER ArtistAt
     Specifies the folder level for the artist (e.g., 1U for one up, 1D for one down).
 
@@ -47,6 +50,10 @@ function Invoke-MuFo {
         [string]$DoIt = "Manual",
 
         [Parameter(Mandatory = $false)]
+        [ValidateRange(0.0,1.0)]
+        [double]$ConfidenceThreshold = 0.9,
+
+        [Parameter(Mandatory = $false)]
         [string]$ArtistAt,
 
         [Parameter(Mandatory = $false)]
@@ -58,7 +65,7 @@ function Invoke-MuFo {
 
     begin {
         # Initialization code here
-        Write-Verbose "Starting Invoke-MuFo with Path: $Path, DoIt: $DoIt"
+    Write-Verbose "Starting Invoke-MuFo with Path: $Path, DoIt: $DoIt, ConfidenceThreshold: $ConfidenceThreshold"
         # Connect to Spotify (validate Spotishell setup)
         if (Get-Module -ListAvailable -Name Spotishell) {
             Connect-SpotifyService
@@ -96,7 +103,7 @@ function Invoke-MuFo {
                         }
                     }
                     "Smart" {
-                        if ($topMatches[0].Score -ge 0.9) {
+                        if ($topMatches[0].Score -ge $ConfidenceThreshold) {
                             $selectedArtist = $topMatches[0].Artist
                             Write-Host "Smart selected: $($selectedArtist.Name)"
                         } else {
@@ -165,8 +172,11 @@ function Invoke-MuFo {
                         }
 
                         # Display summary; later we'll wire -DoIt rename/apply
+                        # Use ConfidenceThreshold for green, and a warning band slightly below it
+                        $goodThreshold = [double]$ConfidenceThreshold
+                        $warnThreshold = [Math]::Max(0.0, [double]$ConfidenceThreshold - 0.15) # assumption: warn band = threshold - 0.15
                         foreach ($c in $albumComparisons | Sort-Object -Property MatchScore -Descending) {
-                            $color = if ($c.MatchScore -ge 0.9) { 'Green' } elseif ($c.MatchScore -ge 0.75) { 'DarkYellow' } else { 'Red' }
+                            $color = if ($c.MatchScore -ge $goodThreshold) { 'Green' } elseif ($c.MatchScore -ge $warnThreshold) { 'DarkYellow' } else { 'Red' }
                             Write-Host ("Album: '{0}' (norm '{1}') -> '{2}' ({3}) Score={4}" -f $c.LocalAlbum, $c.LocalNorm, $c.MatchName, $c.MatchType, $c.MatchScore) -ForegroundColor $color
                         }
                     } catch {
