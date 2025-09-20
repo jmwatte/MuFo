@@ -73,13 +73,13 @@ function Invoke-MuFo {
             $artistName = Split-Path $Path -Leaf
             Write-Host "Processing artist: $artistName"
 
-            # Search Spotify for the artist
-            $spotifyResults = Get-SpotifyArtist -ArtistName $artistName
-            if ($spotifyResults) {
-                Write-Host "Found $($spotifyResults.Count) potential matches on Spotify"
-                # TODO: Implement matching and DoIt logic
+            # Search Spotify for the artist and get best match
+            $matchedArtist = Get-SpotifyArtist -ArtistName $artistName
+            if ($matchedArtist) {
+                Write-Host "Matched artist: $($matchedArtist.Name)"
+                # TODO: Implement album verification and DoIt logic
             } else {
-                Write-Warning "No results found on Spotify for '$artistName'"
+                Write-Warning "No suitable match found on Spotify for '$artistName'"
             }
         }
     }
