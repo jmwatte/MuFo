@@ -73,13 +73,53 @@ function Invoke-MuFo {
             $artistName = Split-Path $Path -Leaf
             Write-Host "Processing artist: $artistName"
 
-            # Search Spotify for the artist and get best match
-            $matchedArtist = Get-SpotifyArtist -ArtistName $artistName
-            if ($matchedArtist) {
-                Write-Host "Matched artist: $($matchedArtist.Name)"
-                # TODO: Implement album verification and DoIt logic
+            # Search Spotify for the artist and get top matches
+            $topMatches = Get-SpotifyArtist -ArtistName $artistName
+            if ($topMatches) {
+                Write-Host "Found $($topMatches.Count) potential matches on Spotify"
+
+                $selectedArtist = $null
+                switch ($DoIt) {
+                    "Automatic" {
+                        $selectedArtist = $topMatches[0].Artist
+                        Write-Host "Automatically selected: $($selectedArtist.Name)"
+                    }
+                    "Manual" {
+                        # Prompt user to choose
+                        for ($i = 0; $i -lt $topMatches.Count; $i++) {
+                            Write-Host "$($i + 1). $($topMatches[$i].Artist.Name) (Score: $([math]::Round($topMatches[$i].Score, 2)))"
+                        }
+                        $choice = Read-Host "Select artist (1-$($topMatches.Count)) or press Enter to skip"
+                        if ($choice -and $choice -match '^\d+$' -and $choice -ge 1 -and $choice -le $topMatches.Count) {
+                            $selectedArtist = $topMatches[$choice - 1].Artist
+                        }
+                    }
+                    "Smart" {
+                        if ($topMatches[0].Score -ge 0.9) {
+                            $selectedArtist = $topMatches[0].Artist
+                            Write-Host "Smart selected: $($selectedArtist.Name)"
+                        } else {
+                            # Fall back to manual
+                            Write-Host "Low confidence, switching to manual mode"
+                            for ($i = 0; $i -lt $topMatches.Count; $i++) {
+                                Write-Host "$($i + 1). $($topMatches[$i].Artist.Name) (Score: $([math]::Round($topMatches[$i].Score, 2)))"
+                            }
+                            $choice = Read-Host "Select artist (1-$($topMatches.Count)) or press Enter to skip"
+                            if ($choice -and $choice -match '^\d+$' -and $choice -ge 1 -and $choice -le $topMatches.Count) {
+                                $selectedArtist = $topMatches[$choice - 1].Artist
+                            }
+                        }
+                    }
+                }
+
+                if ($selectedArtist) {
+                    Write-Host "Selected artist: $($selectedArtist.Name)"
+                    # TODO: Proceed with album verification
+                } else {
+                    Write-Warning "No artist selected"
+                }
             } else {
-                Write-Warning "No suitable match found on Spotify for '$artistName'"
+                Write-Warning "No matches found on Spotify for '$artistName'"
             }
         }
     }

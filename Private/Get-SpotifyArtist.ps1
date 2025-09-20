@@ -31,25 +31,19 @@ function Get-SpotifyArtist {
         Write-Verbose "Found $($results.Count) artist results for '$ArtistName'"
 
         if ($results) {
-            # Find the best match using fuzzy string comparison
-            $bestMatch = $null
-            $bestScore = 0
-
-            foreach ($result in $results) {
-                $score = Get-StringSimilarity -String1 $ArtistName -String2 $result.Name
-                if ($score -gt $bestScore) {
-                    $bestScore = $score
-                    $bestMatch = $result
+            # Sort results by similarity score
+            $scoredResults = $results | ForEach-Object {
+                $score = Get-StringSimilarity -String1 $ArtistName -String2 $_.Name
+                [PSCustomObject]@{
+                    Artist = $_
+                    Score = $score
                 }
-            }
+            } | Sort-Object -Property Score -Descending
 
-            if ($bestScore -ge $MatchThreshold) {
-                Write-Verbose "Best match: $($bestMatch.Name) with score $bestScore"
-                return $bestMatch
-            } else {
-                Write-Warning "No match found above threshold $MatchThreshold"
-                return $null
-            }
+            # Return top matches above threshold
+            $topMatches = $scoredResults | Where-Object { $_.Score -ge $MatchThreshold } | Select-Object -First 5
+            Write-Verbose "Top matches: $($topMatches.Count)"
+            return $topMatches
         } else {
             return $null
         }
