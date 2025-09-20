@@ -62,12 +62,25 @@ function Invoke-MuFo {
     begin {
         # Initialization code here
         Write-Verbose "Starting Invoke-MuFo with Path: $Path, DoIt: $DoIt"
+        # Connect to Spotify
+        Connect-Spotify
     }
 
     process {
         # Main logic here
         if ($PSCmdlet.ShouldProcess($Path, "Process music library")) {
-            Write-Host "Processing $Path"
+            # Get the folder name as artist name
+            $artistName = Split-Path $Path -Leaf
+            Write-Host "Processing artist: $artistName"
+
+            # Search Spotify for the artist
+            $spotifyResults = Get-SpotifyArtist -ArtistName $artistName
+            if ($spotifyResults) {
+                Write-Host "Found $($spotifyResults.Count) potential matches on Spotify"
+                # TODO: Implement matching and DoIt logic
+            } else {
+                Write-Warning "No results found on Spotify for '$artistName'"
+            }
         }
     }
 

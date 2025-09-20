@@ -51,7 +51,7 @@ Description = 'MuFo is a PowerShell module for validating and tagging music libr
 # ProcessorArchitecture = ''
 
 # Modules that must be imported into the global environment prior to importing this module
-# RequiredModules = @()
+RequiredModules = @('Spotishell')
 
 # Assemblies that must be loaded prior to importing this module
 # RequiredAssemblies = @()
