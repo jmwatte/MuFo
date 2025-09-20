@@ -297,8 +297,8 @@ function Invoke-MuFo {
                             }
                         }
 
-                        # If Preview, skip renames entirely (clean output, no WhatIf chatter)
-                        if (-not $Preview) {
+                        # If Preview or WhatIf, skip renames entirely (clean output, no WhatIf chatter)
+                        if (-not $Preview -and -not $WhatIfPreference) {
                             $outcomes = @()
                             foreach ($c in $albumComparisons) {
                                 try {
