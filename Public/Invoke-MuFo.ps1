@@ -131,9 +131,11 @@ function Invoke-MuFo {
                 Write-Verbose "Found $($topMatches.Count) potential matches on Spotify"
 
                 $selectedArtist = $null
+                $artistSelectionSource = 'search'
                 switch ($DoIt) {
                     "Automatic" {
                         $selectedArtist = $topMatches[0].Artist
+                        $artistSelectionSource = 'search'
                         Write-Verbose "Automatically selected: $($selectedArtist.Name)"
                     }
                     "Manual" {
@@ -144,6 +146,7 @@ function Invoke-MuFo {
                         $choice = Read-Host "Select artist (1-$($topMatches.Count)) [Enter=1, S=skip]"
                         if (-not $choice) {
                             $selectedArtist = $topMatches[0].Artist
+                            $artistSelectionSource = 'search'
                         } elseif ($choice -match '^(?i)s(kip)?$' -or $choice -match '^0$') {
                             # skip
                         } elseif ($choice -match '^\d+$' -and [int]$choice -ge 1 -and [int]$choice -le $topMatches.Count) {
@@ -172,8 +175,56 @@ function Invoke-MuFo {
                     }
                 }
 
+                if (-not $selectedArtist) {
+                    # Fallback: infer likely artist from local album folder names
+                    try {
+                        $localAlbumDirs = Get-ChildItem -LiteralPath $Path -Directory -ErrorAction SilentlyContinue
+                        $localNames = @()
+                        foreach ($d in $localAlbumDirs) {
+                            $n = [string]$d.Name
+                            $nn = $n -replace '^[\(\[]?\d{4}[\)\]]?\s*[-–—._ ]\s*',''
+                            if (-not [string]::IsNullOrWhiteSpace($nn)) { $localNames += $nn }
+                        }
+                        $artistVotes = @{}
+                        foreach ($ln in $localNames) {
+                            $matches = Get-SpotifyAlbumMatches -AlbumName $ln -ErrorAction SilentlyContinue
+                            foreach ($m in $matches) {
+                                foreach ($a in $m.Artists) {
+                                    if (-not $a.Name) { continue }
+                                    if (-not $artistVotes.ContainsKey($a.Name)) { $artistVotes[$a.Name] = [PSCustomObject]@{ Name=$a.Name; Id=$a.Id; Votes=0; BestScore=0.0 } }
+                                    $entry = $artistVotes[$a.Name]
+                                    $entry.Votes += 1
+                                    if ($m.Score -gt $entry.BestScore) { $entry.BestScore = [double]$m.Score }
+                                }
+                            }
+                        }
+                        if ($artistVotes.Count -gt 0) {
+                            $inferred = $artistVotes.Values | Sort-Object -Property Votes, BestScore -Descending | Select-Object -First 1
+                            if ($inferred) {
+                                # If smart threshold is high and votes >=2, auto-pick; otherwise suggest
+                                if ($DoIt -eq 'Automatic' -or ($DoIt -eq 'Smart' -and $inferred.BestScore -ge [Math]::Min(1.0, $ConfidenceThreshold))) {
+                                    $selectedArtist = [PSCustomObject]@{ Name=$inferred.Name; Id=$inferred.Id }
+                                    $artistSelectionSource = 'inferred'
+                                    Write-Verbose ("Inferred artist from albums: {0} (votes={1}, bestScore={2})" -f $inferred.Name, $inferred.Votes, ([math]::Round($inferred.BestScore,2)))
+                                } else {
+                                    Write-Host ("Likely artist based on albums: {0} (votes={1}, bestScore={2})" -f $inferred.Name, $inferred.Votes, ([math]::Round($inferred.BestScore,2)))
+                                    $resp = Read-Host ("Use inferred artist? [Y/n]")
+                                    if (-not $resp -or $resp -match '^(?i)y(es)?$') { $selectedArtist = [PSCustomObject]@{ Name=$inferred.Name; Id=$inferred.Id }; $artistSelectionSource = 'inferred' }
+                                }
+                            }
+                        }
+                    } catch { Write-Verbose ("Artist inference failed: {0}" -f $_.Exception.Message) }
+                }
+
                 if ($selectedArtist) {
                     Write-Verbose "Selected artist: $($selectedArtist.Name)"
+                    # If inferred and differs from folder artist name, hint possible typo
+                    if ($artistSelectionSource -eq 'inferred') {
+                        $folderArtist = $artistName
+                        if (-not [string]::Equals($folderArtist, $selectedArtist.Name, [StringComparison]::InvariantCultureIgnoreCase)) {
+                            Write-Host ("Possible artist typo: folder '{0}' -> Spotify '{1}'" -f $folderArtist, $selectedArtist.Name) -ForegroundColor DarkYellow
+                        }
+                    }
                     # Proceed with album verification: compare local folder names to Spotify artist albums
                     try {
                         # Local album folders = immediate subfolders under artist folder
@@ -265,6 +316,7 @@ function Invoke-MuFo {
                             $rec = [ordered]@{
                                 Artist        = $selectedArtist.Name
                                 ArtistId      = $selectedArtist.Id
+                                ArtistSource  = $artistSelectionSource
                                 LocalFolder   = $c.LocalAlbum
                                 LocalAlbum    = $c.LocalNorm
                                 SpotifyAlbum  = $c.MatchName
