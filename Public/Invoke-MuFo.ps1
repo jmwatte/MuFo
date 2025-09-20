@@ -117,9 +117,13 @@ function Invoke-MuFo {
                         for ($i = 0; $i -lt $topMatches.Count; $i++) {
                             Write-Host "$($i + 1). $($topMatches[$i].Artist.Name) (Score: $([math]::Round($topMatches[$i].Score, 2)))"
                         }
-                        $choice = Read-Host "Select artist (1-$($topMatches.Count)) or press Enter to skip"
-                        if ($choice -and $choice -match '^\d+$' -and $choice -ge 1 -and $choice -le $topMatches.Count) {
-                            $selectedArtist = $topMatches[$choice - 1].Artist
+                        $choice = Read-Host "Select artist (1-$($topMatches.Count)) [Enter=1, S=skip]"
+                        if (-not $choice) {
+                            $selectedArtist = $topMatches[0].Artist
+                        } elseif ($choice -match '^(?i)s(kip)?$' -or $choice -match '^0$') {
+                            # skip
+                        } elseif ($choice -match '^\d+$' -and [int]$choice -ge 1 -and [int]$choice -le $topMatches.Count) {
+                            $selectedArtist = $topMatches[[int]$choice - 1].Artist
                         }
                     }
                     "Smart" {
@@ -132,9 +136,13 @@ function Invoke-MuFo {
                             for ($i = 0; $i -lt $topMatches.Count; $i++) {
                                 Write-Host "$($i + 1). $($topMatches[$i].Artist.Name) (Score: $([math]::Round($topMatches[$i].Score, 2)))"
                             }
-                            $choice = Read-Host "Select artist (1-$($topMatches.Count)) or press Enter to skip"
-                            if ($choice -and $choice -match '^\d+$' -and $choice -ge 1 -and $choice -le $topMatches.Count) {
-                                $selectedArtist = $topMatches[$choice - 1].Artist
+                            $choice = Read-Host "Select artist (1-$($topMatches.Count)) [Enter=1, S=skip]"
+                            if (-not $choice) {
+                                $selectedArtist = $topMatches[0].Artist
+                            } elseif ($choice -match '^(?i)s(kip)?$' -or $choice -match '^0$') {
+                                # skip
+                            } elseif ($choice -match '^\d+$' -and [int]$choice -ge 1 -and [int]$choice -le $topMatches.Count) {
+                                $selectedArtist = $topMatches[[int]$choice - 1].Artist
                             }
                         }
                     }
