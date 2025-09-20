@@ -240,9 +240,8 @@ function Invoke-MuFo {
                         }
 
                         # Display summary; later we'll wire -DoIt rename/apply
-                        # Use ConfidenceThreshold for green, and a warning band slightly below it
+                        # Threshold used for decisions and rename map
                         $goodThreshold = [double]$ConfidenceThreshold
-                        $warnThreshold = [Math]::Max(0.0, [double]$ConfidenceThreshold - 0.15)
 
                         # Prepare decisions and emit structured objects
                         $records = @()
@@ -257,22 +256,20 @@ function Invoke-MuFo {
                             $rec = [ordered]@{
                                 Artist        = $selectedArtist.Name
                                 ArtistId      = $selectedArtist.Id
-                                LocalAlbum    = $c.LocalAlbum
-                                LocalNorm     = $c.LocalNorm
+                                LocalFolder   = $c.LocalAlbum
+                                LocalAlbum    = $c.LocalNorm
                                 SpotifyAlbum  = $c.MatchName
                                 AlbumType     = $c.MatchType
                                 Score         = $c.MatchScore
-                                ProposedName  = $c.ProposedName
+                                LocalPath     = $c.LocalPath
+                                NewFolderName = $c.ProposedName
                                 Decision      = $decision
                                 Reason        = $reason
                             }
                             $obj = [PSCustomObject]$rec
                             $records += $obj
                             Write-Output $obj
-                            if ($ShowSummary) {
-                                $color = if ($c.MatchScore -ge $goodThreshold) { 'Green' } elseif ($c.MatchScore -ge $warnThreshold) { 'DarkYellow' } else { 'Red' }
-                                Write-Host ("Album: '{0}' (norm '{1}') -> '{2}' ({3}) Score={4}" -f $c.LocalAlbum, $c.LocalNorm, $c.MatchName, $c.MatchType, $c.MatchScore) -ForegroundColor $color
-                            }
+                            # Intentionally suppress verbose per-album UI line to avoid redundancy when objects are emitted.
                         }
 
                         # If running in WhatIf or -Preview, and summary requested, print a concise rename map
@@ -303,11 +300,11 @@ function Invoke-MuFo {
                             foreach ($c in $albumComparisons) {
                                 try {
                                     $action = 'skip'; $message = ''
-                                    if (-not $c.ProposedName) { $message = 'no-proposal'; $outcomes += [PSCustomObject]@{ LocalAlbum=$c.LocalAlbum; ProposedName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
-                                    if ([string]::Equals($c.LocalAlbum, $c.ProposedName, [StringComparison]::InvariantCultureIgnoreCase)) { $message = 'already-matching'; $outcomes += [PSCustomObject]@{ LocalAlbum=$c.LocalAlbum; ProposedName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
+                                    if (-not $c.ProposedName) { $message = 'no-proposal'; $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
+                                    if ([string]::Equals($c.LocalAlbum, $c.ProposedName, [StringComparison]::InvariantCultureIgnoreCase)) { $message = 'already-matching'; $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
                                     $currentPath = [string]$c.LocalPath
                                     $targetPath  = Join-Path -Path $Path -ChildPath $c.ProposedName
-                                    if (Test-Path -LiteralPath $targetPath) { if ($ShowSummary) { Write-Warning ("Skip rename: Target already exists: {0}" -f $targetPath) }; $message = 'target-exists'; $outcomes += [PSCustomObject]@{ LocalAlbum=$c.LocalAlbum; ProposedName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
+                                    if (Test-Path -LiteralPath $targetPath) { if ($ShowSummary) { Write-Warning ("Skip rename: Target already exists: {0}" -f $targetPath) }; $message = 'target-exists'; $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
 
                                     $shouldRename = $false
                                     switch ($DoIt) {
@@ -325,8 +322,8 @@ function Invoke-MuFo {
                                         if ($ShowSummary) { Write-Verbose ("Skipped rename for '{0}' (score {1})" -f $c.LocalAlbum, $c.MatchScore) }
                                         $action = 'skip'; $message = if ($c.MatchScore -ge $goodThreshold) { 'user-declined' } else { 'below-threshold' }
                                     }
-                                    $outcomes += [PSCustomObject]@{ LocalAlbum=$c.LocalAlbum; ProposedName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }
-                                } catch { if ($ShowSummary) { Write-Warning ("Rename failed for '{0}': {1}" -f $c.LocalAlbum, $_.Exception.Message) }; $outcomes += [PSCustomObject]@{ LocalAlbum=$c.LocalAlbum; ProposedName=$c.ProposedName; Action='error'; Reason=$_.Exception.Message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName } }
+                                    $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }
+                                } catch { if ($ShowSummary) { Write-Warning ("Rename failed for '{0}': {1}" -f $c.LocalAlbum, $_.Exception.Message) }; $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action='error'; Reason=$_.Exception.Message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName } }
                             }
                             if ($LogTo) {
                                 try {
