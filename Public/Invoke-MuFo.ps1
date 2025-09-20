@@ -41,6 +41,9 @@ function Invoke-MuFo {
 .PARAMETER ShowSummary
     Also print a friendly summary line per album with color, in addition to object output.
 
+.PARAMETER Detailed
+    When used with -Preview or -WhatIf, emit full object details instead of the concise view.
+
 .PARAMETER Verbose
     Provides detailed output.
 
@@ -88,6 +91,9 @@ function Invoke-MuFo {
 
         [Parameter(Mandatory = $false)]
         [switch]$ShowSummary
+        ,
+        [Parameter(Mandatory = $false)]
+        [switch]$Detailed
     )
 
     begin {
@@ -112,20 +118,20 @@ function Invoke-MuFo {
 
     process {
         # Main analysis logic always runs; actual changes are guarded by ShouldProcess
-        # Get the folder name as artist name
-        $artistName = Split-Path $Path -Leaf
-        Write-Host "Processing artist: $artistName"
+    # Get the folder name as artist name
+    $artistName = Split-Path $Path -Leaf
+    Write-Verbose "Processing artist: $artistName"
 
             # Search Spotify for the artist and get top matches
             $topMatches = Get-SpotifyArtist -ArtistName $artistName
             if ($topMatches) {
-                Write-Host "Found $($topMatches.Count) potential matches on Spotify"
+                Write-Verbose "Found $($topMatches.Count) potential matches on Spotify"
 
                 $selectedArtist = $null
                 switch ($DoIt) {
                     "Automatic" {
                         $selectedArtist = $topMatches[0].Artist
-                        Write-Host "Automatically selected: $($selectedArtist.Name)"
+                        Write-Verbose "Automatically selected: $($selectedArtist.Name)"
                     }
                     "Manual" {
                         # Prompt user to choose
@@ -144,10 +150,10 @@ function Invoke-MuFo {
                     "Smart" {
                         if ($topMatches[0].Score -ge $ConfidenceThreshold) {
                             $selectedArtist = $topMatches[0].Artist
-                            Write-Host "Smart selected: $($selectedArtist.Name)"
+                            Write-Verbose "Smart selected: $($selectedArtist.Name)"
                         } else {
                             # Fall back to manual
-                            Write-Host "Low confidence, switching to manual mode"
+                            Write-Verbose "Low confidence, switching to manual mode"
                             for ($i = 0; $i -lt $topMatches.Count; $i++) {
                                 Write-Host "$($i + 1). $($topMatches[$i].Artist.Name) (Score: $([math]::Round($topMatches[$i].Score, 2)))"
                             }
@@ -164,7 +170,7 @@ function Invoke-MuFo {
                 }
 
                 if ($selectedArtist) {
-                    Write-Host "Selected artist: $($selectedArtist.Name)"
+                    Write-Verbose "Selected artist: $($selectedArtist.Name)"
                     # Proceed with album verification: compare local folder names to Spotify artist albums
                     try {
                         # Local album folders = immediate subfolders under artist folder
@@ -266,9 +272,21 @@ function Invoke-MuFo {
                                 Decision      = $decision
                                 Reason        = $reason
                             }
-                            $obj = [PSCustomObject]$rec
-                            $records += $obj
-                            Write-Output $obj
+                            $objFull = [PSCustomObject]$rec
+                            $records += $objFull
+                            # Concise view for WhatIf/Preview by default
+                            if (($WhatIfPreference -or $Preview) -and -not $Detailed) {
+                                $objDisplay = [PSCustomObject]([ordered]@{
+                                    Artist        = $objFull.Artist
+                                    LocalFolder   = $objFull.LocalFolder
+                                    LocalAlbum    = $objFull.LocalAlbum
+                                    SpotifyAlbum  = $objFull.SpotifyAlbum
+                                    NewFolderName = $objFull.NewFolderName
+                                })
+                                Write-Output $objDisplay
+                            } else {
+                                Write-Output $objFull
+                            }
                             # Intentionally suppress verbose per-album UI line to avoid redundancy when objects are emitted.
                         }
 
