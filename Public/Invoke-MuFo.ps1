@@ -829,7 +829,27 @@ function Invoke-MuFo {
                                     $c | Add-Member -NotePropertyName TrackCountLocal -NotePropertyValue $tracks.Count
                                     $missingTitle = ($tracks | Where-Object { -not $_.Title }).Count
                                     $c | Add-Member -NotePropertyName TracksWithMissingTitle -NotePropertyValue $missingTitle
-                                    $c | Add-Member -NotePropertyName TracksMismatchedToSpotify -NotePropertyValue 0  # Placeholder
+
+                                    # Compute mismatches against Spotify if album matched
+                                    $mismatches = 0
+                                    if ($c.MatchName -and $c.MatchScore -gt 0) {
+                                        # Find the matched album object
+                                        $matchedAlbum = $spotifyAlbums | Where-Object { $_.Name -eq $c.MatchName } | Select-Object -First 1
+                                        if ($matchedAlbum -and $matchedAlbum.Id) {
+                                            $spotifyTracks = Get-SpotifyAlbumTracks -AlbumId $matchedAlbum.Id
+                                            foreach ($localTrack in $tracks) {
+                                                if (-not $localTrack.Title) { continue }
+                                                $bestScore = 0
+                                                foreach ($spotifyTrack in $spotifyTracks) {
+                                                    $score = Get-StringSimilarity -String1 $localTrack.Title -String2 $spotifyTrack.Name
+                                                    if ($score > $bestScore) { $bestScore = $score }
+                                                }
+                                                if ($bestScore -lt 0.8) { $mismatches++ }
+                                            }
+                                        }
+                                    }
+                                    $c | Add-Member -NotePropertyName TracksMismatchedToSpotify -NotePropertyValue $mismatches
+
                                     if ($ShowEverything) {
                                         $c | Add-Member -NotePropertyName Tracks -NotePropertyValue $tracks
                                     }
