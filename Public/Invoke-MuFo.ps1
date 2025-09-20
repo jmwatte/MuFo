@@ -96,11 +96,10 @@ function Invoke-MuFo {
     }
 
     process {
-        # Main logic here
-        if ($PSCmdlet.ShouldProcess($Path, "Process music library")) {
-            # Get the folder name as artist name
-            $artistName = Split-Path $Path -Leaf
-            Write-Host "Processing artist: $artistName"
+        # Main analysis logic always runs; actual changes are guarded by ShouldProcess
+        # Get the folder name as artist name
+        $artistName = Split-Path $Path -Leaf
+        Write-Host "Processing artist: $artistName"
 
             # Search Spotify for the artist and get top matches
             $topMatches = Get-SpotifyArtist -ArtistName $artistName
@@ -266,7 +265,6 @@ function Invoke-MuFo {
             } else {
                 Write-Warning "No matches found on Spotify for '$artistName'"
             }
-        }
     }
 
     end {
