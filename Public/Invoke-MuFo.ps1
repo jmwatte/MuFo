@@ -115,7 +115,38 @@ function Invoke-MuFo {
 
                 if ($selectedArtist) {
                     Write-Host "Selected artist: $($selectedArtist.Name)"
-                    # TODO: Proceed with album verification
+                    # Proceed with album verification: compare local folder names to Spotify artist albums
+                    try {
+                        # Local album folders = immediate subfolders under artist folder
+                        $localAlbumDirs = Get-ChildItem -LiteralPath $Path -Directory -ErrorAction SilentlyContinue
+                        Write-Verbose ("Local album folders found: {0}" -f (($localAlbumDirs | Measure-Object).Count))
+
+                        $spotifyAlbums = Get-SpotifyArtistAlbums -ArtistId $selectedArtist.Id -ErrorAction Stop
+                        Write-Verbose ("Spotify albums retrieved: {0}" -f (($spotifyAlbums | Measure-Object).Count))
+
+                        $albumComparisons = @()
+                        foreach ($dir in $localAlbumDirs) {
+                            $best = $null; $bestScore = 0; $dirName = [string]$dir.Name
+                            foreach ($sa in $spotifyAlbums) {
+                                $score = Get-StringSimilarity -String1 $dirName -String2 $sa.Name
+                                if ($score -gt $bestScore) { $bestScore = $score; $best = $sa }
+                            }
+                            $albumComparisons += [PSCustomObject]@{
+                                LocalAlbum  = $dirName
+                                MatchName   = if ($best) { $best.Name } else { $null }
+                                MatchType   = if ($best) { $best.AlbumType } else { $null }
+                                MatchScore  = [math]::Round($bestScore,2)
+                            }
+                        }
+
+                        # Display summary; later we'll wire -DoIt rename/apply
+                        foreach ($c in $albumComparisons | Sort-Object -Property MatchScore -Descending) {
+                            $color = if ($c.MatchScore -ge 0.9) { 'Green' } elseif ($c.MatchScore -ge 0.75) { 'DarkYellow' } else { 'Red' }
+                            Write-Host ("Album: '{0}' -> '{1}' ({2}) Score={3}" -f $c.LocalAlbum, $c.MatchName, $c.MatchType, $c.MatchScore) -ForegroundColor $color
+                        }
+                    } catch {
+                        Write-Warning ("Album verification failed: {0}" -f $_)
+                    }
                 } else {
                     Write-Warning "No artist selected"
                 }
