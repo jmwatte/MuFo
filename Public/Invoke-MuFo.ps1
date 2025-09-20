@@ -26,6 +26,12 @@ function Invoke-MuFo {
 .PARAMETER LogTo
     Path to the log file for results.
 
+.PARAMETER IncludeSingles
+    Include single releases when fetching albums from provider.
+
+.PARAMETER IncludeCompilations
+    Include compilation releases when fetching albums from provider.
+
 .PARAMETER Verbose
     Provides detailed output.
 
@@ -60,7 +66,13 @@ function Invoke-MuFo {
         [string[]]$ExcludeFolders,
 
         [Parameter(Mandatory = $false)]
-        [string]$LogTo
+        [string]$LogTo,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$IncludeSingles,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$IncludeCompilations
     )
 
     begin {
@@ -128,7 +140,7 @@ function Invoke-MuFo {
                         $localAlbumDirs = Get-ChildItem -LiteralPath $Path -Directory -ErrorAction SilentlyContinue
                         Write-Verbose ("Local album folders found: {0}" -f (($localAlbumDirs | Measure-Object).Count))
 
-                        $spotifyAlbums = Get-SpotifyArtistAlbums -ArtistId $selectedArtist.Id -ErrorAction Stop
+                        $spotifyAlbums = Get-SpotifyArtistAlbums -ArtistId $selectedArtist.Id -IncludeSingles:$IncludeSingles -IncludeCompilations:$IncludeCompilations -ErrorAction Stop
                         Write-Verbose ("Spotify albums retrieved: {0}" -f (($spotifyAlbums | Measure-Object).Count))
 
                         $albumComparisons = @()
