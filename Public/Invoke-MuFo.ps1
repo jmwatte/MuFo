@@ -33,6 +33,9 @@ function Invoke-MuFo {
 .PARAMETER IncludeCompilations
     Include compilation releases when fetching albums from provider.
 
+.PARAMETER IncludeTracks
+    Include track tag inspection and validation metrics in the output.
+
 .PARAMETER AsObject
     [Deprecated] Replaced by default object output plus -ShowSummary/-Preview switches.
 
@@ -111,6 +114,9 @@ function Invoke-MuFo {
 
         [Parameter(Mandatory = $false)]
         [switch]$IncludeCompilations,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$IncludeTracks,
 
         [Parameter(Mandatory = $false)]
         [switch]$Preview,
@@ -815,6 +821,30 @@ function Invoke-MuFo {
                             }
                         }
 
+                        # If IncludeTracks, collect track information and compute metrics
+                        if ($IncludeTracks) {
+                            foreach ($c in $albumComparisons) {
+                                try {
+                                    $tracks = Get-AudioFileTags -Path $c.LocalPath
+                                    $c | Add-Member -NotePropertyName TrackCountLocal -NotePropertyValue $tracks.Count
+                                    $missingTitle = ($tracks | Where-Object { -not $_.Title }).Count
+                                    $c | Add-Member -NotePropertyName TracksWithMissingTitle -NotePropertyValue $missingTitle
+                                    $c | Add-Member -NotePropertyName TracksMismatchedToSpotify -NotePropertyValue 0  # Placeholder
+                                    if ($ShowEverything) {
+                                        $c | Add-Member -NotePropertyName Tracks -NotePropertyValue $tracks
+                                    }
+                                } catch {
+                                    Write-Warning "Failed to read tracks for '$($c.LocalPath)': $($_.Exception.Message)"
+                                    $c | Add-Member -NotePropertyName TrackCountLocal -NotePropertyValue 0
+                                    $c | Add-Member -NotePropertyName TracksWithMissingTitle -NotePropertyValue 0
+                                    $c | Add-Member -NotePropertyName TracksMismatchedToSpotify -NotePropertyValue 0
+                                    if ($ShowEverything) {
+                                        $c | Add-Member -NotePropertyName Tracks -NotePropertyValue @()
+                                    }
+                                }
+                            }
+                        }
+
                         # Display summary; later we'll wire -DoIt rename/apply
                         # Threshold used for decisions and rename map
                         $goodThreshold = [double]$ConfidenceThreshold
@@ -842,6 +872,14 @@ function Invoke-MuFo {
                                 NewFolderName = $c.ProposedName
                                 Decision      = $decision
                                 Reason        = $reason
+                            }
+                            if ($IncludeTracks) {
+                                $rec['TrackCountLocal'] = $c.TrackCountLocal
+                                $rec['TracksWithMissingTitle'] = $c.TracksWithMissingTitle
+                                $rec['TracksMismatchedToSpotify'] = $c.TracksMismatchedToSpotify
+                                if ($ShowEverything) {
+                                    $rec['Tracks'] = $c.Tracks
+                                }
                             }
                             $objFull = [PSCustomObject]$rec
                             $records += $objFull
