@@ -32,6 +32,15 @@ function Invoke-MuFo {
 .PARAMETER IncludeCompilations
     Include compilation releases when fetching albums from provider.
 
+.PARAMETER AsObject
+    [Deprecated] Replaced by default object output plus -ShowSummary/-Preview switches.
+
+.PARAMETER Preview
+    Perform analysis only and emit structured objects; do not prompt or rename. Use this to avoid WhatIf chatter.
+
+.PARAMETER ShowSummary
+    Also print a friendly summary line per album with color, in addition to object output.
+
 .PARAMETER Verbose
     Provides detailed output.
 
@@ -72,7 +81,13 @@ function Invoke-MuFo {
         [switch]$IncludeSingles,
 
         [Parameter(Mandatory = $false)]
-        [switch]$IncludeCompilations
+        [switch]$IncludeCompilations,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$Preview,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$ShowSummary
     )
 
     begin {
@@ -227,41 +242,89 @@ function Invoke-MuFo {
                         # Display summary; later we'll wire -DoIt rename/apply
                         # Use ConfidenceThreshold for green, and a warning band slightly below it
                         $goodThreshold = [double]$ConfidenceThreshold
-                        $warnThreshold = [Math]::Max(0.0, [double]$ConfidenceThreshold - 0.15) # assumption: warn band = threshold - 0.15
-                        foreach ($c in $albumComparisons | Sort-Object -Property MatchScore -Descending) {
-                            $color = if ($c.MatchScore -ge $goodThreshold) { 'Green' } elseif ($c.MatchScore -ge $warnThreshold) { 'DarkYellow' } else { 'Red' }
-                            Write-Host ("Album: '{0}' (norm '{1}') -> '{2}' ({3}) Score={4}" -f $c.LocalAlbum, $c.LocalNorm, $c.MatchName, $c.MatchType, $c.MatchScore) -ForegroundColor $color
+                        $warnThreshold = [Math]::Max(0.0, [double]$ConfidenceThreshold - 0.15)
+
+                        # Prepare decisions and emit structured objects
+                        $records = @()
+                        foreach ($c in ($albumComparisons | Sort-Object -Property MatchScore -Descending)) {
+                            $decision = 'skip'
+                            $reason = ''
+                            switch ($DoIt) {
+                                'Automatic' { if ($c.MatchScore -ge $goodThreshold -and $c.ProposedName) { $decision = 'rename' } else { $reason = 'below-threshold-or-no-proposal' } }
+                                'Smart'     { if ($c.MatchScore -ge $goodThreshold -and $c.ProposedName) { $decision = 'rename' } else { $decision = 'prompt'; $reason = if ($c.ProposedName) { 'manual-confirmation' } else { 'no-proposal' } } }
+                                'Manual'    { $decision = if ($c.ProposedName) { 'prompt' } else { 'skip' }; if (-not $c.ProposedName) { $reason = 'no-proposal' } }
+                            }
+                            $rec = [ordered]@{
+                                Artist        = $selectedArtist.Name
+                                ArtistId      = $selectedArtist.Id
+                                LocalAlbum    = $c.LocalAlbum
+                                LocalNorm     = $c.LocalNorm
+                                SpotifyAlbum  = $c.MatchName
+                                AlbumType     = $c.MatchType
+                                Score         = $c.MatchScore
+                                ProposedName  = $c.ProposedName
+                                Decision      = $decision
+                                Reason        = $reason
+                            }
+                            $obj = [PSCustomObject]$rec
+                            $records += $obj
+                            Write-Output $obj
+                            if ($ShowSummary) {
+                                $color = if ($c.MatchScore -ge $goodThreshold) { 'Green' } elseif ($c.MatchScore -ge $warnThreshold) { 'DarkYellow' } else { 'Red' }
+                                Write-Host ("Album: '{0}' (norm '{1}') -> '{2}' ({3}) Score={4}" -f $c.LocalAlbum, $c.LocalNorm, $c.MatchName, $c.MatchType, $c.MatchScore) -ForegroundColor $color
+                            }
                         }
 
-                        # Apply rename actions per DoIt mode
-                        foreach ($c in $albumComparisons) {
-                            try {
-                                if (-not $c.ProposedName) { continue }
-                                # Skip if name already matches (case-insensitive)
-                                if ([string]::Equals($c.LocalAlbum, $c.ProposedName, [StringComparison]::InvariantCultureIgnoreCase)) { continue }
-                                $currentPath = [string]$c.LocalPath
-                                $targetPath  = Join-Path -Path $Path -ChildPath $c.ProposedName
-                                if (Test-Path -LiteralPath $targetPath) {
-                                    Write-Warning ("Skip rename: Target already exists: {0}" -f $targetPath)
-                                    continue
-                                }
+                        # If Preview, skip renames entirely (clean output, no WhatIf chatter)
+                        if (-not $Preview) {
+                            $outcomes = @()
+                            foreach ($c in $albumComparisons) {
+                                try {
+                                    $action = 'skip'; $message = ''
+                                    if (-not $c.ProposedName) { $message = 'no-proposal'; $outcomes += [PSCustomObject]@{ LocalAlbum=$c.LocalAlbum; ProposedName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
+                                    if ([string]::Equals($c.LocalAlbum, $c.ProposedName, [StringComparison]::InvariantCultureIgnoreCase)) { $message = 'already-matching'; $outcomes += [PSCustomObject]@{ LocalAlbum=$c.LocalAlbum; ProposedName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
+                                    $currentPath = [string]$c.LocalPath
+                                    $targetPath  = Join-Path -Path $Path -ChildPath $c.ProposedName
+                                    if (Test-Path -LiteralPath $targetPath) { if ($ShowSummary) { Write-Warning ("Skip rename: Target already exists: {0}" -f $targetPath) }; $message = 'target-exists'; $outcomes += [PSCustomObject]@{ LocalAlbum=$c.LocalAlbum; ProposedName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
 
-                                $shouldRename = $false
-                                switch ($DoIt) {
-                                    'Automatic' { $shouldRename = ($c.MatchScore -ge $goodThreshold) }
-                                    'Smart'     { if ($c.MatchScore -ge $goodThreshold) { $shouldRename = $true } else { $resp = Read-Host ("Rename '{0}' -> '{1}'? [y/N]" -f $c.LocalAlbum, $c.ProposedName); if ($resp -match '^(?i)y(es)?$') { $shouldRename = $true } } }
-                                    'Manual'    { $resp = Read-Host ("Rename '{0}' -> '{1}'? [y/N]" -f $c.LocalAlbum, $c.ProposedName); if ($resp -match '^(?i)y(es)?$') { $shouldRename = $true } }
-                                }
-                                if ($shouldRename) {
-                                    if ($PSCmdlet.ShouldProcess($currentPath, ("Rename to '{0}'" -f $c.ProposedName))) {
-                                        Rename-Item -LiteralPath $currentPath -NewName $c.ProposedName -ErrorAction Stop
-                                        Write-Host ("Renamed: '{0}' -> '{1}'" -f $c.LocalAlbum, $c.ProposedName) -ForegroundColor Green
+                                    $shouldRename = $false
+                                    switch ($DoIt) {
+                                        'Automatic' { $shouldRename = ($c.MatchScore -ge $goodThreshold) }
+                                        'Smart'     { if ($c.MatchScore -ge $goodThreshold) { $shouldRename = $true } else { $resp = Read-Host ("Rename '{0}' -> '{1}'? [y/N]" -f $c.LocalAlbum, $c.ProposedName); if ($resp -match '^(?i)y(es)?$') { $shouldRename = $true } } }
+                                        'Manual'    { $resp = Read-Host ("Rename '{0}' -> '{1}'? [y/N]" -f $c.LocalAlbum, $c.ProposedName); if ($resp -match '^(?i)y(es)?$') { $shouldRename = $true } }
                                     }
-                                } else {
-                                    Write-Verbose ("Skipped rename for '{0}' (score {1})" -f $c.LocalAlbum, $c.MatchScore)
-                                }
-                            } catch {
-                                Write-Warning ("Rename failed for '{0}': {1}" -f $c.LocalAlbum, $_.Exception.Message)
+                                    if ($shouldRename) {
+                                        if ($PSCmdlet.ShouldProcess($currentPath, ("Rename to '{0}'" -f $c.ProposedName))) {
+                                            Rename-Item -LiteralPath $currentPath -NewName $c.ProposedName -ErrorAction Stop
+                                            if ($ShowSummary) { Write-Host ("Renamed: '{0}' -> '{1}'" -f $c.LocalAlbum, $c.ProposedName) -ForegroundColor Green }
+                                            $action = 'rename'; $message = 'renamed'
+                                        }
+                                    } else {
+                                        if ($ShowSummary) { Write-Verbose ("Skipped rename for '{0}' (score {1})" -f $c.LocalAlbum, $c.MatchScore) }
+                                        $action = 'skip'; $message = if ($c.MatchScore -ge $goodThreshold) { 'user-declined' } else { 'below-threshold' }
+                                    }
+                                    $outcomes += [PSCustomObject]@{ LocalAlbum=$c.LocalAlbum; ProposedName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }
+                                } catch { if ($ShowSummary) { Write-Warning ("Rename failed for '{0}': {1}" -f $c.LocalAlbum, $_.Exception.Message) }; $outcomes += [PSCustomObject]@{ LocalAlbum=$c.LocalAlbum; ProposedName=$c.ProposedName; Action='error'; Reason=$_.Exception.Message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName } }
+                            }
+                            if ($LogTo) {
+                                try {
+                                    $dir = Split-Path -Parent -Path $LogTo
+                                    if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+                                    $payload = [PSCustomObject]@{ Timestamp = (Get-Date).ToString('o'); Path = (Resolve-Path -LiteralPath $Path).Path; Mode = $DoIt; ConfidenceThreshold = $ConfidenceThreshold; Items = $outcomes }
+                                    ($payload | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $LogTo -Encoding utf8
+                                    if ($ShowSummary) { Write-Verbose ("Wrote JSON log: {0}" -f $LogTo) }
+                                } catch { if ($ShowSummary) { Write-Warning ("Failed to write log '{0}': {1}" -f $LogTo, $_.Exception.Message) } }
+                            }
+                        } else {
+                            # Preview-only logging
+                            if ($LogTo) {
+                                try {
+                                    $dir = Split-Path -Parent -Path $LogTo
+                                    if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+                                    $payload = [PSCustomObject]@{ Timestamp = (Get-Date).ToString('o'); Path = (Resolve-Path -LiteralPath $Path).Path; Mode = 'Preview'; ConfidenceThreshold = $ConfidenceThreshold; Items = $records }
+                                    ($payload | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $LogTo -Encoding utf8
+                                    if ($ShowSummary) { Write-Verbose ("Wrote JSON log: {0}" -f $LogTo) }
+                                } catch { if ($ShowSummary) { Write-Warning ("Failed to write log '{0}': {1}" -f $LogTo, $_.Exception.Message) } }
                             }
                         }
                     } catch {
