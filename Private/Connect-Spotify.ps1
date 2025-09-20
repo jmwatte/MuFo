@@ -15,11 +15,13 @@ function Connect-Spotify {
     param ()
 
     try {
-        # Assume Spotishell has a Connect-Spotify or similar command
-        # For now, placeholder - user may need to authenticate manually
-        Write-Verbose "Attempting to connect to Spotify..."
-        # Connect-Spotify  # Uncomment if Spotishell has this
-        Write-Host "Please ensure you are authenticated with Spotify (e.g., via Spotishell's Connect-Spotify if available)"
+        # Try to connect using Spotishell's Connect-Spotify if available
+        if (Get-Command Connect-Spotify -ErrorAction SilentlyContinue) {
+            Connect-Spotify
+            Write-Verbose "Connected to Spotify via Spotishell"
+        } else {
+            Write-Host "Spotishell Connect-Spotify not found. Please authenticate manually."
+        }
     } catch {
         Write-Warning "Failed to connect to Spotify: $_"
     }
