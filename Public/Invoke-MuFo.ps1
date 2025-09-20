@@ -39,10 +39,13 @@ function Invoke-MuFo {
     Perform analysis only and emit structured objects; do not prompt or rename. Use this to avoid WhatIf chatter.
 
 .PARAMETER ShowSummary
-    Also print a friendly summary line per album with color, in addition to object output.
+    [Deprecated] Concise output and the rename map are now shown by default when using -WhatIf or -Preview.
 
 .PARAMETER Detailed
-    When used with -Preview or -WhatIf, emit full object details instead of the concise view.
+    [Deprecated] Use -ShowEverything. When used with -Preview or -WhatIf, emit full object details instead of the concise view.
+
+.PARAMETER ShowEverything
+    Emit full object details (ArtistId, AlbumType, Score, LocalPath, Decision, Reason, etc.).
 
 .PARAMETER Verbose
     Provides detailed output.
@@ -93,7 +96,10 @@ function Invoke-MuFo {
         [switch]$ShowSummary
         ,
         [Parameter(Mandatory = $false)]
-        [switch]$Detailed
+    [switch]$Detailed,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$ShowEverything
     )
 
     begin {
@@ -275,7 +281,8 @@ function Invoke-MuFo {
                             $objFull = [PSCustomObject]$rec
                             $records += $objFull
                             # Concise view for WhatIf/Preview by default
-                            if (($WhatIfPreference -or $Preview) -and -not $Detailed) {
+                            $wantFull = ($ShowEverything -or $Detailed)
+                            if (($WhatIfPreference -or $Preview) -and -not $wantFull) {
                                 $objDisplay = [PSCustomObject]([ordered]@{
                                     Artist        = $objFull.Artist
                                     LocalFolder   = $objFull.LocalFolder
@@ -290,25 +297,23 @@ function Invoke-MuFo {
                             # Intentionally suppress verbose per-album UI line to avoid redundancy when objects are emitted.
                         }
 
-                        # If running in WhatIf or -Preview, and summary requested, print a concise rename map
-                        if ($ShowSummary) {
-                            $isPreview = $Preview -or $WhatIfPreference
-                            if ($isPreview) {
-                                $renameMap = [ordered]@{}
-                                foreach ($c in ($albumComparisons | Sort-Object -Property MatchScore -Descending)) {
-                                    if ($c.ProposedName -and -not [string]::Equals($c.LocalAlbum, $c.ProposedName, [StringComparison]::InvariantCultureIgnoreCase)) {
-                                        # Only include confident suggestions (at/above threshold)
-                                        if ($c.MatchScore -ge $goodThreshold) {
-                                            $renameMap[[string]$c.LocalPath] = [string]$c.ProposedName
-                                        }
+                        # If running in WhatIf or -Preview, always print a concise rename map by default
+                        $isPreview = $Preview -or $WhatIfPreference
+                        if ($isPreview) {
+                            $renameMap = [ordered]@{}
+                            foreach ($c in ($albumComparisons | Sort-Object -Property MatchScore -Descending)) {
+                                if ($c.ProposedName -and -not [string]::Equals($c.LocalAlbum, $c.ProposedName, [StringComparison]::InvariantCultureIgnoreCase)) {
+                                    # Only include confident suggestions (at/above threshold)
+                                    if ($c.MatchScore -ge $goodThreshold) {
+                                        $renameMap[[string]$c.LocalPath] = [string]$c.ProposedName
                                     }
                                 }
-                                if ($renameMap.Count -gt 0) {
-                                    Write-Host "What If: Performing Rename Operation"
-                                    $renameMap.GetEnumerator() | Format-List
-                                } else {
-                                    Write-Host "What If: No rename candidates at the current threshold." -ForegroundColor DarkYellow
-                                }
+                            }
+                            if ($renameMap.Count -gt 0) {
+                                Write-Host "What If: Performing Rename Operation"
+                                $renameMap.GetEnumerator() | Format-List
+                            } else {
+                                Write-Host "What If: No rename candidates at the current threshold." -ForegroundColor DarkYellow
                             }
                         }
 
