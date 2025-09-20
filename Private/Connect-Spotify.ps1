@@ -1,4 +1,4 @@
-function Connect-Spotify {
+function Connect-SpotifyService {
 <#
 .SYNOPSIS
     Authenticates with Spotify using Spotishell.
@@ -15,15 +15,19 @@ function Connect-Spotify {
     param ()
 
     try {
-        # Try to connect using Spotishell's Connect-Spotify
-        $connectCmd = Get-Command Connect-Spotify -Module Spotishell -ErrorAction SilentlyContinue
-        if ($connectCmd) {
-            & $connectCmd
-            Write-Verbose "Connected to Spotify via Spotishell"
+        # Avoid name conflicts and try to validate Spotishell setup
+        $appCmd = Get-Command Get-SpotifyApplication -Module Spotishell -ErrorAction SilentlyContinue
+        if ($appCmd) {
+            $app = & $appCmd 2>$null
+            if (-not $app) {
+                Write-Host "Spotishell application is not initialized. Run Initialize-SpotifyApplication or New-SpotifyApplication."
+            } else {
+                Write-Verbose "Spotishell application detected."
+            }
         } else {
-            Write-Host "Spotishell Connect-Spotify not found. Please authenticate manually."
+            Write-Verbose "Spotishell application cmdlets not found; proceeding without explicit auth check."
         }
     } catch {
-        Write-Warning "Failed to connect to Spotify: $_"
+        Write-Warning "Failed to check Spotify application setup: $_"
     }
 }

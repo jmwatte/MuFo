@@ -19,26 +19,36 @@ function Get-StringSimilarity {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)]
-        [string]$String1,
+        $String1,
 
         [Parameter(Mandatory = $true)]
-        [string]$String2
+        $String2
     )
 
-    # Simple implementation of Levenshtein distance
-    $len1 = $String1.Length
-    $len2 = $String2.Length
+    # Normalize inputs to strings and guard against null/arrays
+    if ($null -eq $String1) { $String1 = '' }
+    if ($null -eq $String2) { $String2 = '' }
+    if ($String1 -is [array]) { $String1 = ($String1 -join ' ') }
+    if ($String2 -is [array]) { $String2 = ($String2 -join ' ') }
+    $String1 = [string]$String1
+    $String2 = [string]$String2
 
-    if ($len1 -eq 0) { return if ($len2 -eq 0) { 1 } else { 0 } }
+    # Simple implementation of Levenshtein distance
+    [int]$len1 = $String1.Length
+    [int]$len2 = $String2.Length
+
+    if ($len1 -eq 0) {
+        if ($len2 -eq 0) { return 1 } else { return 0 }
+    }
     if ($len2 -eq 0) { return 0 }
 
     $matrix = New-Object 'int[,]' ($len1 + 1), ($len2 + 1)
 
-    for ($i = 0; $i -le $len1; $i++) { $matrix[$i, 0] = $i }
-    for ($j = 0; $j -le $len2; $j++) { $matrix[0, $j] = $j }
+    for ([int]$i = 0; $i -le $len1; $i++) { $matrix[$i, 0] = $i }
+    for ([int]$j = 0; $j -le $len2; $j++) { $matrix[0, $j] = $j }
 
-    for ($i = 1; $i -le $len1; $i++) {
-        for ($j = 1; $j -le $len2; $j++) {
+    for ([int]$i = 1; $i -le $len1; $i++) {
+        for ([int]$j = 1; $j -le $len2; $j++) {
             $cost = if ($String1[$i-1] -eq $String2[$j-1]) { 0 } else { 1 }
             $matrix[$i, $j] = [Math]::Min(
                 [Math]::Min($matrix[$i-1, $j] + 1, $matrix[$i, $j-1] + 1),

@@ -59,8 +59,12 @@ function Invoke-MuFo {
     begin {
         # Initialization code here
         Write-Verbose "Starting Invoke-MuFo with Path: $Path, DoIt: $DoIt"
-        # Connect to Spotify
-        Connect-Spotify
+        # Connect to Spotify (validate Spotishell setup)
+        if (Get-Module -ListAvailable -Name Spotishell) {
+            Connect-SpotifyService
+        } else {
+            Write-Warning "Spotishell module not found. Install-Module Spotishell to enable Spotify integration."
+        }
     }
 
     process {
