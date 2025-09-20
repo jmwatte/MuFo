@@ -53,10 +53,7 @@ function Invoke-MuFo {
         [string[]]$ExcludeFolders,
 
         [Parameter(Mandatory = $false)]
-        [string]$LogTo,
-
-        [Parameter(Mandatory = $false)]
-        [switch]$WhatIf
+        [string]$LogTo
     )
 
     begin {
