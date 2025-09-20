@@ -1,3 +1,11 @@
+If I ask you to do something, reflect back in your words what you think I asked and wait for my feedback before carrying out anything.
+Follow and update the flow-mufo.md and plan-mufo.md.
+Additionally, implement the step plans in these markdowns and keep them current:
+- implementexcludefolders.md (wire exclusions and exclusions store)
+- implementshowresults.md (results viewer for -LogTo JSON)
+- implementartistat.md (folder level detection)
+- implementtracktagging.md (read-only track tagging groundwork)
+
 🗂️ Folder Structure
 Organize your PowerShell project like this:
 /MyPowerShellModule

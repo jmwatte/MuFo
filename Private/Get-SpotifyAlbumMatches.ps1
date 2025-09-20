@@ -16,7 +16,8 @@ function Get-SpotifyAlbumMatches {
     )
 
     try {
-        $result = Search-Item -Type Album -Query $AlbumName -ErrorAction Stop
+    Write-Verbose ("Search-Item Album query: '{0}'" -f $AlbumName)
+    $result = Search-Item -Type Album -Query $AlbumName -ErrorAction Stop
         $items = @()
         if ($null -eq $result) { return @() }
         if ($result -is [System.Array]) {

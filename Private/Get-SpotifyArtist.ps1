@@ -27,7 +27,8 @@ function Get-SpotifyArtist {
 
     try {
         # Use Spotishell to search for the artist
-        $searchResult = Search-Item -Type Artist -Query $ArtistName -ErrorAction Stop
+    Write-Verbose ("Search-Item Artist query: '{0}'" -f $ArtistName)
+    $searchResult = Search-Item -Type Artist -Query $ArtistName -ErrorAction Stop
         # Spotishell may return an array of result pages or a single object; normalize
         $resultItems = @()
         if ($null -ne $searchResult) {
@@ -80,11 +81,28 @@ function Get-SpotifyArtist {
                 }
             } | Where-Object { $_ } | Sort-Object -Property Score -Descending
 
-            # Return top matches above threshold
-            $topMatches = $scoredResults | Where-Object { $_.Score -ge $MatchThreshold } | Select-Object -First 5
-            if (-not $topMatches -or $topMatches.Count -eq 0) {
-                Write-Verbose ("No matches >= threshold {0}. Falling back to top 5 by score." -f $MatchThreshold)
-                $topMatches = $scoredResults | Select-Object -First 5
+            # Prefer above-threshold results, then fill with next-best to reach 5, de-duplicated by artist Id
+            $topMatches = @()
+            $ids = New-Object System.Collections.Generic.HashSet[string]
+            foreach ($r in $scoredResults) {
+                if ($r.Score -ge $MatchThreshold) {
+                    $id = $null; try { $id = [string]$r.Artist.Id } catch { $id = $null }
+                    if ($id -and $ids.Add($id)) { $topMatches += $r }
+                }
+                if ($topMatches.Count -ge 5) { break }
+            }
+            if ($topMatches.Count -lt 5) {
+                foreach ($r in $scoredResults) {
+                    $id = $null; try { $id = [string]$r.Artist.Id } catch { $id = $null }
+                    if ($id -and $ids.Add($id)) { $topMatches += $r }
+                    if ($topMatches.Count -ge 5) { break }
+                }
+                if ($topMatches.Count -gt 0) {
+                    $aboveCount = ($topMatches | Where-Object { $_.Score -ge $MatchThreshold } | Measure-Object).Count
+                    Write-Verbose ("{0} matches >= threshold {1}. Filled with {2} next-best by score." -f $aboveCount, $MatchThreshold, ($topMatches.Count - $aboveCount))
+                } else {
+                    Write-Verbose ("No matches found even after fill; returning empty set.")
+                }
             }
             Write-Verbose ("Top matches: {0}" -f ($topMatches | Measure-Object).Count)
             foreach ($m in $topMatches) { Write-Verbose (" - {0} [{1}]" -f $m.Artist.Name, ([math]::Round($m.Score,2))) }
