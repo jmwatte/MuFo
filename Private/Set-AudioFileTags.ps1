@@ -5,7 +5,18 @@ function Set-AudioFileTags {
 
 .DESCRIPTION
     This function writes metadata to audio files with special enhancements for classical music.
-    It can fill missing titles, track numbers, genres, and optimize album artist organization.
+    It can fill missing titles, track numbers, genres, an    # Summary
+    Write-Host "\nTag Enhancement Summary:" -ForegroundColor Cyan
+    Write-Host "  Files processed: $($existingTags.Count)" -ForegroundColor Gray
+    
+    if ($WhatIfPreference) {
+        $wouldUpdate = $results | Where-Object { $_.ChangesApplied.Count -gt 0 } | Measure-Object | ForEach-Object Count
+        Write-Host "  Files that would be updated: $wouldUpdate" -ForegroundColor Yellow
+        Write-Host "  Files that would remain unchanged: $($existingTags.Count - $wouldUpdate)" -ForegroundColor Gray
+    } else {
+        Write-Host "  Files updated: $changesMade" -ForegroundColor Green
+        Write-Host "  Files unchanged: $($existingTags.Count - $changesMade)" -ForegroundColor Gray
+    }imize album artist organization.
     Includes validation for missing tracks and metadata consistency.
 
 .PARAMETER Path
@@ -102,7 +113,6 @@ function Set-AudioFileTags {
     Write-Host "Album Analysis:" -ForegroundColor Cyan
     Write-Host "  Album: $($albumAnalysis.AlbumName)" -ForegroundColor Gray
     Write-Host "  Artist: $($albumAnalysis.ArtistName)" -ForegroundColor Gray
-    Write-Host "  Classical Music: $($albumAnalysis.IsClassical)" -ForegroundColor Gray
     Write-Host "  Tracks Found: $($existingTags.Count) / Expected: $($albumAnalysis.ExpectedTracks)" -ForegroundColor Gray
     
     # Validate completeness if requested
@@ -164,10 +174,12 @@ function Set-AudioFileTags {
                     }
                 }
                 
-                if ($suggestedTitle -and $PSCmdlet.ShouldProcess($track.Path, "Set title to '$suggestedTitle'")) {
-                    $tag.Title = $suggestedTitle
+                if ($suggestedTitle) {
+                    if ($PSCmdlet.ShouldProcess($track.Path, "Set title to '$suggestedTitle'")) {
+                        $tag.Title = $suggestedTitle
+                        $changesMadeToFile = $true
+                    }
                     $changes += "Title: '$suggestedTitle'"
-                    $changesMadeToFile = $true
                 }
             }
             
@@ -188,10 +200,12 @@ function Set-AudioFileTags {
                     }
                 }
                 
-                if ($suggestedTrackNumber -and $PSCmdlet.ShouldProcess($track.Path, "Set track number to $suggestedTrackNumber")) {
-                    $tag.Track = [uint32]$suggestedTrackNumber
+                if ($suggestedTrackNumber) {
+                    if ($PSCmdlet.ShouldProcess($track.Path, "Set track number to $suggestedTrackNumber")) {
+                        $tag.Track = [uint32]$suggestedTrackNumber
+                        $changesMadeToFile = $true
+                    }
                     $changes += "Track: $suggestedTrackNumber"
-                    $changesMadeToFile = $true
                 }
             }
             
@@ -205,10 +219,12 @@ function Set-AudioFileTags {
                     $suggestedGenre = $SpotifyAlbum.genres[0]
                 }
                 
-                if ($suggestedGenre -and $PSCmdlet.ShouldProcess($track.Path, "Set genre to '$suggestedGenre'")) {
-                    $tag.Genres = @($suggestedGenre)
+                if ($suggestedGenre) {
+                    if ($PSCmdlet.ShouldProcess($track.Path, "Set genre to '$suggestedGenre'")) {
+                        $tag.Genres = @($suggestedGenre)
+                        $changesMadeToFile = $true
+                    }
                     $changes += "Genre: '$suggestedGenre'"
-                    $changesMadeToFile = $true
                 }
             }
             
