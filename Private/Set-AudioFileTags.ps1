@@ -78,7 +78,7 @@ function Set-AudioFileTags {
         return @()
     }
     
-    # Get current tags to work with
+    # Get current tags to work with (this will now exclude lib folders)
     $existingTags = Get-AudioFileTags -Path $Path -IncludeComposer
     if ($existingTags.Count -eq 0) {
         Write-Warning "No audio files found or could not read existing tags"

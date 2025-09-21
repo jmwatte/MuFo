@@ -149,9 +149,24 @@ function Get-AudioFileTags {
 
         # Determine if Path is a file or folder
         if (Test-Path -LiteralPath $Path -PathType Leaf) {
-            $files = @($Path)
+            # Single file - validate it's an audio file
+            $fileExtension = [System.IO.Path]::GetExtension($Path).ToLower()
+            if ($supportedExtensions -contains $fileExtension) {
+                $files = @($Path)
+            } else {
+                Write-Warning "File '$Path' is not a supported audio format"
+                return @()
+            }
         } elseif (Test-Path -LiteralPath $Path -PathType Container) {
-            $files = Get-ChildItem -LiteralPath $Path -File | Where-Object { $_.Extension -in $supportedExtensions } | Select-Object -ExpandProperty FullName
+            # Directory - scan for audio files, excluding system/library folders
+            $files = Get-ChildItem -LiteralPath $Path -File | 
+                     Where-Object { 
+                         $_.Extension.ToLower() -in $supportedExtensions -and
+                         $_.FullName -notlike "*\lib\*" -and
+                         $_.FullName -notlike "*\bin\*" -and
+                         $_.FullName -notlike "*\.git\*"
+                     } | 
+                     Select-Object -ExpandProperty FullName
         } else {
             Write-Warning "Path '$Path' does not exist or is not accessible."
             return @()
@@ -212,7 +227,7 @@ function Get-AudioFileTags {
                     # Detect if this is classical music
                     $isClassical = $false
                     $classicalIndicators = @(
-                        ($composer -ne $null),
+                        ($null -ne $composer),
                         ($genres -contains "Classical"),
                         ($normalizedTag.Album -match "(?i)(symphony|concerto|sonata|quartet|opera|oratorio|cantata|mass|requiem|preludes|etudes)"),
                         (($artists -join " ") -match "(?i)(orchestra|symphony|philharmonic|ensemble|quartet|choir|philharmonie)")
