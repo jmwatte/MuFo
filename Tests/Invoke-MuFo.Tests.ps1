@@ -1,5 +1,5 @@
 BeforeAll {
-    # Import function under test and all helpers (mocks will override as needed)
+    # Import function under test and helpers (mocks will override as needed)
     . "$PSScriptRoot/../Public/Invoke-MuFo.ps1"
     . "$PSScriptRoot/../Private/Connect-Spotify.ps1"
     . "$PSScriptRoot/../Private/Get-SpotifyArtist.ps1"
@@ -21,10 +21,12 @@ Describe 'Invoke-MuFo' -Tag 'Unit' {
             }
             Mock -CommandName Get-SpotifyAlbumMatches -ParameterFilter { $Query -match 'artist:.10cc.' } {
                 @([pscustomobject]@{
-                    Name        = 'Sheet Music'
-                    AlbumType   = 'album'
+                    AlbumName   = 'Sheet Music'
+                    Score       = 1.0
+                    Artists     = @([pscustomobject]@{ Name='10cc'; Id='ART10' })
                     ReleaseDate = '2007-01-01'
-                    Item        = [pscustomobject]@{ Id = 'ALBUM_ID' }
+                    AlbumType   = 'album'
+                    Item        = [pscustomobject]@{ Id = 'ALBUM_ID'; Name = 'Sheet Music'; ReleaseDate = '2007-01-01' }
                 })
             }
         }
@@ -51,7 +53,7 @@ Describe 'Invoke-MuFo' -Tag 'Unit' {
 
             Mock Connect-SpotifyService { }
             Mock Get-SpotifyArtist {
-                @([pscustomobject]@{ Artist = [pscustomobject]@{ Name='M11CA'; Id='X1' }; Score = 0.8 })
+                @([pscustomobject]@{ Artist = [pscustomobject]@{ Name='M11CA'; Id='X1' }; Score = 0.5 })
             }
             Mock -CommandName Get-SpotifyAlbumMatches { @() }
             Mock -CommandName Search-Item -ParameterFilter { $Type -eq 'All' -and $Query -match '11cc\s+Sheet Music' } {
@@ -96,7 +98,7 @@ Describe 'Invoke-MuFo' -Tag 'Unit' {
             New-Item -ItemType Directory -Path (Join-Path $artistPath '1974 - Sheet Music') | Out-Null
 
             Mock Connect-SpotifyService { }
-            Mock Get-SpotifyArtist { @([pscustomobject]@{ Artist = [pscustomobject]@{ Name='M11CA'; Id='X1' }; Score = 0.7 }) }
+            Mock Get-SpotifyArtist { @([pscustomobject]@{ Artist = [pscustomobject]@{ Name='M11CA'; Id='X1' }; Score = 0.5 }) }
             Mock Get-SpotifyAlbumMatches { @() }
             Mock -CommandName Search-Item -ParameterFilter { $Type -eq 'All' -and $Query -match '11cc\s+Sheet Music' } {
                 return @(
@@ -140,8 +142,8 @@ Describe 'Invoke-MuFo' -Tag 'Unit' {
             Mock Get-SpotifyArtist {
                 # Low-confidence unrelated results
                 @(
-                    [pscustomobject]@{ Artist = [pscustomobject]@{ Name='M11CA'; Id='X1' }; Score = 0.8 },
-                    [pscustomobject]@{ Artist = [pscustomobject]@{ Name='CC116'; Id='X2' }; Score = 0.8 }
+                    [pscustomobject]@{ Artist = [pscustomobject]@{ Name='M11CA'; Id='X1' }; Score = 0.5 },
+                    [pscustomobject]@{ Artist = [pscustomobject]@{ Name='CC116'; Id='X2' }; Score = 0.5 }
                 )
             }
 
@@ -153,9 +155,12 @@ Describe 'Invoke-MuFo' -Tag 'Unit' {
                 if ($Query -like '*Sheet Music*') {
                     return @(
                         [PSCustomObject]@{
-                            AlbumName = 'Sheet Music'
-                            Score     = 1.0
-                            Artists   = @([PSCustomObject]@{ Name = '10cc'; Id = 'ART10' })
+                            AlbumName   = 'Sheet Music'
+                            Score       = 1.0
+                            Artists     = @([PSCustomObject]@{ Name = '10cc'; Id = 'ART10' })
+                            ReleaseDate = '2007-01-01'
+                            AlbumType   = 'album'
+                            Item        = [pscustomobject]@{ Id = 'ALBUM_ID_INFERENCE'; Name = 'Sheet Music'; ReleaseDate = '2007-01-01' }
                         }
                     )
                 }
@@ -168,10 +173,12 @@ Describe 'Invoke-MuFo' -Tag 'Unit' {
                 Write-Verbose "Validation mock triggered for Query: $($Query)"
                 @(
                     [pscustomobject]@{
-                        Name        = 'Sheet Music'
-                        AlbumType   = 'album'
+                        AlbumName   = 'Sheet Music'
+                        Score       = 1.0
+                        Artists     = @([pscustomobject]@{ Name='10cc'; Id='ART10' })
                         ReleaseDate = '2007-01-01'
-                        Item        = [pscustomobject]@{ Id = 'ALBUM_ID_VALIDATED' }
+                        AlbumType   = 'album'
+                        Item        = [pscustomobject]@{ Id = 'ALBUM_ID_VALIDATED'; Name = 'Sheet Music'; ReleaseDate = '2007-01-01' }
                     }
                 )
             }

@@ -34,7 +34,8 @@ function Invoke-MuFo {
     Include compilation releases when fetching albums from provider.
 
 .PARAMETER IncludeTracks
-    Include track tag inspection and validation metrics in the output.
+    Include track tag inspection and validation metrics in the output. When enabled, also performs
+    classical music analysis including composer detection, conductor identification, and organization suggestions.
 
 .PARAMETER BoxMode
     Treat subfolders as discs of a box set, aggregating tracks from all subfolders into one album.
@@ -88,7 +89,7 @@ function Invoke-MuFo {
 
         [Parameter(Mandatory = $false)]
         [ValidateRange(0.0,1.0)]
-        [double]$ConfidenceThreshold = 0.9,
+        [double]$ConfidenceThreshold = 0.6,
 
         [Parameter(Mandatory = $false)]
         [ValidateSet('Here','1U','2U','1D','2D')]
@@ -861,39 +862,63 @@ function Invoke-MuFo {
                             # Tier 1: Precise Filtered Search (artist, album, year)
                             if ($origYear) {
                                 $q1 = "artist:`"$($selectedArtist.Name)`" album:`"$normalizedLocal`" year:$origYear"
-                                $spotifyAlbums += Get-SpotifyAlbumMatches -Query $q1 -AlbumName $normalizedLocal
+                                $spotifyAlbums += Get-SpotifyAlbumMatches -Query $q1 -AlbumName $normalizedLocal -ArtistName $selectedArtist.Name -Year $origYear
                             }
                             # Tier 2: Year-Influenced Search (artist, album, year as keyword)
                             if ($spotifyAlbums.Count -eq 0 -and $origYear) {
                                 $q2 = "artist:`"$($selectedArtist.Name)`" album:`"$normalizedLocal`" $origYear"
-                                $spotifyAlbums += Get-SpotifyAlbumMatches -Query $q2 -AlbumName $normalizedLocal
+                                $spotifyAlbums += Get-SpotifyAlbumMatches -Query $q2 -AlbumName $normalizedLocal -ArtistName $selectedArtist.Name -Year $origYear
                             }
                             # Tier 3: Broad Fallback Search (artist, album)
                             if ($spotifyAlbums.Count -eq 0) {
                                 $q3 = "artist:`"$($selectedArtist.Name)`" album:`"$normalizedLocal`""
-                                $spotifyAlbums += Get-SpotifyAlbumMatches -Query $q3 -AlbumName $normalizedLocal
+                                $spotifyAlbums += Get-SpotifyAlbumMatches -Query $q3 -AlbumName $normalizedLocal -ArtistName $selectedArtist.Name -Year $origYear
                             }
-                            # Tier 4: Get all artist albums as a final fallback
-                            if ($spotifyAlbums.Count -eq 0) {
-                                $spotifyAlbums = Get-SpotifyArtistAlbums -ArtistId $selectedArtist.Id -IncludeSingles:$IncludeSingles -IncludeCompilations:$IncludeCompilations -ErrorAction Stop
+                            # Tier 4: Limited fallback - only for very short album names
+                            if ($spotifyAlbums.Count -eq 0 -and $normalizedLocal.Length -le 10) {
+                                Write-Verbose "Very short album name, trying limited artist discography..."
+                                $artistAlbums = Get-SpotifyArtistAlbums -ArtistId $selectedArtist.Id -IncludeSingles:$false -IncludeCompilations:$false -ErrorAction Stop
+                                # Only check albums with reasonable similarity to avoid processing thousands
+                                $spotifyAlbums = $artistAlbums | Where-Object { 
+                                    $quickScore = Get-StringSimilarity -String1 $normalizedLocal -String2 $_.Name
+                                    $quickScore -ge 0.5
+                                } | Select-Object -First 20
                             }
 
                             foreach ($sa in $spotifyAlbums) {
                                 try {
                                     if (-not $sa) { continue }
-                                    $saName = $null
-                                    if ($sa.PSObject.Properties.Match('Name').Count -gt 0) { $saName = $sa.Name }
-                                    elseif ($sa.PSObject.Properties.Match('name').Count -gt 0) { $saName = $sa.name }
-                                    if ($null -eq $saName) { continue }
-                                    if ($saName -is [array]) { $saName = ($saName -join ' ') } else { $saName = [string]$saName }
-                                    $score = Get-StringSimilarity -String1 $normalizedLocal -String2 $saName
                                     
-                                    # Boost score for year matches to prefer original releases
-                                    if ($origYear -and $sa.PSObject.Properties.Match('ReleaseDate').Count -gt 0 -and $sa.ReleaseDate) {
-                                        $saYear = [regex]::Match([string]$sa.ReleaseDate, '^(?<y>\d{4})')
-                                        if ($saYear.Success -and $saYear.Groups['y'].Value -eq $origYear) {
-                                            $score += 1.0  # Heavily boost for exact year match
-                                            Write-Verbose ("Year match bonus: {0} ({1}) matches local year {2}" -f $saName, $saYear.Groups['y'].Value, $origYear)
+                                    # Check if this is already a scored result from Get-SpotifyAlbumMatches
+                                    if ($sa.PSObject.Properties.Match('Score').Count -gt 0 -and $sa.PSObject.Properties.Match('AlbumName').Count -gt 0) {
+                                        # This is a pre-scored result, use its score and name
+                                        $score = [double]$sa.Score
+                                        $saName = [string]$sa.AlbumName
+                                        
+                                        # Boost score for year matches to prefer original releases  
+                                        if ($origYear -and $sa.PSObject.Properties.Match('ReleaseDate').Count -gt 0 -and $sa.ReleaseDate) {
+                                            $saYear = [regex]::Match([string]$sa.ReleaseDate, '^(?<y>\d{4})')
+                                            if ($saYear.Success -and $saYear.Groups['y'].Value -eq $origYear) {
+                                                $score += 1.0  # Heavily boost for exact year match
+                                                Write-Verbose ("Year match bonus: {0} ({1}) matches local year {2}" -f $saName, $saYear.Groups['y'].Value, $origYear)
+                                            }
+                                        }
+                                    } else {
+                                        # This is a raw Spotify album object, score it manually
+                                        $saName = $null
+                                        if ($sa.PSObject.Properties.Match('Name').Count -gt 0) { $saName = $sa.Name }
+                                        elseif ($sa.PSObject.Properties.Match('name').Count -gt 0) { $saName = $sa.name }
+                                        if ($null -eq $saName) { continue }
+                                        if ($saName -is [array]) { $saName = ($saName -join ' ') } else { $saName = [string]$saName }
+                                        $score = Get-StringSimilarity -String1 $normalizedLocal -String2 $saName
+                                        
+                                        # Boost score for year matches to prefer original releases
+                                        if ($origYear -and $sa.PSObject.Properties.Match('ReleaseDate').Count -gt 0 -and $sa.ReleaseDate) {
+                                            $saYear = [regex]::Match([string]$sa.ReleaseDate, '^(?<y>\d{4})')
+                                            if ($saYear.Success -and $saYear.Groups['y'].Value -eq $origYear) {
+                                                $score += 1.0  # Heavily boost for exact year match
+                                                Write-Verbose ("Year match bonus: {0} ({1}) matches local year {2}" -f $saName, $saYear.Groups['y'].Value, $origYear)
+                                            }
                                         }
                                     }
                                     
@@ -963,11 +988,28 @@ function Invoke-MuFo {
                                     }
                                     $tracks = @()
                                     foreach ($p in $scanPaths) {
-                                        $tracks += Get-AudioFileTags -Path $p
+                                        $tracks += Get-AudioFileTags -Path $p -IncludeComposer
                                     }
                                     $c | Add-Member -NotePropertyName TrackCountLocal -NotePropertyValue $tracks.Count
                                     $missingTitle = ($tracks | Where-Object { -not $_.Title }).Count
                                     $c | Add-Member -NotePropertyName TracksWithMissingTitle -NotePropertyValue $missingTitle
+
+                                    # Classical music analysis
+                                    $classicalTracks = $tracks | Where-Object { $_.IsClassical -eq $true }
+                                    $c | Add-Member -NotePropertyName ClassicalTracks -NotePropertyValue $classicalTracks.Count
+                                    
+                                    if ($classicalTracks.Count -gt 0) {
+                                        $composers = $classicalTracks | Where-Object { $_.Composer } | Group-Object Composer | Sort-Object Count -Descending
+                                        $primaryComposer = if ($composers.Count -gt 0) { $composers[0].Name } else { $null }
+                                        $c | Add-Member -NotePropertyName PrimaryComposer -NotePropertyValue $primaryComposer
+                                        $c | Add-Member -NotePropertyName SuggestedClassicalArtist -NotePropertyValue $classicalTracks[0].SuggestedAlbumArtist
+                                        
+                                        # Conductor analysis
+                                        $conductors = $classicalTracks | Where-Object { $_.Conductor } | Group-Object Conductor | Sort-Object Count -Descending
+                                        if ($conductors.Count -gt 0) {
+                                            $c | Add-Member -NotePropertyName PrimaryConductor -NotePropertyValue $conductors[0].Name
+                                        }
+                                    }
 
                                     # Compute mismatches against Spotify if album matched
                                     $mismatches = 0
