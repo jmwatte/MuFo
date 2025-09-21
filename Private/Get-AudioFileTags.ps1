@@ -85,16 +85,27 @@ function Get-AudioFileTags {
                     if ($response -eq '' -or $response -match '^[Yy]') {
                         # Use the helper function if available
                         if (Get-Command Install-TagLibSharp -ErrorAction SilentlyContinue) {
-                            Install-TagLibSharp
+                            try {
+                                Install-TagLibSharp
+                                Write-Host ""
+                                Write-Host "Please restart PowerShell and run your command again to use TagLib-Sharp." -ForegroundColor Yellow
+                            } catch {
+                                Write-Warning "Installation helper failed: $($_.Exception.Message)"
+                                Write-Host "Please try manual installation: Install-Package TagLibSharp" -ForegroundColor Yellow
+                            }
                         } else {
                             Write-Host "Installing TagLib-Sharp..." -ForegroundColor Green
                             try {
-                                Install-Package TagLibSharp -Scope CurrentUser -Force -SkipDependencies
+                                Install-Package TagLibSharp -Scope CurrentUser -Force -SkipDependencies -ErrorAction Stop
                                 Write-Host "✓ TagLib-Sharp installed successfully!" -ForegroundColor Green
                                 Write-Host "Please restart PowerShell and try again." -ForegroundColor Yellow
                             } catch {
-                                Write-Warning "Failed to install TagLib-Sharp automatically: $($_.Exception.Message)"
-                                Write-Host "Please install manually: Install-Package TagLibSharp" -ForegroundColor Yellow
+                                Write-Warning "Failed to install TagLib-Sharp: $($_.Exception.Message)"
+                                Write-Host ""
+                                Write-Host "Please try manual installation:" -ForegroundColor Yellow
+                                Write-Host "  Install-Package TagLibSharp -Force" -ForegroundColor White
+                                Write-Host "  -or-" -ForegroundColor Yellow  
+                                Write-Host "  Download from: https://www.nuget.org/packages/TagLibSharp/" -ForegroundColor White
                             }
                         }
                     }

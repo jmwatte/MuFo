@@ -72,6 +72,8 @@ function Install-TagLibSharp {
     # Attempt installation
     Write-Host "Installing TagLib-Sharp..." -ForegroundColor Yellow
     
+    $installSuccess = $false
+    
     try {
         # Method 1: Try PackageManagement
         if (Get-Command Install-Package -ErrorAction SilentlyContinue) {
@@ -83,9 +85,11 @@ function Install-TagLibSharp {
                 Force = $Force
                 SkipDependencies = $true
                 ProviderName = 'NuGet'
+                ErrorAction = 'Stop'
             }
             
             Install-Package @installParams
+            $installSuccess = $true
             Write-Host "✓ TagLib-Sharp installed via PackageManagement" -ForegroundColor Green
         }
         else {
@@ -95,36 +99,72 @@ function Install-TagLibSharp {
     catch {
         Write-Warning "PackageManagement installation failed: $($_.Exception.Message)"
         
-        # Method 2: Try NuGet directly  
+        # Method 2: Try alternative NuGet approach
         try {
-            Write-Host "Trying direct NuGet installation..." -ForegroundColor Yellow
+            Write-Host "Trying alternative installation method..." -ForegroundColor Yellow
             
-            $nugetPath = "$env:TEMP\nuget.exe"
-            if (-not (Test-Path $nugetPath)) {
-                Write-Host "Downloading NuGet.exe..." -ForegroundColor Yellow
-                Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" -OutFile $nugetPath
+            # Try installing with different parameters
+            $altParams = @{
+                Name = 'TagLibSharp'
+                Scope = $Scope
+                Force = $true
+                AllowClobber = $true
+                ErrorAction = 'Stop'
             }
             
-            $packagesDir = "$env:USERPROFILE\.nuget\packages"
-            if (-not (Test-Path $packagesDir)) {
-                New-Item -ItemType Directory -Path $packagesDir -Force | Out-Null
-            }
-            
-            & $nugetPath install TagLibSharp -OutputDirectory $packagesDir
-            Write-Host "✓ TagLib-Sharp installed via NuGet" -ForegroundColor Green
+            Install-Package @altParams
+            $installSuccess = $true
+            Write-Host "✓ TagLib-Sharp installed via alternative method" -ForegroundColor Green
         }
         catch {
-            Write-Error "All installation methods failed. Please install manually:"
-            Write-Host ""
-            Write-Host "Option 1: PowerShell Package Manager" -ForegroundColor Yellow
-            Write-Host "  Install-Package TagLibSharp -Scope CurrentUser" -ForegroundColor White
-            Write-Host ""
-            Write-Host "Option 2: Download manually" -ForegroundColor Yellow
-            Write-Host "  1. Download TagLib-Sharp from: https://github.com/mono/taglib-sharp" -ForegroundColor White
-            Write-Host "  2. Extract TagLib-Sharp.dll" -ForegroundColor White
-            Write-Host "  3. Place in MuFo module directory" -ForegroundColor White
-            throw "Installation failed"
+            Write-Warning "Alternative installation failed: $($_.Exception.Message)"
+            
+            # Method 3: Try direct NuGet download
+            try {
+                Write-Host "Trying direct NuGet download..." -ForegroundColor Yellow
+                
+                $nugetUrl = "https://www.nuget.org/api/v2/package/TagLibSharp"
+                $tempZip = "$env:TEMP\TagLibSharp.zip"
+                $extractDir = "$env:USERPROFILE\.nuget\packages\taglibsharp"
+                
+                # Download the package
+                Invoke-WebRequest -Uri $nugetUrl -OutFile $tempZip -ErrorAction Stop
+                
+                # Extract it
+                if (Test-Path $extractDir) {
+                    Remove-Item $extractDir -Recurse -Force
+                }
+                Expand-Archive -Path $tempZip -DestinationPath $extractDir -Force
+                
+                # Clean up
+                Remove-Item $tempZip -Force
+                
+                $installSuccess = $true
+                Write-Host "✓ TagLib-Sharp downloaded and extracted manually" -ForegroundColor Green
+            }
+            catch {
+                Write-Error "All installation methods failed:"
+                Write-Host ""
+                Write-Host "The automatic installation encountered errors. Please try manual installation:" -ForegroundColor Yellow
+                Write-Host ""
+                Write-Host "Option 1: PowerShell Package Manager (retry)" -ForegroundColor Cyan
+                Write-Host "  Install-Package TagLibSharp -Scope CurrentUser -Force" -ForegroundColor White
+                Write-Host ""
+                Write-Host "Option 2: NuGet CLI" -ForegroundColor Cyan
+                Write-Host "  nuget install TagLibSharp -OutputDirectory `$env:USERPROFILE\.nuget\packages" -ForegroundColor White
+                Write-Host ""
+                Write-Host "Option 3: Manual Download" -ForegroundColor Cyan
+                Write-Host "  1. Visit: https://www.nuget.org/packages/TagLibSharp/" -ForegroundColor White
+                Write-Host "  2. Download the .nupkg file" -ForegroundColor White
+                Write-Host "  3. Extract TagLib.dll to the MuFo module directory" -ForegroundColor White
+                
+                return
+            }
         }
+    }
+    
+    if (-not $installSuccess) {
+        Write-Warning "Installation may have failed. Proceeding with verification..."
     }
     
     # Verify installation
