@@ -417,7 +417,7 @@ function Invoke-MuFo {
                         # Quick path: use the first local album name to infer directly from top album match
                         if ($localNames.Count -gt 0) {
                             $primary = $localNames[0]
-                            $quick = Get-SpotifyAlbumMatches -AlbumName $primary -ErrorAction SilentlyContinue | Select-Object -First 1
+                            $quick = Get-SpotifyAlbumMatches -AlbumName $primary -Artist $localArtist -ErrorAction SilentlyContinue | Select-Object -First 1
                             if ($quick -and $quick.Artists -and $quick.Artists.Count -gt 0) {
                                 $qa = $quick.Artists[0]
                                 if ($qa.Name) {
@@ -541,8 +541,7 @@ function Invoke-MuFo {
                         foreach ($ln in $localNames) {
                             if ($selectedArtist) { break }
                             # Try both album-only and combined artist+album queries to improve recall
-                            $m1 = Get-SpotifyAlbumMatches -AlbumName $ln -ErrorAction SilentlyContinue
-                            $m2 = Get-SpotifyAlbumMatches -AlbumName ("{0} {1}" -f $localArtist, $ln) -ErrorAction SilentlyContinue
+                            $m1 = Get-SpotifyAlbumMatches -AlbumName $ln -Artist $localArtist -ErrorAction SilentlyContinue
                             # Also try a combined All-type query via Search-Item directly to mirror user's successful approach
                             $m3 = @()
                             try {
@@ -606,7 +605,7 @@ function Invoke-MuFo {
                                 Write-Verbose ("Phrase m4/m5 search failed: {0}{1}{2}" -f $msg, $innerText, $stackText)
                             }
                             if (-not $selectedArtist) {
-                                foreach ($m in ($m1 + $m2 + $m3 + $m4 + $m5)) {
+                                foreach ($m in ($m1 + $m3 + $m4 + $m5)) {
                                     foreach ($a in $m.Artists) {
                                         if (-not $a.Name) { continue }
                                         # Only count votes for reasonably relevant matches

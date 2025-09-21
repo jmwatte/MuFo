@@ -6,18 +6,23 @@ function Get-SpotifyAlbumMatches {
 .PARAMETER AlbumName
     The album name to search for.
 
+.PARAMETER Artist
+    Optional artist name to include in the search query.
+
 .PARAMETER Top
     Number of top matches to return (default 5).
 #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$AlbumName,
+        [string]$Artist,
         [int]$Top = 5
     )
 
     try {
-    Write-Verbose ("Search-Item Album query: '{0}'" -f $AlbumName)
-    $result = Search-Item -Type Album -Query $AlbumName -ErrorAction Stop
+        $Query = if ($Artist) { "$Artist $AlbumName" } else { $AlbumName }
+    Write-Verbose ("Search-Item Album query: '{0}'" -f $Query)
+    $result = Search-Item -Type Album -Query $Query -ErrorAction Stop
         $items = @()
         if ($null -eq $result) { return @() }
         if ($result -is [System.Array]) {
