@@ -25,9 +25,13 @@ function Set-AudioFileTags {
 .PARAMETER SpotifyAlbum
     Spotify album object to use as reference for metadata enhancement.
 
+.PARAMETER FixOnly
+    Only fix these specific tag types. Valid values: 'Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists'.
+    Cannot be used together with -DontFix. When specified, only these tag types will be fixed.
+
 .PARAMETER DontFix
     Exclude specific tag types from being fixed. Valid values: 'Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists'.
-    By default, all tag types are fixed when issues are detected.
+    Cannot be used together with -FixOnly. By default, all tag types are fixed when issues are detected.
 
 .PARAMETER OptimizeClassicalTags
     Optimize tags for classical music (composer as album artist, conductor info, etc.).
@@ -48,6 +52,11 @@ function Set-AudioFileTags {
     
     Fixes all metadata except genres, and validates track completeness.
 
+.EXAMPLE
+    Set-AudioFileTags -Path "C:\Music\Album" -FixOnly Titles,TrackNumbers
+    
+    Only fixes track titles and track numbers, leaves other metadata unchanged.
+
 .NOTES
     Requires TagLib-Sharp to be available for writing tags.
     Author: jmw
@@ -58,6 +67,10 @@ function Set-AudioFileTags {
         [string]$Path,
         
         [object]$SpotifyAlbum,
+        
+        [Parameter()]
+        [ValidateSet('Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists')]
+        [string[]]$FixOnly = @(),
         
         [Parameter()]
         [ValidateSet('Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists')]
@@ -90,6 +103,22 @@ function Set-AudioFileTags {
     }
     
     Write-Verbose "Processing $($existingTags.Count) audio files for tag enhancement"
+    
+    # Parameter validation: FixOnly and DontFix are mutually exclusive
+    if ($FixOnly.Count -gt 0 -and $DontFix.Count -gt 0) {
+        throw "Cannot specify both -FixOnly and -DontFix parameters. Use one or the other."
+    }
+    
+    # Determine which tags to fix
+    $tagsToFix = if ($FixOnly.Count -gt 0) {
+        $FixOnly
+    } elseif ($DontFix.Count -gt 0) {
+        @('Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists') | Where-Object { $_ -notin $DontFix }
+    } else {
+        @('Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists')  # Fix everything by default
+    }
+    
+    Write-Verbose "Tags to fix: $($tagsToFix -join ', ')"
     
     $results = @()
     $changesMade = 0
@@ -144,7 +173,7 @@ function Set-AudioFileTags {
             $changes = @()
             
             # Fill missing or incorrect titles
-            if ('Titles' -notin $DontFix) {
+            if ('Titles' -in $tagsToFix) {
                 $suggestedTitle = $null
                 $needsTitleFix = $false
                 
@@ -196,7 +225,7 @@ function Set-AudioFileTags {
             }
             
             # Fill missing track numbers
-            if ('TrackNumbers' -notin $DontFix -and ($tag.Track -eq 0 -or -not $tag.Track)) {
+            if ('TrackNumbers' -in $tagsToFix -and ($tag.Track -eq 0 -or -not $tag.Track)) {
                 $suggestedTrackNumber = $null
                 
                 # Try to extract from filename
@@ -224,7 +253,7 @@ function Set-AudioFileTags {
             }
             
             # Fill missing or incorrect years
-            if ('Years' -notin $DontFix) {
+            if ('Years' -in $tagsToFix) {
                 $suggestedYear = $null
                 
                 # Try to get year from Spotify album first
@@ -263,7 +292,7 @@ function Set-AudioFileTags {
             }
             
             # Fill missing or enhance existing genres
-            if ('Genres' -notin $DontFix) {
+            if ('Genres' -in $tagsToFix) {
                 $suggestedGenres = @()
                 
                 # Get existing genres first
@@ -313,7 +342,7 @@ function Set-AudioFileTags {
             }
             
             # Fill missing or correct incorrect artists
-            if ('Artists' -notin $DontFix) {
+            if ('Artists' -in $tagsToFix) {
                 $suggestedArtist = $null
                 $suggestedAlbumArtist = $null
                 

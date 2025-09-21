@@ -40,9 +40,13 @@ function Invoke-MuFo {
 .PARAMETER FixTags
     Enable tag writing and enhancement. Fills missing titles, track numbers, and optimizes classical music tags.
 
+.PARAMETER FixOnly
+    Only fix these specific tag types (requires -FixTags). Valid values: 'Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists'.
+    Cannot be used together with -DontFix. When specified, only these tag types will be fixed.
+
 .PARAMETER DontFix
     Exclude specific tag types from being fixed (requires -FixTags). Valid values: 'Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists'.
-    By default, -FixTags will fix all detected issues unless excluded here.
+    Cannot be used together with -FixOnly. By default, -FixTags will fix all detected issues unless excluded here.
 
 .PARAMETER OptimizeClassicalTags
     Optimize tags for classical music organization - composer as album artist, conductor info, etc. (requires -FixTags).
@@ -137,6 +141,10 @@ function Invoke-MuFo {
 
         [Parameter(Mandatory = $false)]
         [switch]$FixTags,
+
+        [Parameter(Mandatory = $false)]
+        [ValidateSet('Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists')]
+        [string[]]$FixOnly = @(),
 
         [Parameter(Mandatory = $false)]
         [ValidateSet('Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists')]
@@ -258,6 +266,12 @@ function Invoke-MuFo {
         # Parameter validation for tag enhancement
         if ($OptimizeClassicalTags -and -not $FixTags) {
             Write-Error "Tag enhancement switch (-OptimizeClassicalTags) requires -FixTags to be enabled."
+            return
+        }
+        
+        # FixOnly and DontFix are mutually exclusive
+        if ($FixOnly.Count -gt 0 -and $DontFix.Count -gt 0) {
+            Write-Error "Cannot specify both -FixOnly and -DontFix parameters. Use one or the other."
             return
         }
         
@@ -1064,8 +1078,9 @@ function Invoke-MuFo {
                                             WhatIf = $WhatIfPreference
                                         }
                                         
-                                        # Pass DontFix parameter to Set-AudioFileTags
-                                        if ($DontFix) { $tagParams.DontFix = $DontFix }
+                                        # Pass tag fixing parameters to Set-AudioFileTags
+                                        if ($FixOnly.Count -gt 0) { $tagParams.FixOnly = $FixOnly }
+                                        if ($DontFix.Count -gt 0) { $tagParams.DontFix = $DontFix }
                                         if ($OptimizeClassicalTags) { $tagParams.OptimizeClassicalTags = $true }
                                         if ($ValidateCompleteness) { $tagParams.ValidateCompleteness = $true }
                                         
