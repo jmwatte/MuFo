@@ -6,7 +6,7 @@ function Set-AudioFileTags {
 .DESCRIPTION
     This function writes metadata to audio files with special enhancements for classical music.
     It can fill missing titles, track numbers, genres, an    # Summary
-    Write-Host "\nTag Enhancement Summary:" -ForegroundColor Cyan
+    Write-Host "`nTag Enhancement Summary:" -ForegroundColor Cyan
     Write-Host "  Files processed: $($existingTags.Count)" -ForegroundColor Gray
     
     if ($WhatIfPreference) {
@@ -25,14 +25,9 @@ function Set-AudioFileTags {
 .PARAMETER SpotifyAlbum
     Spotify album object to use as reference for metadata enhancement.
 
-.PARAMETER FillMissingTitles
-    Automatically fill missing track titles from filename or Spotify data.
-
-.PARAMETER FillMissingTrackNumbers
-    Automatically assign track numbers based on file order or filename patterns.
-
-.PARAMETER FillMissingGenres
-    Fill missing genre information from Spotify or infer from classical music detection.
+.PARAMETER DontFix
+    Exclude specific tag types from being fixed. Valid values: 'Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists'.
+    By default, all tag types are fixed when issues are detected.
 
 .PARAMETER OptimizeClassicalTags
     Optimize tags for classical music (composer as album artist, conductor info, etc.).
@@ -44,14 +39,14 @@ function Set-AudioFileTags {
     Show what changes would be made without actually writing them.
 
 .EXAMPLE
-    Set-AudioFileTags -Path "C:\Music\Arvo Pärt\1999 - Alina" -FillMissingTitles -OptimizeClassicalTags
+    Set-AudioFileTags -Path "C:\Music\Arvo Pärt\1999 - Alina" -OptimizeClassicalTags
     
-    Fills missing metadata and optimizes for classical music organization.
+    Fixes all metadata issues and optimizes for classical music organization.
 
 .EXAMPLE
-    Set-AudioFileTags -Path "C:\Music\Album" -SpotifyAlbum $album -FillMissingTrackNumbers -ValidateCompleteness
+    Set-AudioFileTags -Path "C:\Music\Album" -SpotifyAlbum $album -DontFix Genres -ValidateCompleteness
     
-    Uses Spotify album data to fill track numbers and check for missing tracks.
+    Fixes all metadata except genres, and validates track completeness.
 
 .NOTES
     Requires TagLib-Sharp to be available for writing tags.
@@ -64,11 +59,9 @@ function Set-AudioFileTags {
         
         [object]$SpotifyAlbum,
         
-        [switch]$FillMissingTitles,
-        
-        [switch]$FillMissingTrackNumbers,
-        
-        [switch]$FillMissingGenres,
+        [Parameter()]
+        [ValidateSet('Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists')]
+        [string[]]$DontFix = @(),
         
         [switch]$OptimizeClassicalTags,
         
@@ -103,7 +96,7 @@ function Set-AudioFileTags {
     
     # Analyze album for consistency and gaps
     $albumAnalysis = @{
-        AlbumName = ($existingTags | Where-Object { $_.Album } | Group-Object Album | Sort-Object Count -Descending | Select-Object -First 1).Name
+        AlbumName = ($existingTags | Where-Object { $_.Album } | Group-Object Album | Sort-Object Count -Descending | Select-Object -First 1 -ExpandProperty Name)
         ArtistName = ($existingTags | Where-Object { $_.Artist } | Group-Object Artist | Sort-Object Count -Descending | Select-Object -First 1 -ExpandProperty Name)
         IsClassical = ($existingTags | Where-Object { $_.IsClassical -eq $true }).Count -gt ($existingTags.Count / 2)
         TrackNumbers = $existingTags | Where-Object { $_.Track -gt 0 } | ForEach-Object { $_.Track } | Sort-Object
@@ -150,41 +143,60 @@ function Set-AudioFileTags {
             $changesMadeToFile = $false
             $changes = @()
             
-            # Fill missing titles
-            if ($FillMissingTitles -and [string]::IsNullOrWhiteSpace($tag.Title)) {
+            # Fill missing or incorrect titles
+            if ('Titles' -notin $DontFix) {
                 $suggestedTitle = $null
+                $needsTitleFix = $false
                 
-                # Try to extract from filename
-                $filename = [System.IO.Path]::GetFileNameWithoutExtension($track.FileName)
-                
-                # Pattern: "01 - Track Name" or "Track Name"
-                if ($filename -match '^\d+\s*[-\.]\s*(.+)$') {
-                    $suggestedTitle = $matches[1].Trim()
-                } elseif ($filename -match '^\d+\s+(.+)$') {
-                    $suggestedTitle = $matches[1].Trim()
-                } else {
-                    $suggestedTitle = $filename
+                # Check if title is missing or obviously wrong
+                if ([string]::IsNullOrWhiteSpace($tag.Title)) {
+                    $needsTitleFix = $true
+                } elseif ($tag.Title -like "*test*" -or $tag.Title -like "*missing*" -or $tag.Title -eq [System.IO.Path]::GetFileNameWithoutExtension($track.FileName)) {
+                    # Title looks like a placeholder or just the filename
+                    $needsTitleFix = $true
                 }
                 
-                # Try to get from Spotify if available
-                if ($SpotifyAlbum -and $SpotifyAlbum.tracks -and $track.Track -gt 0) {
-                    $spotifyTrack = $SpotifyAlbum.tracks.items | Where-Object { $_.track_number -eq $track.Track }
-                    if ($spotifyTrack) {
-                        $suggestedTitle = $spotifyTrack.name
+                if ($needsTitleFix) {
+                    # Try to get from Spotify first (most accurate)
+                    if ($SpotifyAlbum -and $SpotifyAlbum.tracks -and $track.Track -gt 0) {
+                        $spotifyTrack = $SpotifyAlbum.tracks.items | Where-Object { $_.track_number -eq $track.Track }
+                        if ($spotifyTrack) {
+                            $suggestedTitle = $spotifyTrack.name
+                        }
                     }
-                }
-                
-                if ($suggestedTitle) {
-                    if ($PSCmdlet.ShouldProcess($track.Path, "Set title to '$suggestedTitle'")) {
-                        $tag.Title = $suggestedTitle
-                        $changesMadeToFile = $true
+                    
+                    # If no Spotify data, try to extract from filename
+                    if (-not $suggestedTitle) {
+                        $filename = [System.IO.Path]::GetFileNameWithoutExtension($track.FileName)
+                        
+                        # Pattern: "01 - Track Name" or "Track Name"
+                        if ($filename -match '^\d+\s*[-\.]\s*(.+)$') {
+                            $suggestedTitle = $matches[1].Trim()
+                        } elseif ($filename -match '^\d+\s+(.+)$') {
+                            $suggestedTitle = $matches[1].Trim()
+                        } elseif ($filename -notlike "*test*" -and $filename -notlike "*missing*") {
+                            # Use filename as-is if it doesn't look like a placeholder
+                            $suggestedTitle = $filename
+                        }
                     }
-                    $changes += "Title: '$suggestedTitle'"
+                    
+                    # If we still don't have a suggestion but we know the title is bad, 
+                    # provide a clear indication to the user
+                    if (-not $suggestedTitle) {
+                        $changes += "⚠️ Title: '$($tag.Title)' needs manual review (appears to be placeholder/test data)"
+                        # Don't set changesMadeToFile since we're not making changes, just flagging
+                    } elseif ($suggestedTitle -ne $tag.Title) {
+                        if ($PSCmdlet.ShouldProcess($track.Path, "Set title to '$suggestedTitle'")) {
+                            $tag.Title = $suggestedTitle
+                            $changesMadeToFile = $true
+                        }
+                        $changes += "Title: '$suggestedTitle' (was: '$($tag.Title)')"
+                    }
                 }
             }
             
             # Fill missing track numbers
-            if ($FillMissingTrackNumbers -and ($tag.Track -eq 0 -or -not $tag.Track)) {
+            if ('TrackNumbers' -notin $DontFix -and ($tag.Track -eq 0 -or -not $tag.Track)) {
                 $suggestedTrackNumber = $null
                 
                 # Try to extract from filename
@@ -193,7 +205,9 @@ function Set-AudioFileTags {
                     $suggestedTrackNumber = [int]$matches[1]
                 } else {
                     # Use file order as fallback
-                    $allFiles = Get-ChildItem -Path (Split-Path $track.Path) -Filter "*.mp3", "*.flac", "*.m4a", "*.ogg", "*.wav" | Sort-Object Name
+                    $allFiles = Get-ChildItem -Path (Split-Path $track.Path) -File | 
+                                Where-Object { $_.Extension.ToLower() -in @('.mp3', '.flac', '.m4a', '.ogg', '.wav') } | 
+                                Sort-Object Name
                     $index = [Array]::IndexOf($allFiles.FullName, $track.Path)
                     if ($index -ge 0) {
                         $suggestedTrackNumber = $index + 1
@@ -209,22 +223,124 @@ function Set-AudioFileTags {
                 }
             }
             
-            # Fill missing genres
-            if ($FillMissingGenres -and (-not $tag.Genres -or $tag.Genres.Count -eq 0)) {
-                $suggestedGenre = $null
+            # Fill missing or incorrect years
+            if ('Years' -notin $DontFix) {
+                $suggestedYear = $null
                 
-                if ($albumAnalysis.IsClassical) {
-                    $suggestedGenre = "Classical"
-                } elseif ($SpotifyAlbum -and $SpotifyAlbum.genres -and $SpotifyAlbum.genres.Count -gt 0) {
-                    $suggestedGenre = $SpotifyAlbum.genres[0]
+                # Try to get year from Spotify album first
+                if ($SpotifyAlbum -and $SpotifyAlbum.release_date) {
+                    try {
+                        $releaseDate = [DateTime]::Parse($SpotifyAlbum.release_date)
+                        $suggestedYear = $releaseDate.Year
+                    } catch {
+                        # Try parsing just the year if full date parsing fails
+                        if ($SpotifyAlbum.release_date -match '^\d{4}') {
+                            $suggestedYear = [int]$matches[0]
+                        }
+                    }
                 }
                 
-                if ($suggestedGenre) {
-                    if ($PSCmdlet.ShouldProcess($track.Path, "Set genre to '$suggestedGenre'")) {
-                        $tag.Genres = @($suggestedGenre)
+                # Try to extract from folder name if no Spotify data
+                if (-not $suggestedYear) {
+                    $folderName = Split-Path $track.Path -Parent | Split-Path -Leaf
+                    if ($folderName -match '(\d{4})') {
+                        $suggestedYear = [int]$matches[1]
+                    }
+                }
+                
+                # Update if we have a suggested year and it's different from current
+                if ($suggestedYear -and ($tag.Year -eq 0 -or $tag.Year -ne $suggestedYear)) {
+                    if ($PSCmdlet.ShouldProcess($track.Path, "Set year to $suggestedYear")) {
+                        $tag.Year = [uint32]$suggestedYear
                         $changesMadeToFile = $true
                     }
-                    $changes += "Genre: '$suggestedGenre'"
+                    if ($tag.Year -eq 0) {
+                        $changes += "Year: $suggestedYear"
+                    } else {
+                        $changes += "Year: $suggestedYear (was: $($tag.Year))"
+                    }
+                }
+            }
+            
+            # Fill missing or enhance existing genres
+            if ('Genres' -notin $DontFix) {
+                $suggestedGenres = @()
+                
+                # Get existing genres first
+                $existingGenres = @()
+                if ($tag.Genres -and $tag.Genres.Count -gt 0) {
+                    $existingGenres = @($tag.Genres)
+                }
+                
+                # Add classical genre if detected
+                if ($albumAnalysis.IsClassical -and "Classical" -notin $existingGenres) {
+                    $suggestedGenres += "Classical"
+                } elseif ($SpotifyAlbum -and $SpotifyAlbum.artists -and $SpotifyAlbum.artists.Count -gt 0) {
+                    # Get genres from artist, not album
+                    try {
+                        $artistId = $SpotifyAlbum.artists[0].id
+                        if ($artistId) {
+                            $spotifyArtist = Get-Artist -Id $artistId -ErrorAction SilentlyContinue
+                            if ($spotifyArtist -and $spotifyArtist.genres -and $spotifyArtist.genres.Count -gt 0) {
+                                # Add Spotify genres that aren't already present
+                                foreach ($spotifyGenre in $spotifyArtist.genres) {
+                                    if ($spotifyGenre -notin $existingGenres -and $spotifyGenre -notin $suggestedGenres) {
+                                        $suggestedGenres += $spotifyGenre
+                                    }
+                                }
+                            }
+                        }
+                    } catch {
+                        Write-Verbose "Could not fetch artist genres: $($_.Exception.Message)"
+                    }
+                }
+                
+                # Only update if we have new genres to add
+                if ($suggestedGenres.Count -gt 0) {
+                    $finalGenres = @($existingGenres) + @($suggestedGenres)
+                    
+                    if ($PSCmdlet.ShouldProcess($track.Path, "Add genres '$($suggestedGenres -join ', ')' to existing '$($existingGenres -join ', ')'")) {
+                        $tag.Genres = $finalGenres
+                        $changesMadeToFile = $true
+                    }
+                    
+                    if ($existingGenres.Count -gt 0) {
+                        $changes += "Genres: Added '$($suggestedGenres -join ', ')' to existing '$($existingGenres -join ', ')'"
+                    } else {
+                        $changes += "Genres: '$($suggestedGenres -join ', ')'"
+                    }
+                }
+            }
+            
+            # Fill missing or correct incorrect artists
+            if ('Artists' -notin $DontFix) {
+                $suggestedArtist = $null
+                $suggestedAlbumArtist = $null
+                
+                # Get artist from Spotify data
+                if ($SpotifyAlbum -and $SpotifyAlbum.artists -and $SpotifyAlbum.artists.Count -gt 0) {
+                    $suggestedArtist = $SpotifyAlbum.artists[0].name
+                    $suggestedAlbumArtist = $suggestedArtist
+                }
+                
+                # Check if artist field is missing or obviously wrong (like single character)
+                $needsArtistFix = [string]::IsNullOrWhiteSpace($track.Artist) -or $track.Artist.Length -le 2
+                $needsAlbumArtistFix = [string]::IsNullOrWhiteSpace($track.AlbumArtist) -or $track.AlbumArtist.Length -le 2
+                
+                if ($needsArtistFix -and $suggestedArtist) {
+                    if ($PSCmdlet.ShouldProcess($track.Path, "Set artist to '$suggestedArtist'")) {
+                        $tag.Performers = @($suggestedArtist)
+                        $changesMadeToFile = $true
+                    }
+                    $changes += "Artist: '$suggestedArtist'"
+                }
+                
+                if ($needsAlbumArtistFix -and $suggestedAlbumArtist) {
+                    if ($PSCmdlet.ShouldProcess($track.Path, "Set album artist to '$suggestedAlbumArtist'")) {
+                        $tag.AlbumArtists = @($suggestedAlbumArtist)
+                        $changesMadeToFile = $true
+                    }
+                    $changes += "AlbumArtist: '$suggestedAlbumArtist'"
                 }
             }
             
@@ -260,10 +376,24 @@ function Set-AudioFileTags {
             
             # Save changes if any were made
             if ($changesMadeToFile) {
-                $fileObj.Save()
-                $changesMade++
-                
-                Write-Host "  ✓ Updated: $($track.FileName)" -ForegroundColor Green
+                if (-not $WhatIfPreference) {
+                    $fileObj.Save()
+                    $changesMade++
+                    
+                    Write-Host "  ✓ Updated: $($track.FileName)" -ForegroundColor Green
+                    foreach ($change in $changes) {
+                        Write-Host "    $change" -ForegroundColor Gray
+                    }
+                } else {
+                    # WhatIf mode - show what would be updated with same format
+                    Write-Host "  ✓ Would update: $($track.FileName)" -ForegroundColor Yellow
+                    foreach ($change in $changes) {
+                        Write-Host "    $change" -ForegroundColor Gray
+                    }
+                }
+            } elseif ($changes.Count -gt 0) {
+                # Show informational messages (warnings, manual review needed, etc.)
+                Write-Host "  ⚠️ Review needed: $($track.FileName)" -ForegroundColor Magenta
                 foreach ($change in $changes) {
                     Write-Host "    $change" -ForegroundColor Gray
                 }

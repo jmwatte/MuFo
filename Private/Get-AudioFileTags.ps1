@@ -1,7 +1,7 @@
 function Get-AudioFileTags {
 <#
-.SYNOPSIS
-    Reads audio file tags using TagLib-Sharp with enhanced classical music support.
+.SYNOPSIS        $supportedExtensions = @('.mp3', '.flac', '.m4a', '.ogg', '.wav', '.wma')
+        Write-Host "DEBUG: Get-AudioFileTags function entry - Path: $Path" -ForegroundColor Red    Reads audio file tags using TagLib-Sharp with enhanced classical music support.
 
 .DESCRIPTION
     This function scans a folder or processes individual audio files to extract metadata
@@ -182,11 +182,42 @@ function Get-AudioFileTags {
                 $tag = $fileObj.Tag
                 $properties = $fileObj.Properties
 
-                # Extract comprehensive tag information
-                $artists = if ($tag -and $tag.Performers) { [array]$tag.Performers } else { @() }
-                $albumArtists = if ($tag -and $tag.AlbumArtists) { [array]$tag.AlbumArtists } else { @() }
-                $composers = if ($tag -and $tag.Composers) { [array]$tag.Composers } else { @() }
-                $genres = if ($tag -and $tag.Genres) { [array]$tag.Genres } else { @() }
+                # Extract comprehensive tag information with proper array handling
+                $artists = @()
+                if ($tag -and $tag.Performers) {
+                    if ($tag.Performers -is [array]) {
+                        $artists = $tag.Performers
+                    } else {
+                        $artists = @($tag.Performers)
+                    }
+                }
+                
+                $albumArtists = @()
+                if ($tag -and $tag.AlbumArtists) {
+                    if ($tag.AlbumArtists -is [array]) {
+                        $albumArtists = $tag.AlbumArtists
+                    } else {
+                        $albumArtists = @($tag.AlbumArtists)
+                    }
+                }
+                
+                $composers = @()
+                if ($tag -and $tag.Composers) {
+                    if ($tag.Composers -is [array]) {
+                        $composers = $tag.Composers
+                    } else {
+                        $composers = @($tag.Composers)
+                    }
+                }
+                
+                $genres = @()
+                if ($tag -and $tag.Genres) {
+                    if ($tag.Genres -is [array]) {
+                        $genres = $tag.Genres
+                    } else {
+                        $genres = @($tag.Genres)
+                    }
+                }
 
                 # Create comprehensive tag object
                 $normalizedTag = [PSCustomObject]@{
@@ -195,7 +226,7 @@ function Get-AudioFileTags {
                     Title           = if ($tag -and $tag.Title) { $tag.Title } else { [System.IO.Path]::GetFileNameWithoutExtension($file) }
                     Artist          = if ($artists.Count -gt 0) { $artists[0] } else { $null }
                     Artists         = $artists
-                    AlbumArtist     = if ($albumArtists.Count -gt 0) { $albumArtists[0] } else { $null }
+                    AlbumArtist     = if ($albumArtists.Count -gt 0) { $albumArtists[0] } else { if ($artists.Count -gt 0) { $artists[0] } else { $null } }
                     AlbumArtists    = $albumArtists
                     Album           = if ($tag -and $tag.Album) { $tag.Album } else { $null }
                     Track           = if ($tag -and $tag.Track) { $tag.Track } else { $null }

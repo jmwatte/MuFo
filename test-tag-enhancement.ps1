@@ -79,7 +79,7 @@ try {
 # Test 3: Tag enhancement simulation (WhatIf)
 Write-Host "`n--- Test 3: Tag Enhancement Simulation ---" -ForegroundColor Green
 try {
-    $enhancementTest = Invoke-MuFo -Path $TestPath -IncludeTracks -FixTags -FillMissingTitles -FillMissingTrackNumbers -FillMissingGenres -OptimizeClassicalTags -WhatIf
+    $enhancementTest = Invoke-MuFo -Path $TestPath -IncludeTracks -FixTags -OptimizeClassicalTags -WhatIf
     Write-Host "✓ Tag enhancement simulation completed" -ForegroundColor Green
 } catch {
     Write-Host "✗ Tag enhancement simulation failed: $($_.Exception.Message)" -ForegroundColor Red
@@ -109,10 +109,10 @@ Write-Host "Testing parameter dependencies..." -ForegroundColor Yellow
 
 # Should fail - tag enhancement without -FixTags
 try {
-    Invoke-MuFo -Path $TestPath -FillMissingTitles -ErrorAction Stop
+    Invoke-MuFo -Path $TestPath -DontFix Titles -ErrorAction Stop
     Write-Host "  ✗ Should have failed without -FixTags" -ForegroundColor Red
 } catch {
-    Write-Host "  ✓ Correctly rejected -FillMissingTitles without -FixTags" -ForegroundColor Green
+    Write-Host "  ✓ Correctly rejected -DontFix without -FixTags" -ForegroundColor Green
 }
 
 # Should warn - -FixTags without -IncludeTracks

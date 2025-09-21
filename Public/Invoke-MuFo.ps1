@@ -40,14 +40,9 @@ function Invoke-MuFo {
 .PARAMETER FixTags
     Enable tag writing and enhancement. Fills missing titles, track numbers, and optimizes classical music tags.
 
-.PARAMETER FillMissingTitles
-    Automatically fill missing track titles from filename or Spotify data (requires -FixTags).
-
-.PARAMETER FillMissingTrackNumbers
-    Automatically assign track numbers based on file order or filename patterns (requires -FixTags).
-
-.PARAMETER FillMissingGenres
-    Fill missing genre information from Spotify or infer from classical music detection (requires -FixTags).
+.PARAMETER DontFix
+    Exclude specific tag types from being fixed (requires -FixTags). Valid values: 'Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists'.
+    By default, -FixTags will fix all detected issues unless excluded here.
 
 .PARAMETER OptimizeClassicalTags
     Optimize tags for classical music organization - composer as album artist, conductor info, etc. (requires -FixTags).
@@ -144,13 +139,8 @@ function Invoke-MuFo {
         [switch]$FixTags,
 
         [Parameter(Mandatory = $false)]
-        [switch]$FillMissingTitles,
-
-        [Parameter(Mandatory = $false)]
-        [switch]$FillMissingTrackNumbers,
-
-        [Parameter(Mandatory = $false)]
-        [switch]$FillMissingGenres,
+        [ValidateSet('Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists')]
+        [string[]]$DontFix = @(),
 
         [Parameter(Mandatory = $false)]
         [switch]$OptimizeClassicalTags,
@@ -266,8 +256,8 @@ function Invoke-MuFo {
 
     process {
         # Parameter validation for tag enhancement
-        if (($FillMissingTitles -or $FillMissingTrackNumbers -or $FillMissingGenres -or $OptimizeClassicalTags) -and -not $FixTags) {
-            Write-Error "Tag enhancement switches (-FillMissingTitles, -FillMissingTrackNumbers, -FillMissingGenres, -OptimizeClassicalTags) require -FixTags to be enabled."
+        if ($OptimizeClassicalTags -and -not $FixTags) {
+            Write-Error "Tag enhancement switch (-OptimizeClassicalTags) requires -FixTags to be enabled."
             return
         }
         
@@ -1074,9 +1064,8 @@ function Invoke-MuFo {
                                             WhatIf = $WhatIfPreference
                                         }
                                         
-                                        if ($FillMissingTitles) { $tagParams.FillMissingTitles = $true }
-                                        if ($FillMissingTrackNumbers) { $tagParams.FillMissingTrackNumbers = $true }
-                                        if ($FillMissingGenres) { $tagParams.FillMissingGenres = $true }
+                                        # Pass DontFix parameter to Set-AudioFileTags
+                                        if ($DontFix) { $tagParams.DontFix = $DontFix }
                                         if ($OptimizeClassicalTags) { $tagParams.OptimizeClassicalTags = $true }
                                         if ($ValidateCompleteness) { $tagParams.ValidateCompleteness = $true }
                                         
