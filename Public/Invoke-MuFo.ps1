@@ -36,6 +36,9 @@ function Invoke-MuFo {
 .PARAMETER IncludeTracks
     Include track tag inspection and validation metrics in the output.
 
+.PARAMETER BoxMode
+    Treat subfolders as discs of a box set, aggregating tracks from all subfolders into one album.
+
 .PARAMETER AsObject
     [Deprecated] Replaced by default object output plus -ShowSummary/-Preview switches.
 
@@ -117,6 +120,9 @@ function Invoke-MuFo {
 
         [Parameter(Mandatory = $false)]
         [switch]$IncludeTracks,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$BoxMode,
 
         [Parameter(Mandatory = $false)]
         [switch]$Preview,
@@ -825,7 +831,16 @@ function Invoke-MuFo {
                         if ($IncludeTracks) {
                             foreach ($c in $albumComparisons) {
                                 try {
-                                    $tracks = Get-AudioFileTags -Path $c.LocalPath
+                                    # Determine paths to scan for tracks (BoxMode aggregates subfolders as discs)
+                                    $scanPaths = if ($BoxMode -and (Get-ChildItem -LiteralPath $c.LocalPath -Directory -ErrorAction SilentlyContinue)) {
+                                        Get-ChildItem -LiteralPath $c.LocalPath -Directory | Select-Object -ExpandProperty FullName
+                                    } else {
+                                        @($c.LocalPath)
+                                    }
+                                    $tracks = @()
+                                    foreach ($p in $scanPaths) {
+                                        $tracks += Get-AudioFileTags -Path $p
+                                    }
                                     $c | Add-Member -NotePropertyName TrackCountLocal -NotePropertyValue $tracks.Count
                                     $missingTitle = ($tracks | Where-Object { -not $_.Title }).Count
                                     $c | Add-Member -NotePropertyName TracksWithMissingTitle -NotePropertyValue $missingTitle
@@ -842,7 +857,7 @@ function Invoke-MuFo {
                                                 $bestScore = 0
                                                 foreach ($spotifyTrack in $spotifyTracks) {
                                                     $score = Get-StringSimilarity -String1 $localTrack.Title -String2 $spotifyTrack.Name
-                                                    if ($score > $bestScore) { $bestScore = $score }
+                                                    if ($score -gt $bestScore) { $bestScore = $score }
                                                 }
                                                 if ($bestScore -lt 0.8) { $mismatches++ }
                                             }

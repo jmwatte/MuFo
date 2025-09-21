@@ -65,5 +65,6 @@ This step plan describes how to implement folder exclusions in Invoke-MuFo and a
 
 ## Notes
 - Keep comparisons on folder display names (not full paths).
-- Consider a future option for wildcard/glob exclusions.
+- Wildcard/glob exclusions are now supported using PowerShell's `-like` operator (* and ?).
+  - Examples: 'E_*' excludes folders starting with 'E_', '*_Live' excludes folders ending with '_Live', 'Album?' excludes 'Album1', 'Album2', etc.
 - Handle errors (JSON invalid or file locked) with warnings and continue.

@@ -32,7 +32,7 @@ Describe 'Invoke-MuFo' -Tag 'Unit' {
             $res = Invoke-MuFo -Path (Join-Path $TestDrive '10cc') -DoIt Automatic -Preview
             $res | Should -Not -BeNullOrEmpty
             $res | Should -HaveCount 1
-            $res[0].Artist | Should -Be '10cc'
+            $res[0].SpotifyArtist | Should -Be '10cc'
             $res[0].LocalFolder | Should -Be '1974 - Sheet Music'
             $res[0].LocalAlbum | Should -Be 'Sheet Music'
             $res[0].SpotifyAlbum | Should -Be 'Sheet Music'
@@ -79,7 +79,7 @@ Describe 'Invoke-MuFo' -Tag 'Unit' {
             $res = Invoke-MuFo -Path (Join-Path $TestDrive '11cc') -DoIt Smart -Preview
             $res | Should -Not -BeNullOrEmpty
             $res | Should -HaveCount 1
-            $res[0].Artist | Should -Be '10cc'
+            $res[0].SpotifyArtist | Should -Be '10cc'
             $res[0].ArtistSource | Should -BeIn @('inferred','evaluated')
             $res[0].LocalAlbum | Should -Be 'Sheet Music'
             $res[0].NewFolderName | Should -Be '2007 - Sheet Music'
@@ -113,7 +113,7 @@ Describe 'Invoke-MuFo' -Tag 'Unit' {
             $res = Invoke-MuFo -Path (Join-Path $TestDrive '11cc') -DoIt Smart -Preview
             $res | Should -Not -BeNullOrEmpty
             $res | Should -HaveCount 1
-            $res[0].Artist | Should -Be '10cc'
+            $res[0].SpotifyArtist | Should -Be '10cc'
             $res[0].NewFolderName | Should -Be '2007 - Sheet Music'
         }
     }
@@ -150,9 +150,74 @@ Describe 'Invoke-MuFo' -Tag 'Unit' {
             $res = Invoke-MuFo -Path (Join-Path $TestDrive '11cc') -DoIt Smart -Preview
             $res | Should -Not -BeNullOrEmpty
             $res | Should -HaveCount 1
-            $res[0].Artist | Should -Be '10cc'
+            $res[0].SpotifyArtist | Should -Be '10cc'
             $res[0].ArtistSource | Should -Be 'inferred'
             $res[0].NewFolderName | Should -Be '2007 - Sheet Music'
+        }
+    }
+
+    Context 'Exclusions functionality' {
+        BeforeAll {
+            # Folder structure in TestDrive:
+            $artistPath = Join-Path -Path $TestDrive -ChildPath '10cc'
+            New-Item -ItemType Directory -Path $artistPath | Out-Null
+            New-Item -ItemType Directory -Path (Join-Path $artistPath '1974 - Sheet Music') | Out-Null
+            New-Item -ItemType Directory -Path (Join-Path $artistPath 'Excluded Album') | Out-Null
+
+            # Mocks
+            Mock Connect-SpotifyService { }
+            Mock Get-SpotifyArtist {
+                @([pscustomobject]@{ Artist = [pscustomobject]@{ Name='10cc'; Id='ART10' }; Score = 1.0 })
+            }
+            Mock Get-SpotifyArtistAlbums {
+                @([pscustomobject]@{ Name = 'Sheet Music'; AlbumType='album'; ReleaseDate='2007-01-01' })
+            }
+        }
+
+        It 'filters out excluded folders from processing' {
+            $res = Invoke-MuFo -Path (Join-Path $TestDrive '10cc') -DoIt Automatic -Preview -ExcludeFolders 'Excluded Album'
+            $res | Should -Not -BeNullOrEmpty
+            $res | Should -HaveCount 1
+            $res[0].LocalFolder | Should -Be '1974 - Sheet Music'
+            $res[0].NewFolderName | Should -Be '2007 - Sheet Music'
+        }
+
+        It 'shows exclusions when -ExcludedFoldersShow is used' {
+            $output = Invoke-MuFo -Path (Join-Path $TestDrive '10cc') -DoIt Automatic -Preview -ExcludeFolders 'Excluded Album' -ExcludedFoldersShow 6>&1
+            ($output | Out-String) | Should -Match 'Effective Exclusions:'
+        }
+
+        It 'loads exclusions from file when -ExcludedFoldersLoad is specified' {
+            # Create a test exclusions file
+            $exclusionsFile = Join-Path $TestDrive 'exclusions.json'
+            @('Loaded Exclusion') | ConvertTo-Json | Set-Content -Path $exclusionsFile
+
+            $res = Invoke-MuFo -Path (Join-Path $TestDrive '10cc') -DoIt Automatic -Preview -ExcludedFoldersLoad $exclusionsFile
+            $res | Should -Not -BeNullOrEmpty
+            $res | Should -HaveCount 2
+            $res[0].LocalFolder | Should -Be '1974 - Sheet Music'
+        }
+
+        It 'merges exclusions when -ExcludedFoldersLoad and -ExcludeFolders are both specified' {
+            # Create a test exclusions file
+            $exclusionsFile = Join-Path $TestDrive 'exclusions.json'
+            @('Loaded Exclusion') | ConvertTo-Json | Set-Content -Path $exclusionsFile
+
+            $res = Invoke-MuFo -Path (Join-Path $TestDrive '10cc') -DoIt Automatic -Preview -ExcludedFoldersLoad $exclusionsFile -ExcludeFolders 'Excluded Album'
+            $res | Should -Not -BeNullOrEmpty
+            $res | Should -HaveCount 1
+            $res[0].LocalFolder | Should -Be '1974 - Sheet Music'
+        }
+
+        It 'replaces exclusions when -ExcludedFoldersReplace is specified' {
+            # Create a test exclusions file
+            $exclusionsFile = Join-Path $TestDrive 'exclusions.json'
+            @('Loaded Exclusion') | ConvertTo-Json | Set-Content -Path $exclusionsFile
+
+            $res = Invoke-MuFo -Path (Join-Path $TestDrive '10cc') -DoIt Automatic -Preview -ExcludedFoldersLoad $exclusionsFile -ExcludeFolders 'Excluded Album' -ExcludedFoldersReplace
+            $res | Should -Not -BeNullOrEmpty
+            $res | Should -HaveCount 2
+            $res[0].LocalFolder | Should -Be '1974 - Sheet Music'
         }
     }
 }
