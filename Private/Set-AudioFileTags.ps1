@@ -104,7 +104,7 @@ function Set-AudioFileTags {
     # Analyze album for consistency and gaps
     $albumAnalysis = @{
         AlbumName = ($existingTags | Where-Object { $_.Album } | Group-Object Album | Sort-Object Count -Descending | Select-Object -First 1).Name
-        ArtistName = ($existingTags | Where-Object { $_.Artist } | Group-Object Artist | Sort-Object Count -Descending | Select-Object -First 1).Name
+        ArtistName = ($existingTags | Where-Object { $_.Artist } | Group-Object Artist | Sort-Object Count -Descending | Select-Object -First 1 -ExpandProperty Name)
         IsClassical = ($existingTags | Where-Object { $_.IsClassical -eq $true }).Count -gt ($existingTags.Count / 2)
         TrackNumbers = $existingTags | Where-Object { $_.Track -gt 0 } | ForEach-Object { $_.Track } | Sort-Object
         ExpectedTracks = if ($SpotifyAlbum -and $SpotifyAlbum.total_tracks) { $SpotifyAlbum.total_tracks } else { $existingTags.Count }
@@ -311,8 +311,15 @@ function Set-AudioFileTags {
     # Summary
     Write-Host "`nTag Enhancement Summary:" -ForegroundColor Cyan
     Write-Host "  Files processed: $($existingTags.Count)" -ForegroundColor Gray
-    Write-Host "  Files updated: $changesMade" -ForegroundColor Green
-    Write-Host "  Files unchanged: $($existingTags.Count - $changesMade)" -ForegroundColor Gray
+    
+    if ($WhatIfPreference) {
+        $wouldUpdate = ($results | Where-Object { $_.ChangesApplied.Count -gt 0 }).Count
+        Write-Host "  Files that would be updated: $wouldUpdate" -ForegroundColor Yellow
+        Write-Host "  Files that would remain unchanged: $($existingTags.Count - $wouldUpdate)" -ForegroundColor Gray
+    } else {
+        Write-Host "  Files updated: $changesMade" -ForegroundColor Green
+        Write-Host "  Files unchanged: $($existingTags.Count - $changesMade)" -ForegroundColor Gray
+    }
     
     if ($LogTo) {
         Write-Host "  Log saved to: $LogTo" -ForegroundColor Yellow
