@@ -417,7 +417,14 @@ function Invoke-MuFo {
                         # Quick path: use the first local album name to infer directly from top album match
                         if ($localNames.Count -gt 0) {
                             $primary = $localNames[0]
-                            $quick = Get-SpotifyAlbumMatches -AlbumName $primary -Artist $localArtist -ErrorAction SilentlyContinue | Select-Object -First 1
+                            # Extract year from first album folder for targeted search
+                            $primaryYear = $null
+                            if ($localAlbumDirs -and $localAlbumDirs.Count -gt 0) {
+                                $firstDir = $localAlbumDirs[0].Name
+                                $ym = [regex]::Match($firstDir, '^[\(\[]?(?<year>\d{4})[\)\]]?')
+                                if ($ym.Success) { $primaryYear = $ym.Groups['year'].Value }
+                            }
+                            $quick = Get-SpotifyAlbumMatches -AlbumName $primary -Artist $localArtist -Year $primaryYear -ErrorAction SilentlyContinue | Select-Object -First 1
                             if ($quick -and $quick.Artists -and $quick.Artists.Count -gt 0) {
                                 $qa = $quick.Artists[0]
                                 if ((Get-StringSimilarity -String1 $localArtist -String2 $qa.Name) -ge 0.8) {
@@ -541,7 +548,11 @@ function Invoke-MuFo {
                         foreach ($ln in $localNames) {
                             if ($selectedArtist) { break }
                             # Try both album-only and combined artist+album queries to improve recall
-                            $m1 = Get-SpotifyAlbumMatches -AlbumName $ln -Artist $localArtist -ErrorAction SilentlyContinue
+                            # Extract year from current album name for targeted search
+                            $lnYear = $null
+                            $lym = [regex]::Match($ln, '^[\(\[]?(?<year>\d{4})[\)\]]?')
+                            if ($lym.Success) { $lnYear = $lym.Groups['year'].Value }
+                            $m1 = Get-SpotifyAlbumMatches -AlbumName ($ln -replace '^[\(\[]?\d{4}[\)\]]?\s*[-–—._ ]\s*','') -Artist $localArtist -Year $lnYear -ErrorAction SilentlyContinue
                             # Also try a combined All-type query via Search-Item directly to mirror user's successful approach
                             $m3 = @()
                             try {
@@ -783,6 +794,16 @@ function Invoke-MuFo {
                                     if ($null -eq $saName) { continue }
                                     if ($saName -is [array]) { $saName = ($saName -join ' ') } else { $saName = [string]$saName }
                                     $score = Get-StringSimilarity -String1 $normalizedLocal -String2 $saName
+                                    
+                                    # Boost score for year matches to prefer original releases
+                                    if ($origYear -and $sa.PSObject.Properties.Match('ReleaseDate').Count -gt 0 -and $sa.ReleaseDate) {
+                                        $saYear = [regex]::Match([string]$sa.ReleaseDate, '^(?<y>\d{4})')
+                                        if ($saYear.Success -and $saYear.Groups['y'].Value -eq $origYear) {
+                                            $score += 0.3  # Significant boost for year match
+                                            Write-Verbose ("Year match bonus: {0} ({1}) matches local year {2}" -f $saName, $saYear.Groups['y'].Value, $origYear)
+                                        }
+                                    }
+                                    
                                     if ($score -gt $bestScore) { $bestScore = $score; $best = $sa }
                                 } catch {
                                     Write-Verbose ("Album compare skipped due to error: {0}" -f $_.Exception.Message)

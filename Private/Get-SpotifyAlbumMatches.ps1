@@ -9,6 +9,9 @@ function Get-SpotifyAlbumMatches {
 .PARAMETER Artist
     Optional artist name to include in the search query.
 
+.PARAMETER Year
+    Optional year to include in the search query for more targeted results.
+
 .PARAMETER Top
     Number of top matches to return (default 5).
 #>
@@ -16,11 +19,13 @@ function Get-SpotifyAlbumMatches {
     param(
         [Parameter(Mandatory)][string]$AlbumName,
         [string]$Artist,
+        [string]$Year,
         [int]$Top = 5
     )
 
     try {
         $Query = if ($Artist) { "$Artist $AlbumName" } else { $AlbumName }
+        if ($Year) { $Query += " year:$Year" }
     Write-Verbose ("Search-Item Album query: '{0}'" -f $Query)
     $result = Search-Item -Type Album -Query $Query -ErrorAction Stop
         $items = @()

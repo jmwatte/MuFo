@@ -1,4 +1,14 @@
 If I ask you to do something, reflect back in your words what you think I asked and wait for my feedback before carrying out anything.
+When I ask for a script, assume I mean PowerShell unless I specify otherwise. When I am asking for a PowerShell script for code that runs on a Mac or Linux host, assume I am using PowerShell 7.3. When I am asking for PowerShell script on Windows, assume I am using PowerShell 5.1
+
+when I state somethin to you and I try to descirbe a problem before you fix anything or suggest anything. First resate my statement to you in such a way that I can see what you understand. Restate the problem i wnat a fix for in your own words the wait till i ok your rephasing of my statement till I see your understnad my question or problem.
+
+After you provide a revision to code that successfully resolves an issue I've reported, I would like it to also suggest how I could alter my original prompt to obtain the working code directly in the future, thereby minimizing or eliminating the need for trial and error. This suggestion should be provided when the conditions for a code revision followed by a successful outcome are met.
+
+
+If anything here is unclear or you want the guide expanded with concrete examples (test mocks, log schema, or the psm1 loader), tell me which area to expand and I will iterate.
+
+
 Follow and update the flow-mufo.md and plan-mufo.md.
 Additionally, implement the step plans in these markdowns and keep them current:
 - implementexcludefolders.md (wire exclusions and exclusions store)
@@ -35,7 +45,7 @@ Organize your PowerShell project like this:
 1. Naming Conventions
 - Use Verb-Noun format (e.g., Get-User, Set-Config).
 - Stick to approved PowerShell verbs.
-2. Comment-Based Help
+1. Comment-Based Help
 Include this block at the top of each public function:
 <#
 .SYNOPSIS
