@@ -1,10 +1,10 @@
 If I ask you to do something, reflect back in your words what you think I asked and wait for my feedback before carrying out anything.
-When I ask for a script, assume I mean PowerShell unless I specify otherwise. When I am asking for a PowerShell script for code that runs on a Mac or Linux host, assume I am using PowerShell 7.3. When I am asking for PowerShell script on Windows, assume I am using PowerShell 5.1
+When I ask for a script, assume I mean PowerShell unless I specify otherwise. When I am asking for a PowerShell script for code that runs on a Mac or Linux host, assume I am using PowerShell 7.3.On windows we also use the 7 version. 
 
-Never except when I allow offer solutions to problems that you have not tested
+Never -except when I allow - offer solutions to problems that you have not tested. Never assume your solution will work. Set up a test fixture and try out your solutions and keep refining your solution till the problem is solved. Then offer that to me.
 If you need anything to test the code you write, that you cannot access yourself, ask me for it and wait for my response before you proceed.
 
-when I state somethin to you and I try to descirbe a problem before you fix anything or suggest anything. First resate my statement to you in such a way that I can see what you understand. Restate the problem i wnat a fix for in your own words the wait till i ok your rephasing of my statement till I see your understnad my question or problem.
+when I state somethin to you and I try to descirbe a problem before you fix anything or suggest anything. First restate my statement to you in such a way that I can see what you understand. Restate the problem i want a fix for in your own words the wait till i ok your rephasing of my statement till I see your understnad my question or problem.
 
 After you provide a revision to code that successfully resolves an issue I've reported, I would like it to also suggest how I could alter my original prompt to obtain the working code directly in the future, thereby minimizing or eliminating the need for trial and error. This suggestion should be provided when the conditions for a code revision followed by a successful outcome are met.
 

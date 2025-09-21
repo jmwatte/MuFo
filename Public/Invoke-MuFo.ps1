@@ -176,14 +176,21 @@ function Invoke-MuFo {
             return [PSCustomObject]@{ Dir = $storeDir; File = $storeFile }
         }
         function Read-ExcludedFoldersFromDisk {
-            param([Parameter(Mandatory)]$StorePath)
+            param([Parameter(Mandatory)][string]$FilePath)
             try {
-                if (-not (Test-Path -LiteralPath $StorePath.File)) { return @() }
-                $json = Get-Content -LiteralPath $StorePath.File -Encoding UTF8 -Raw
+                if (-not (Test-Path -LiteralPath $FilePath)) { return @() }
+                $json = Get-Content -LiteralPath $FilePath -Encoding UTF8 -Raw
                 $data = $json | ConvertFrom-Json
-                if ($data -and $data -is [array]) { return [string[]]$data } else { return @() }
+                # Handle both array format and single-item format
+                if ($data -is [array]) { 
+                    return [string[]]$data 
+                } elseif ($data -is [string]) {
+                    return @([string]$data)
+                } else { 
+                    return @() 
+                }
             } catch {
-                Write-Warning "Failed to read exclusions from '$($StorePath.File)': $($_.Exception.Message)"
+                Write-Warning "Failed to read exclusions from '$FilePath': $($_.Exception.Message)"
                 return @()
             }
         }
@@ -270,16 +277,41 @@ function Invoke-MuFo {
             # Compute effective exclusions
             $storePath = Get-ExclusionsStorePath
             $effectiveExclusions = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::InvariantCultureIgnoreCase)
-            if ($ExcludeFolders) { $ExcludeFolders | ForEach-Object { $effectiveExclusions.Add($_) | Out-Null } }
+
+            # First, add command-line exclusions if provided
+            if ($ExcludeFolders) {
+                $ExcludeFolders | ForEach-Object { $effectiveExclusions.Add($_) | Out-Null }
+                Write-Verbose "Added command-line exclusions: $($ExcludeFolders -join ', ')"
+            }
+            
+            # Then handle file-based exclusions
             if ($ExcludedFoldersLoad) {
-                $loaded = Read-ExcludedFoldersFromDisk -StorePath (Get-ExclusionsStorePath -Path $ExcludedFoldersLoad)
-                if ($ExcludedFoldersReplace) {
-                    $effectiveExclusions.Clear()
-                    $loaded | ForEach-Object { $effectiveExclusions.Add($_) | Out-Null }
+                $loaded = if (Test-Path -LiteralPath $ExcludedFoldersLoad) {
+                    $loadedResult = Read-ExcludedFoldersFromDisk -FilePath $ExcludedFoldersLoad
+                    Write-Verbose "Loaded exclusions from file '$ExcludedFoldersLoad': $($loadedResult -join ', ')"
+                    $loadedResult
                 } else {
+                    Write-Warning "Exclusion file not found: $ExcludedFoldersLoad"
+                    @()
+                }
+                
+                if ($ExcludedFoldersReplace) {
+                    # Replace mode: clear existing exclusions and use only command line
+                    $effectiveExclusions.Clear()
+                    Write-Verbose "Replace mode: cleared existing exclusions"
+                    if ($ExcludeFolders) {
+                        $ExcludeFolders | ForEach-Object { $effectiveExclusions.Add($_) | Out-Null }
+                        Write-Verbose "Replace mode: re-added command-line exclusions: $($ExcludeFolders -join ', ')"
+                    }
+                } else {
+                    # Merge mode: add file exclusions to existing command-line exclusions
                     $loaded | ForEach-Object { $effectiveExclusions.Add($_) | Out-Null }
+                    Write-Verbose "Merge mode: added file exclusions to existing ones"
                 }
             }
+            
+            Write-Verbose "Final effective exclusions: $($effectiveExclusions -join ', ')"
+
             # Show exclusions if requested
             if ($ExcludedFoldersShow) {
                 Write-Host "Effective Exclusions:" -ForegroundColor Cyan
@@ -289,7 +321,7 @@ function Invoke-MuFo {
                     Write-Host "  (none)" -ForegroundColor White
                 }
                 Write-Host "Persisted Exclusions:" -ForegroundColor Cyan
-                $persisted = Read-ExcludedFoldersFromDisk -StorePath $storePath
+                $persisted = Read-ExcludedFoldersFromDisk -FilePath $storePath.File
                 if ($persisted.Count -gt 0) {
                     $persisted | Sort-Object | ForEach-Object { Write-Host "  $_" -ForegroundColor White }
                 } else {
@@ -338,13 +370,20 @@ function Invoke-MuFo {
                 $albums = @()
                 try {
                     if ($null -eq $Result) { return @() }
-                    if ($Result -is [System.Array]) {
-                        foreach ($p in $Result) { $albums += (Get-AlbumItemsFromSearchResult -Result $p) }
-                    } else {
-                        if ($Result.PSObject.Properties.Match('Albums').Count -gt 0 -and $Result.Albums) {
-                            if ($Result.Albums.PSObject.Properties.Match('Items').Count -gt 0 -and $Result.Albums.Items) { $albums += $Result.Albums.Items }
+                    
+                    $resultsToProcess = if ($Result -is [System.Array]) { $Result } else { @($Result) }
+
+                    foreach ($p in $resultsToProcess) {
+                        if ($null -eq $p) { continue }
+                        
+                        if ($p.PSObject.Properties.Match('Albums').Count -gt 0 -and $p.Albums) {
+                            if ($p.Albums.PSObject.Properties.Match('Items').Count -gt 0 -and $p.Albums.Items) {
+                                $albums += @($p.Albums.Items)
+                            }
                         }
-                        if ($Result.PSObject.Properties.Match('Items').Count -gt 0 -and $Result.Items) { $albums += $Result.Items }
+                        if ($p.PSObject.Properties.Match('Items').Count -gt 0 -and $p.Items) {
+                            $albums += @($p.Items)
+                        }
                     }
                 } catch {
                     $msg = $_.Exception.Message
@@ -424,7 +463,13 @@ function Invoke-MuFo {
                                 $ym = [regex]::Match($firstDir, '^[\(\[]?(?<year>\d{4})[\)\]]?')
                                 if ($ym.Success) { $primaryYear = $ym.Groups['year'].Value }
                             }
-                            $quick = Get-SpotifyAlbumMatches -AlbumName $primary -Artist $localArtist -Year $primaryYear -ErrorAction SilentlyContinue | Select-Object -First 1
+                            
+                            $query = if ($primaryYear) {
+                                "artist:`"$localArtist`" album:`"$primary`" year:$primaryYear"
+                            } else {
+                                "artist:`"$localArtist`" album:`"$primary`""
+                            }
+                            $quick = Get-SpotifyAlbumMatches -Query $query -AlbumName $primary -ErrorAction SilentlyContinue | Select-Object -First 1
                             if ($quick -and $quick.Artists -and $quick.Artists.Count -gt 0) {
                                 $qa = $quick.Artists[0]
                                 if ((Get-StringSimilarity -String1 $localArtist -String2 $qa.Name) -ge 0.8) {
@@ -543,8 +588,11 @@ function Invoke-MuFo {
                         # Only run voting if we still don't have a selected artist after quick/phrase inference
                         if ($selectedArtist) {
                             Write-Verbose ("Artist already selected by quick inference ('{0}'); skipping album-vote inference." -f $selectedArtist.Name)
+                        } else {
+                            Write-Verbose "Starting artist voting inference process"
+                            # Run the full voting inference since no quick match was found
+                            $artistVotes = @{}
                         }
-                        $artistVotes = @{}
                         foreach ($ln in $localNames) {
                             if ($selectedArtist) { break }
                             # Try both album-only and combined artist+album queries to improve recall
@@ -552,7 +600,13 @@ function Invoke-MuFo {
                             $lnYear = $null
                             $lym = [regex]::Match($ln, '^[\(\[]?(?<year>\d{4})[\)\]]?')
                             if ($lym.Success) { $lnYear = $lym.Groups['year'].Value }
-                            $m1 = Get-SpotifyAlbumMatches -AlbumName ($ln -replace '^[\(\[]?\d{4}[\)\]]?\s*[-–—._ ]\s*','') -Artist $localArtist -Year $lnYear -ErrorAction SilentlyContinue
+                            
+                            $albumQuery = if ($lnYear) {
+                                "artist:`"$localArtist`" album:`"$($ln -replace '^[\(\[]?\d{4}[\)\]]?\s*[-–—._ ]\s*','')`" year:$lnYear"
+                            } else {
+                                "artist:`"$localArtist`" album:`"$($ln -replace '^[\(\[]?\d{4}[\)\]]?\s*[-–—._ ]\s*','')`""
+                            }
+                            $m1 = Get-SpotifyAlbumMatches -Query $albumQuery -AlbumName ($ln -replace '^[\(\[]?\d{4}[\)\]]?\s*[-–—._ ]\s*','') -ErrorAction SilentlyContinue
                             # Also try a combined All-type query via Search-Item directly to mirror user's successful approach
                             $m3 = @()
                             try {
@@ -616,17 +670,29 @@ function Invoke-MuFo {
                                 Write-Verbose ("Phrase m4/m5 search failed: {0}{1}{2}" -f $msg, $innerText, $stackText)
                             }
                             if (-not $selectedArtist) {
-                                foreach ($m in ($m1 + $m3 + $m4 + $m5)) {
-                                    foreach ($a in $m.Artists) {
-                                        if (-not $a.Name) { continue }
-                                        # Only count votes for reasonably relevant matches
-                                        if ($m.Score -ge 0.3) {
-                                            $artistSimilarity = Get-StringSimilarity -String1 $localArtist -String2 $a.Name
-                                            if ($artistSimilarity -ge 0.8) {
-                                                if (-not $artistVotes.ContainsKey($a.Name)) { $artistVotes[$a.Name] = [PSCustomObject]@{ Name=$a.Name; Id=$a.Id; Votes=0; BestScore=0.0 } }
-                                                $entry = $artistVotes[$a.Name]
-                                                $entry.Votes += 1
-                                                if ($m.Score -gt $entry.BestScore) { $entry.BestScore = [double]$m.Score }
+                                Write-Verbose "Processing album '$ln' for artist votes"
+                                $allMatches = @()
+                                if ($m1) { $allMatches += @($m1); Write-Verbose "Added m1 matches: $($m1.Count)" }
+                                if ($m3) { $allMatches += @($m3); Write-Verbose "Added m3 matches: $($m3.Count)" }
+                                if ($m4) { $allMatches += @($m4); Write-Verbose "Added m4 matches: $($m4.Count)" }
+                                if ($m5) { $allMatches += @($m5); Write-Verbose "Added m5 matches: $($m5.Count)" }
+                                Write-Verbose "Total matches for voting: $($allMatches.Count)"
+                                foreach ($m in $allMatches) {
+                                    if ($m.Artists) {
+                                        foreach ($a in $m.Artists) {
+                                            if (-not $a.Name) { continue }
+                                            Write-Verbose "Checking artist vote for: $($a.Name) with match score: $($m.Score)"
+                                            # Only count votes for reasonably relevant matches
+                                            if ($m.Score -ge 0.3) {
+                                                $artistSimilarity = Get-StringSimilarity -String1 $localArtist -String2 $a.Name
+                                                Write-Verbose "Artist similarity between '$localArtist' and '$($a.Name)': $artistSimilarity"
+                                                if ($artistSimilarity -ge 0.7) {
+                                                    if (-not $artistVotes.ContainsKey($a.Name)) { $artistVotes[$a.Name] = [PSCustomObject]@{ Name=$a.Name; Id=$a.Id; Votes=0; BestScore=0.0 } }
+                                                    $entry = $artistVotes[$a.Name]
+                                                    $entry.Votes += 1
+                                                    if ($m.Score -gt $entry.BestScore) { $entry.BestScore = [double]$m.Score }
+                                                    Write-Verbose "Added vote for artist '$($a.Name)' (total votes: $($entry.Votes), best score: $($entry.BestScore))"
+                                                }
                                             }
                                         }
                                     }
@@ -647,7 +713,12 @@ function Invoke-MuFo {
                                         $resp = Read-Host ("Use inferred artist? [Y/n]")
                                         if (-not $resp -or $resp -match '^(?i)y(es)?$') { $selectedArtist = [PSCustomObject]@{ Name=$inferred.Name; Id=$inferred.Id }; $artistSelectionSource = 'inferred' }
                                     } else {
-                                        # In preview, don't prompt; keep unselected so we can fall back to manual selection logic if needed (but we skip prompts in preview)
+                                        # In preview, use the inferred artist if it has reasonable confidence
+                                        if ($inferred.BestScore -ge 0.7) {
+                                            $selectedArtist = [PSCustomObject]@{ Name=$inferred.Name; Id=$inferred.Id }
+                                            $artistSelectionSource = 'inferred'
+                                            Write-Verbose ("Preview: Using inferred artist {0} (votes={1}, bestScore={2})" -f $inferred.Name, $inferred.Votes, ([math]::Round($inferred.BestScore,2)))
+                                        }
                                     }
                                 }
                             }
@@ -731,7 +802,7 @@ function Invoke-MuFo {
                 }
 
                 # Final fallback in Preview/WhatIf: if still not selected, assume top match to enable analysis
-                if (-not $selectedArtist -and $isPreview) {
+                if (-not $selectedArtist -and $isPreview -and $topMatches -and $topMatches.Count -gt 0) {
                     $selectedArtist = $topMatches[0].Artist
                     $artistSelectionSource = 'search'
                     Write-Verbose "Preview/WhatIf: no confident or inferred artist; assuming top search match '$($selectedArtist.Name)' for analysis."
@@ -769,11 +840,10 @@ function Invoke-MuFo {
                     try {
                         # Local album folders = immediate subfolders under artist folder
                         $localAlbumDirs = Get-ChildItem -LiteralPath $currentPath -Directory -ErrorAction SilentlyContinue
+                        Write-Verbose "Found album directories before exclusion filtering: $($localAlbumDirs.Name -join ', ')"
                         $localAlbumDirs = $localAlbumDirs | Where-Object { -not (Test-ExclusionMatch -FolderName $_.Name -Exclusions $effectiveExclusions) }
+                        Write-Verbose "Album directories after exclusion filtering: $($localAlbumDirs.Name -join ', ')"
                         Write-Verbose ("Local album folders found: {0}" -f (($localAlbumDirs | Measure-Object).Count))
-
-                        $spotifyAlbums = Get-SpotifyArtistAlbums -ArtistId $selectedArtist.Id -IncludeSingles:$IncludeSingles -IncludeCompilations:$IncludeCompilations -ErrorAction Stop
-                        Write-Verbose ("Spotify albums retrieved: {0}" -f (($spotifyAlbums | Measure-Object).Count))
 
                         $albumComparisons = @()
                         foreach ($dir in $localAlbumDirs) {
@@ -785,6 +855,29 @@ function Invoke-MuFo {
                             $origYear = $null
                             $m = [regex]::Match($dirName, '^[\(\[]?(?<year>\d{4})[\)\]]?')
                             if ($m.Success) { $origYear = $m.Groups['year'].Value }
+
+                            # Tiered search for albums
+                            $spotifyAlbums = @()
+                            # Tier 1: Precise Filtered Search (artist, album, year)
+                            if ($origYear) {
+                                $q1 = "artist:`"$($selectedArtist.Name)`" album:`"$normalizedLocal`" year:$origYear"
+                                $spotifyAlbums += Get-SpotifyAlbumMatches -Query $q1 -AlbumName $normalizedLocal
+                            }
+                            # Tier 2: Year-Influenced Search (artist, album, year as keyword)
+                            if ($spotifyAlbums.Count -eq 0 -and $origYear) {
+                                $q2 = "artist:`"$($selectedArtist.Name)`" album:`"$normalizedLocal`" $origYear"
+                                $spotifyAlbums += Get-SpotifyAlbumMatches -Query $q2 -AlbumName $normalizedLocal
+                            }
+                            # Tier 3: Broad Fallback Search (artist, album)
+                            if ($spotifyAlbums.Count -eq 0) {
+                                $q3 = "artist:`"$($selectedArtist.Name)`" album:`"$normalizedLocal`""
+                                $spotifyAlbums += Get-SpotifyAlbumMatches -Query $q3 -AlbumName $normalizedLocal
+                            }
+                            # Tier 4: Get all artist albums as a final fallback
+                            if ($spotifyAlbums.Count -eq 0) {
+                                $spotifyAlbums = Get-SpotifyArtistAlbums -ArtistId $selectedArtist.Id -IncludeSingles:$IncludeSingles -IncludeCompilations:$IncludeCompilations -ErrorAction Stop
+                            }
+
                             foreach ($sa in $spotifyAlbums) {
                                 try {
                                     if (-not $sa) { continue }
@@ -799,7 +892,7 @@ function Invoke-MuFo {
                                     if ($origYear -and $sa.PSObject.Properties.Match('ReleaseDate').Count -gt 0 -and $sa.ReleaseDate) {
                                         $saYear = [regex]::Match([string]$sa.ReleaseDate, '^(?<y>\d{4})')
                                         if ($saYear.Success -and $saYear.Groups['y'].Value -eq $origYear) {
-                                            $score += 0.3  # Significant boost for year match
+                                            $score += 1.0  # Heavily boost for exact year match
                                             Write-Verbose ("Year match bonus: {0} ({1}) matches local year {2}" -f $saName, $saYear.Groups['y'].Value, $origYear)
                                         }
                                     }
@@ -821,8 +914,15 @@ function Invoke-MuFo {
                                 }
                             }
                             # Build proposed target name based on Spotify album name and available year info
-                            $matchName = if ($best) { [string]$best.Name } else { $null }
-                            $matchType = if ($best) { $best.AlbumType } else { $null }
+                            $matchName = $null
+                            if ($best) {
+                                if ($best.PSObject.Properties.Match('Name').Count) {
+                                    $matchName = [string]$best.Name
+                                } elseif ($best.PSObject.Properties.Match('AlbumName').Count) {
+                                    $matchName = [string]$best.AlbumName
+                                }
+                            }
+                            $matchType = if ($best) { if ($best.PSObject.Properties.Match('AlbumType').Count) { [string]$best.AlbumType } else { $null } } else { $null }
                             $matchYear = $null
                             if ($best -and $best.PSObject.Properties.Match('ReleaseDate').Count -gt 0 -and $best.ReleaseDate) {
                                 $ym = [regex]::Match([string]$best.ReleaseDate, '^(?<y>\d{4})')
@@ -847,6 +947,7 @@ function Invoke-MuFo {
                                 MatchScore  = [math]::Round($bestScore,2)
                                 MatchYear   = $matchYear
                                 ProposedName= $proposed
+                                MatchedItem = $best # Keep the full object for track fetching
                             }
                         }
 
@@ -872,9 +973,9 @@ function Invoke-MuFo {
                                     $mismatches = 0
                                     if ($c.MatchName -and $c.MatchScore -gt 0) {
                                         # Find the matched album object
-                                        $matchedAlbum = $spotifyAlbums | Where-Object { $_.Name -eq $c.MatchName } | Select-Object -First 1
-                                        if ($matchedAlbum -and $matchedAlbum.Id) {
-                                            $spotifyTracks = Get-SpotifyAlbumTracks -AlbumId $matchedAlbum.Id
+                                        $matchedAlbum = $c.MatchedItem
+                                        if ($matchedAlbum -and $matchedAlbum.Item.Id) {
+                                            $spotifyTracks = Get-SpotifyAlbumTracks -AlbumId $matchedAlbum.Item.Id
                                             foreach ($localTrack in $tracks) {
                                                 if (-not $localTrack.Title) { continue }
                                                 $bestScore = 0

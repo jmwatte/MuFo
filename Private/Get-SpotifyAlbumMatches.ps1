@@ -1,33 +1,27 @@
 function Get-SpotifyAlbumMatches {
 <#
 .SYNOPSIS
-    Searches Spotify for albums by name and returns top matches with artists and a similarity score.
+    Searches Spotify for albums using a specified query and returns top matches with artists and a similarity score.
+
+.PARAMETER Query
+    The raw search query string to send to Spotify.
 
 .PARAMETER AlbumName
-    The album name to search for.
-
-.PARAMETER Artist
-    Optional artist name to include in the search query.
-
-.PARAMETER Year
-    Optional year to include in the search query for more targeted results.
+    The album name to search for. Used for scoring similarity.
 
 .PARAMETER Top
     Number of top matches to return (default 5).
 #>
     [CmdletBinding()]
     param(
+        [Parameter(Mandatory)][string]$Query,
         [Parameter(Mandatory)][string]$AlbumName,
-        [string]$Artist,
-        [string]$Year,
         [int]$Top = 5
     )
 
     try {
-        $Query = if ($Artist) { "$Artist $AlbumName" } else { $AlbumName }
-        if ($Year) { $Query += " year:$Year" }
-    Write-Verbose ("Search-Item Album query: '{0}'" -f $Query)
-    $result = Search-Item -Type Album -Query $Query -ErrorAction Stop
+        Write-Verbose ("Search-Item Album query: '{0}'" -f $Query)
+        $result = Search-Item -Type Album -Query $Query -ErrorAction Stop
         $items = @()
         if ($null -eq $result) { return @() }
         if ($result -is [System.Array]) {
@@ -53,12 +47,22 @@ function Get-SpotifyAlbumMatches {
                         if ($an) { $artists += [PSCustomObject]@{ Name=$an; Id=$aid } }
                     }
                 }
-                $scored += [PSCustomObject]@{ AlbumName=$name; Score=[double]$score; Artists=$artists }
+                $releaseDate = if ($i.PSObject.Properties.Match('ReleaseDate').Count) { [string]$i.ReleaseDate } else { $null }
+                $albumType = if ($i.PSObject.Properties.Match('AlbumType').Count) { [string]$i.AlbumType } else { $null }
+
+                $scored += [PSCustomObject]@{ 
+                    AlbumName   = $name
+                    Score       = [double]$score
+                    Artists     = $artists
+                    ReleaseDate = $releaseDate
+                    AlbumType   = $albumType
+                    Item        = $i # Keep original item for track fetching later
+                }
             } catch { }
         }
         return ($scored | Sort-Object -Property Score -Descending | Select-Object -First $Top)
     } catch {
-        Write-Verbose ("Album search failed for '{0}': {1}" -f $AlbumName, $_.Exception.Message)
+        Write-Verbose ("Album search failed for query '{0}': {1}" -f $Query, $_.Exception.Message)
         return @()
     }
 }

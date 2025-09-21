@@ -1,0 +1,75 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<test-results xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="nunit_schema_2.5.xsd" name="Pester" total="10" errors="0" failures="4" not-run="0" inconclusive="0" ignored="0" skipped="0" invalid="0" date="2025-09-21" time="11:39:52">
+  <environment cwd="C:\Users\resto\Documents\PowerShell\Modules\MuFo" clr-version="9.0.8" user-domain="DESKTOP-OLQ2J2M" machine-name="DESKTOP-OLQ2J2M" user="user" platform="Microsoft Windows 11 Home|C:\WINDOWS|\Device\Harddisk0\Partition3" os-version="10.0.26100" nunit-version="2.5.8.0" />
+  <culture-info current-culture="en-US" current-uiculture="en-US" />
+  <test-suite type="TestFixture" name="Pester" executed="True" result="Failure" success="False" time="9.1078" asserts="0" description="Pester">
+    <results>
+      <test-suite type="TestFixture" name="C:\Users\resto\Documents\PowerShell\Modules\MuFo\Tests\Invoke-MuFo.Tests.ps1" executed="True" result="Failure" success="False" time="9.1078" asserts="0" description="C:\Users\resto\Documents\PowerShell\Modules\MuFo\Tests\Invoke-MuFo.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Invoke-MuFo" executed="True" result="Failure" success="False" time="8.1591" asserts="0" description="Invoke-MuFo">
+            <results>
+              <test-suite type="TestFixture" name="Invoke-MuFo.When artist matches by folder name (search path)" executed="True" result="Success" success="True" time="1.1511" asserts="0" description="Invoke-MuFo.When artist matches by folder name (search path)">
+                <results>
+                  <test-case description="emits concise object with proposed new folder name and Decision=rename in Automatic mode" name="Invoke-MuFo.When artist matches by folder name (search path).emits concise object with proposed new folder name and Decision=rename in Automatic mode" time="0.8297" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Invoke-MuFo.When folder artist is wrong and All-search infers correct artist" executed="True" result="Success" success="True" time="2.9307" asserts="0" description="Invoke-MuFo.When folder artist is wrong and All-search infers correct artist">
+                <results>
+                  <test-case description="uses All-search to infer 10cc and proposes the correct rename in Preview" name="Invoke-MuFo.When folder artist is wrong and All-search infers correct artist.uses All-search to infer 10cc and proposes the correct rename in Preview" time="0.3958" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Invoke-MuFo.All-search returns decoy first, we still pick best match by scoring" executed="True" result="Success" success="True" time="3.3722" asserts="0" description="Invoke-MuFo.All-search returns decoy first, we still pick best match by scoring">
+                <results>
+                  <test-case description="chooses 10cc despite a misleading first result" name="Invoke-MuFo.All-search returns decoy first, we still pick best match by scoring.chooses 10cc despite a misleading first result" time="0.3305" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Invoke-MuFo.When folder artist is wrong but albums imply the correct artist (inference path)" executed="True" result="Failure" success="False" time="5.6149" asserts="0" description="Invoke-MuFo.When folder artist is wrong but albums imply the correct artist (inference path)">
+                <results>
+                  <test-case description="infers artist from albums in Smart mode and proceeds with validation" name="Invoke-MuFo.When folder artist is wrong but albums imply the correct artist (inference path).infers artist from albums in Smart mode and proceeds with validation" time="2.1277" asserts="0" success="False" result="Failure" executed="True">
+                    <failure>
+                      <message>Expected a value, but got $null or empty.</message>
+                      <stack-trace>at $res | Should -Not -BeNullOrEmpty, C:\Users\resto\Documents\PowerShell\Modules\MuFo\Tests\Invoke-MuFo.Tests.ps1:198
+at &lt;ScriptBlock&gt;, C:\Users\resto\Documents\PowerShell\Modules\MuFo\Tests\Invoke-MuFo.Tests.ps1:198</stack-trace>
+                    </failure>
+                  </test-case>
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Invoke-MuFo.Exclusions functionality" executed="True" result="Failure" success="False" time="7.8854" asserts="0" description="Invoke-MuFo.Exclusions functionality">
+                <results>
+                  <test-case description="filters out excluded folders from processing" name="Invoke-MuFo.Exclusions functionality.filters out excluded folders from processing" time="0.2196" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="shows exclusions when -ExcludedFoldersShow is used" name="Invoke-MuFo.Exclusions functionality.shows exclusions when -ExcludedFoldersShow is used" time="0.5759" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="loads exclusions from file when -ExcludedFoldersLoad is specified" name="Invoke-MuFo.Exclusions functionality.loads exclusions from file when -ExcludedFoldersLoad is specified" time="0.4773" asserts="0" success="False" result="Failure" executed="True">
+                    <failure>
+                      <message>Expected a value, but got $null or empty.</message>
+                      <stack-trace>at $res | Should -Not -BeNullOrEmpty, C:\Users\resto\Documents\PowerShell\Modules\MuFo\Tests\Invoke-MuFo.Tests.ps1:252
+at &lt;ScriptBlock&gt;, C:\Users\resto\Documents\PowerShell\Modules\MuFo\Tests\Invoke-MuFo.Tests.ps1:252</stack-trace>
+                    </failure>
+                  </test-case>
+                  <test-case description="merges exclusions when -ExcludedFoldersLoad and -ExcludeFolders are both specified" name="Invoke-MuFo.Exclusions functionality.merges exclusions when -ExcludedFoldersLoad and -ExcludeFolders are both specified" time="0.4763" asserts="0" success="False" result="Failure" executed="True">
+                    <failure>
+                      <message>Expected a value, but got $null or empty.</message>
+                      <stack-trace>at $res | Should -Not -BeNullOrEmpty, C:\Users\resto\Documents\PowerShell\Modules\MuFo\Tests\Invoke-MuFo.Tests.ps1:261
+at &lt;ScriptBlock&gt;, C:\Users\resto\Documents\PowerShell\Modules\MuFo\Tests\Invoke-MuFo.Tests.ps1:261</stack-trace>
+                    </failure>
+                  </test-case>
+                  <test-case description="replaces exclusions when -ExcludedFoldersReplace is specified" name="Invoke-MuFo.Exclusions functionality.replaces exclusions when -ExcludedFoldersReplace is specified" time="0.4621" asserts="0" success="False" result="Failure" executed="True">
+                    <failure>
+                      <message>Expected a value, but got $null or empty.</message>
+                      <stack-trace>at $res | Should -Not -BeNullOrEmpty, C:\Users\resto\Documents\PowerShell\Modules\MuFo\Tests\Invoke-MuFo.Tests.ps1:271
+at &lt;ScriptBlock&gt;, C:\Users\resto\Documents\PowerShell\Modules\MuFo\Tests\Invoke-MuFo.Tests.ps1:271</stack-trace>
+                    </failure>
+                  </test-case>
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Invoke-MuFo.When album has a year prefix, it correctly identifies the album and year" executed="True" result="Success" success="True" time="8.1321" asserts="0" description="Invoke-MuFo.When album has a year prefix, it correctly identifies the album and year">
+                <results>
+                  <test-case description="selects the 1984 release based on Tier 1 search" name="Invoke-MuFo.When album has a year prefix, it correctly identifies the album and year.selects the 1984 release based on Tier 1 search" time="0.1838" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+    </results>
+  </test-suite>
+</test-results>
