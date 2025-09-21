@@ -420,7 +420,7 @@ function Invoke-MuFo {
                             $quick = Get-SpotifyAlbumMatches -AlbumName $primary -Artist $localArtist -ErrorAction SilentlyContinue | Select-Object -First 1
                             if ($quick -and $quick.Artists -and $quick.Artists.Count -gt 0) {
                                 $qa = $quick.Artists[0]
-                                if ($qa.Name) {
+                                if ((Get-StringSimilarity -String1 $localArtist -String2 $qa.Name) -ge 0.8) {
                                     $selectedArtist = [PSCustomObject]@{ Name=[string]$qa.Name; Id=[string]$qa.Id }
                                     $artistSelectionSource = 'inferred'
                                     Write-Verbose ("Quick-inferred artist from album '{0}': {1}" -f $primary, $selectedArtist.Name)
@@ -610,10 +610,13 @@ function Invoke-MuFo {
                                         if (-not $a.Name) { continue }
                                         # Only count votes for reasonably relevant matches
                                         if ($m.Score -ge 0.3) {
-                                            if (-not $artistVotes.ContainsKey($a.Name)) { $artistVotes[$a.Name] = [PSCustomObject]@{ Name=$a.Name; Id=$a.Id; Votes=0; BestScore=0.0 } }
-                                            $entry = $artistVotes[$a.Name]
-                                            $entry.Votes += 1
-                                            if ($m.Score -gt $entry.BestScore) { $entry.BestScore = [double]$m.Score }
+                                            $artistSimilarity = Get-StringSimilarity -String1 $localArtist -String2 $a.Name
+                                            if ($artistSimilarity -ge 0.8) {
+                                                if (-not $artistVotes.ContainsKey($a.Name)) { $artistVotes[$a.Name] = [PSCustomObject]@{ Name=$a.Name; Id=$a.Id; Votes=0; BestScore=0.0 } }
+                                                $entry = $artistVotes[$a.Name]
+                                                $entry.Votes += 1
+                                                if ($m.Score -gt $entry.BestScore) { $entry.BestScore = [double]$m.Score }
+                                            }
                                         }
                                     }
                                 }
