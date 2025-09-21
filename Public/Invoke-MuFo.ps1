@@ -37,6 +37,24 @@ function Invoke-MuFo {
     Include track tag inspection and validation metrics in the output. When enabled, also performs
     classical music analysis including composer detection, conductor identification, and organization suggestions.
 
+.PARAMETER FixTags
+    Enable tag writing and enhancement. Fills missing titles, track numbers, and optimizes classical music tags.
+
+.PARAMETER FillMissingTitles
+    Automatically fill missing track titles from filename or Spotify data (requires -FixTags).
+
+.PARAMETER FillMissingTrackNumbers
+    Automatically assign track numbers based on file order or filename patterns (requires -FixTags).
+
+.PARAMETER FillMissingGenres
+    Fill missing genre information from Spotify or infer from classical music detection (requires -FixTags).
+
+.PARAMETER OptimizeClassicalTags
+    Optimize tags for classical music organization - composer as album artist, conductor info, etc. (requires -FixTags).
+
+.PARAMETER ValidateCompleteness
+    Check for missing tracks, duplicates, and other collection issues (works with -IncludeTracks).
+
 .PARAMETER BoxMode
     Treat subfolders as discs of a box set, aggregating tracks from all subfolders into one album.
 
@@ -121,6 +139,24 @@ function Invoke-MuFo {
 
         [Parameter(Mandatory = $false)]
         [switch]$IncludeTracks,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$FixTags,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$FillMissingTitles,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$FillMissingTrackNumbers,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$FillMissingGenres,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$OptimizeClassicalTags,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$ValidateCompleteness,
 
         [Parameter(Mandatory = $false)]
         [switch]$BoxMode,
@@ -229,6 +265,16 @@ function Invoke-MuFo {
     }
 
     process {
+        # Parameter validation for tag enhancement
+        if (($FillMissingTitles -or $FillMissingTrackNumbers -or $FillMissingGenres -or $OptimizeClassicalTags) -and -not $FixTags) {
+            Write-Error "Tag enhancement switches (-FillMissingTitles, -FillMissingTrackNumbers, -FillMissingGenres, -OptimizeClassicalTags) require -FixTags to be enabled."
+            return
+        }
+        
+        if ($FixTags -and -not $IncludeTracks) {
+            Write-Warning "-FixTags works best with -IncludeTracks enabled for comprehensive analysis"
+        }
+        
         # Handle -ShowResults mode
         if ($ShowResults) {
             if (-not $LogTo) {
@@ -1009,6 +1055,48 @@ function Invoke-MuFo {
                                         if ($conductors.Count -gt 0) {
                                             $c | Add-Member -NotePropertyName PrimaryConductor -NotePropertyValue $conductors[0].Name
                                         }
+                                    }
+
+                                    # Completeness validation if requested
+                                    if ($ValidateCompleteness) {
+                                        Write-Verbose "Validating album completeness for: $($c.LocalPath)"
+                                        $spotifyAlbum = if ($c.MatchedItem -and $c.MatchedItem.Item) { $c.MatchedItem.Item } else { $null }
+                                        $completenessResult = Test-AudioFileCompleteness -Path $c.LocalPath -SpotifyAlbum $spotifyAlbum -CheckAudioQuality -CheckFileNaming -SuggestFixes
+                                        $c | Add-Member -NotePropertyName CompletenessAnalysis -NotePropertyValue $completenessResult
+                                    }
+
+                                    # Tag enhancement if requested
+                                    if ($FixTags -and $tracks.Count -gt 0) {
+                                        Write-Verbose "Enhancing tags for: $($c.LocalPath)"
+                                        
+                                        $tagParams = @{
+                                            Path = $c.LocalPath
+                                            WhatIf = $WhatIfPreference
+                                        }
+                                        
+                                        if ($FillMissingTitles) { $tagParams.FillMissingTitles = $true }
+                                        if ($FillMissingTrackNumbers) { $tagParams.FillMissingTrackNumbers = $true }
+                                        if ($FillMissingGenres) { $tagParams.FillMissingGenres = $true }
+                                        if ($OptimizeClassicalTags) { $tagParams.OptimizeClassicalTags = $true }
+                                        if ($ValidateCompleteness) { $tagParams.ValidateCompleteness = $true }
+                                        
+                                        # Add Spotify album data if available
+                                        if ($c.MatchedItem -and $c.MatchedItem.Item) {
+                                            $tagParams.SpotifyAlbum = $c.MatchedItem.Item
+                                        }
+                                        
+                                        if ($LogTo) {
+                                            $tagLogPath = $LogTo -replace '\.(json|log)$', '-tags.$1'
+                                            $tagParams.LogTo = $tagLogPath
+                                        }
+                                        
+                                        $tagResults = Set-AudioFileTags @tagParams
+                                        $c | Add-Member -NotePropertyName TagEnhancementResults -NotePropertyValue $tagResults
+                                        
+                                        # Update track count after enhancements
+                                        $enhancedTracks = Get-AudioFileTags -Path $c.LocalPath -IncludeComposer
+                                        $updatedMissingTitles = ($enhancedTracks | Where-Object { -not $_.Title }).Count
+                                        $c | Add-Member -NotePropertyName TracksWithMissingTitleAfterFix -NotePropertyValue $updatedMissingTitles -Force
                                     }
 
                                     # Compute mismatches against Spotify if album matched

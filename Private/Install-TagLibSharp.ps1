@@ -119,28 +119,48 @@ function Install-TagLibSharp {
         catch {
             Write-Warning "Alternative installation failed: $($_.Exception.Message)"
             
-            # Method 3: Try direct NuGet download
+            # Method 3: Download directly to module folder (simplest approach)
             try {
-                Write-Host "Trying direct NuGet download..." -ForegroundColor Yellow
+                Write-Host "Downloading TagLib-Sharp directly to module folder..." -ForegroundColor Yellow
                 
                 $nugetUrl = "https://www.nuget.org/api/v2/package/TagLibSharp"
                 $tempZip = "$env:TEMP\TagLibSharp.zip"
-                $extractDir = "$env:USERPROFILE\.nuget\packages\taglibsharp"
+                $moduleDir = Split-Path $PSScriptRoot -Parent  # Get MuFo module root
+                $libDir = Join-Path $moduleDir "lib"
+                
+                # Create lib directory if it doesn't exist
+                if (-not (Test-Path $libDir)) {
+                    New-Item -ItemType Directory -Path $libDir -Force | Out-Null
+                }
                 
                 # Download the package
                 Invoke-WebRequest -Uri $nugetUrl -OutFile $tempZip -ErrorAction Stop
                 
-                # Extract it
-                if (Test-Path $extractDir) {
-                    Remove-Item $extractDir -Recurse -Force
+                # Extract to temp location first
+                $tempExtract = "$env:TEMP\TagLibSharp_Extract"
+                if (Test-Path $tempExtract) {
+                    Remove-Item $tempExtract -Recurse -Force
                 }
-                Expand-Archive -Path $tempZip -DestinationPath $extractDir -Force
+                
+                # Extract using .NET
+                Add-Type -AssemblyName System.IO.Compression.FileSystem
+                [System.IO.Compression.ZipFile]::ExtractToDirectory($tempZip, $tempExtract)
+                
+                # Find the TagLib.dll and copy it to module lib folder
+                $tagLibDll = Get-ChildItem -Path $tempExtract -Name "TagLib.dll" -Recurse | Select-Object -First 1
+                if ($tagLibDll) {
+                    $sourceDll = Join-Path $tempExtract $tagLibDll
+                    $destDll = Join-Path $libDir "TagLib.dll"
+                    Copy-Item $sourceDll $destDll -Force
+                    Write-Host "✓ TagLib.dll installed to: $destDll" -ForegroundColor Green
+                    $installSuccess = $true
+                } else {
+                    throw "TagLib.dll not found in downloaded package"
+                }
                 
                 # Clean up
-                Remove-Item $tempZip -Force
-                
-                $installSuccess = $true
-                Write-Host "✓ TagLib-Sharp downloaded and extracted manually" -ForegroundColor Green
+                Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
+                Remove-Item $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
             }
             catch {
                 Write-Error "All installation methods failed:"
@@ -170,25 +190,53 @@ function Install-TagLibSharp {
     # Verify installation
     Write-Host "Verifying installation..." -ForegroundColor Yellow
     
+    $moduleDir = Split-Path $PSScriptRoot -Parent
     $verifyPaths = @(
-        "$env:USERPROFILE\.nuget\packages\taglib*\lib\*\TagLib.dll",
-        "$env:USERPROFILE\.nuget\packages\taglibsharp*\lib\*\TagLib.dll"
+        (Join-Path $moduleDir "lib\TagLib.dll"),                                    # Module lib folder (preferred)
+        "$env:USERPROFILE\.nuget\packages\taglib*\lib\*\TagLib.dll",              # NuGet packages
+        "$env:USERPROFILE\.nuget\packages\taglibsharp*\lib\*\TagLib.dll",
+        "$env:USERPROFILE\.nuget\packages\taglibsharp*\**\TagLib.dll"
     )
     
     $verified = $false
+    $foundDll = $null
+    
     foreach ($path in $verifyPaths) {
-        $dll = Get-ChildItem -Path $path -Recurse -ErrorAction SilentlyContinue | 
-               Where-Object { $_.Name -eq 'TagLib.dll' } | 
-               Select-Object -First 1
-        if ($dll) {
-            Write-Host "✓ Installation verified: $($dll.FullName)" -ForegroundColor Green
+        if ($path -like "*\*") {
+            # Handle wildcard paths
+            $dlls = Get-ChildItem -Path $path -Recurse -ErrorAction SilentlyContinue | 
+                    Where-Object { $_.Name -eq 'TagLib.dll' }
+            
+            if ($dlls) {
+                $foundDll = $dlls | Select-Object -First 1
+                Write-Host "✓ Installation verified: $($foundDll.FullName)" -ForegroundColor Green
+                $verified = $true
+                break
+            }
+        } elseif (Test-Path $path) {
+            $foundDll = Get-Item $path
+            Write-Host "✓ Installation verified: $($foundDll.FullName)" -ForegroundColor Green
             $verified = $true
             break
         }
     }
     
     if (-not $verified) {
+        # Try to find any TagLib.dll in the packages directory
+        $packagesDir = "$env:USERPROFILE\.nuget\packages"
+        if (Test-Path $packagesDir) {
+            $anyTagLib = Get-ChildItem -Path $packagesDir -Name "TagLib.dll" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($anyTagLib) {
+                $foundDll = Get-Item (Join-Path $packagesDir $anyTagLib)
+                Write-Host "✓ Found TagLib.dll: $($foundDll.FullName)" -ForegroundColor Green
+                $verified = $true
+            }
+        }
+    }
+    
+    if (-not $verified) {
         Write-Warning "Could not verify TagLib-Sharp installation. It may not be in the expected location."
+        Write-Host "Please check: $env:USERPROFILE\.nuget\packages for TagLib-Sharp" -ForegroundColor Yellow
         return
     }
     

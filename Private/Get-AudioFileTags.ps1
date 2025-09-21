@@ -49,11 +49,14 @@ function Get-AudioFileTags {
         
         if (-not $tagLibLoaded) {
             # Try to find and load TagLib-Sharp
+            $moduleDir = Split-Path $PSScriptRoot -Parent
             $tagLibPaths = @(
-                "$env:USERPROFILE\.nuget\packages\taglib*\lib\*\TagLib.dll",
+                (Join-Path $moduleDir "lib\TagLib.dll"),                                   # Module lib folder (preferred)
+                (Join-Path $PSScriptRoot '..\TagLib-Sharp.dll'),                          # Module root (legacy)
+                (Join-Path $PSScriptRoot 'TagLib-Sharp.dll'),                             # Private folder (legacy)
+                "$env:USERPROFILE\.nuget\packages\taglib*\lib\*\TagLib.dll",              # NuGet packages
                 "$env:USERPROFILE\.nuget\packages\taglibsharp*\lib\*\TagLib.dll",
-                (Join-Path $PSScriptRoot '..\TagLib-Sharp.dll'),
-                (Join-Path $PSScriptRoot 'TagLib-Sharp.dll')
+                "$env:USERPROFILE\.nuget\packages\taglibsharp*\**\TagLib.dll"
             )
             
             $tagLibPath = $null
@@ -70,6 +73,17 @@ function Get-AudioFileTags {
                 } elseif (Test-Path $path) {
                     $tagLibPath = $path
                     break
+                }
+            }
+            
+            # If still not found, try a broader search
+            if (-not $tagLibPath) {
+                $packagesDir = "$env:USERPROFILE\.nuget\packages"
+                if (Test-Path $packagesDir) {
+                    $found = Get-ChildItem -Path $packagesDir -Name "TagLib.dll" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+                    if ($found) {
+                        $tagLibPath = Join-Path $packagesDir $found
+                    }
                 }
             }
             
