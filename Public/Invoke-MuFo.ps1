@@ -455,7 +455,7 @@ function Invoke-MuFo {
                     }
                     "Manual" {
                         if ($localAlbumDirs.Count -eq 0) {
-                            Write-Host "No albums to process, skipping artist selection." -ForegroundColor Yellow
+                            Write-Verbose "No album directories found, will use artist inference"
                             $selectedArtist = $null
                         } elseif (-not $isPreview) {
                             # Prompt user to choose (skip prompts in Preview/WhatIf)
