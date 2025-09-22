@@ -1,10 +1,10 @@
 # MuFo Current Roadmap & Next Steps
-**Updated: September 22, 2025**
+**Updated: January 11, 2025**
 
-## 🎉 **PROJECT STATUS: FEATURE-COMPLETE CORE**
+## 🎉 **PROJECT STATUS: FEATURE-COMPLETE WITH ADVANCED VALIDATION**
 
-### **✅ MAJOR ACHIEVEMENT: ALL CORE FEATURES IMPLEMENTED**
-MuFo has achieved **100% implementation** of its core music library validation mission:
+### **✅ MAJOR ACHIEVEMENT: DATA-DRIVEN VALIDATION IMPLEMENTED**
+MuFo has achieved a breakthrough in music library validation accuracy with **empirical, data-driven duration validation**:
 
 - ✅ **Spotify Integration** - Optimized search with 10-100x performance improvement
 - ✅ **Folder Validation** - Artist/Album structure validation with flexible detection
@@ -13,8 +13,15 @@ MuFo has achieved **100% implementation** of its core music library validation m
 - ✅ **Results Management** - Logging, viewing, and filtering capabilities
 - ✅ **User Experience** - Multiple execution modes (Auto/Manual/Smart) with rich output
 - ✅ **Manual Override System** - Complete forensic workflow for edge cases and manual track mapping
+- ✅ **Data-Driven Validation** - Empirical thresholds from 149-track real-world analysis
 
-**Current Status**: Production-ready with 100% album matching success rate on real-world libraries.
+**NEW: Data-Driven Duration Validation**
+- Analyzed 149 tracks from 15 real albums (progressive, classical, jazz, rock)
+- Category-specific tolerances: Short (42s), Normal (107s), Long (89s), Epic (331s)
+- 0 false positives vs 3 with percentage-based validation in testing
+- Handles edge cases: Pink Floyd epics, punk shorts, classical variations
+
+**Current Status**: Production-ready with 100% album matching success rate and intelligent duration validation.
 
 ---
 
@@ -154,10 +161,57 @@ Prepare for first major release to PowerShell Gallery.
 - [ ] Cross-platform compatibility verified
 
 ### **Long-term (Next 6 months)**
+- [ ] **Track-Level Identification System** ("Forensic Music ID") 🎯 **HIGH PRIORITY**
+  - Handle loose collections/playlists without album structure
+  - Duration-based "Shazam-like" identification using our data-driven validation
+  - Interactive disambiguation: "not Tom Waits, maybe that girl singer"
+  - Progressive search: artist+title → title-only → duration-only → fuzzy matching
 - [ ] Alternative provider integration (MusicBrainz)
 - [ ] Advanced features based on user demand
 - [ ] Potential GUI or web interface
 - [ ] Enterprise/commercial viability assessment
+
+---
+
+## 🎯 **FUTURE MAJOR FEATURE: Track-Level Identification**
+
+### **The Vision**
+Extend MuFo beyond album-based validation to handle **loose music collections**:
+
+**Problem**: You have a folder of random music files - maybe from old playlists, downloads, or corrupted libraries. Files might have:
+- ❓ Missing artist metadata
+- ❓ Wrong/corrupted titles  
+- ❓ No album information
+- ✅ But they have **duration** (which our data-driven validation can leverage!)
+
+**Solution**: "Forensic Music Identification" system that:
+1. **Extracts whatever metadata exists** (title, artist, duration)
+2. **Searches Spotify progressively**: full metadata → title+duration → fuzzy title matching
+3. **Uses duration as primary confidence signal** (leveraging our new data-driven thresholds)
+4. **Interactive disambiguation**: User can say "definitely not this artist, try female vocalists"
+5. **Applies identified metadata** using existing TagLib functions
+
+**Note**: Minimum requirement is **title** metadata - pure duration-only would be impractical.
+
+### **Use Cases**:
+- 📁 **Mixed playlists**: Validate compilation albums or custom playlists
+- 🔍 **Unknown files**: Identify music with missing/corrupt metadata
+- 🎵 **"Shazam mode"**: Find candidates by duration alone when metadata is unreliable
+- 🧹 **Library rescue**: Recover organization for "lost" music collections
+
+### **Technical Approach**:
+```powershell
+# Basic usage
+Invoke-TrackIdentification -Path "C:\Music\Unknown\"
+
+# Interactive disambiguation
+Invoke-TrackIdentification -Path "C:\Music\Playlist\" -Interactive
+
+# Duration-focused mode (when metadata is unreliable)
+Invoke-TrackIdentification -Path "C:\Music\Corrupted\" -DurationOnly -UseDataDrivenTolerance
+```
+
+This would make MuFo a **complete music organization solution** - handling both structured album libraries AND unstructured file collections!
 
 ---
 

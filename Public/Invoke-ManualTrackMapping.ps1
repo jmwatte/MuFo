@@ -1,7 +1,10 @@
 function Invoke-ManualTrackMapping {
 <#
 .SYNOPSIS
-    Manual track mapping workflow for edge cases and forensic analysis.
+    Manual track mapping workflow for edge cases and         'Generate' {
+            Write-Host "🎵 Generating manual track mapping files..." -ForegroundColor Cyan
+            
+            $result = New-TrackMapping -Path $Path -OutputName $OutputName -SortBy $SortBy -OpenFiles:$OpenFiles -NoOpen:$NoOpennsic analysis.
 
 .DESCRIPTION
     Two-step workflow for manually correcting track order when automatic methods fail:
@@ -92,6 +95,12 @@ function Invoke-ManualTrackMapping {
         [Parameter(ParameterSetName = 'Generate')]
         [ValidateSet('FileName', 'TrackNumber', 'Title')]
         [string]$SortBy = 'FileName',
+        
+        [Parameter(ParameterSetName = 'Generate')]
+        [switch]$OpenFiles,
+        
+        [Parameter(ParameterSetName = 'Generate')]
+        [switch]$NoOpen,
         
         [Parameter(ParameterSetName = 'Import')]
         [switch]$WhatIf

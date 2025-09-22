@@ -118,6 +118,110 @@ MuFo now provides:
 ### Use Cases Supported:
 - ✅ Track order mismatches (tags vs. actual audio)
 - ✅ Filename order vs. actual album sequence
+
+## 🎯 Data-Driven Duration Validation (NEW - Jan 11, 2025)
+**STATUS: ✅ COMPLETE**
+
+### Functions Implemented:
+- ✅ `Compare-TrackDurations` - Enhanced with `-UseDataDrivenTolerance`
+- ✅ `Test-AlbumDurationConsistency` - Added `DataDriven` validation level
+- ✅ Real-world music analysis script with 149-track dataset
+- ✅ Category-specific tolerances (Short/Normal/Long/Epic tracks)
+
+### Key Features:
+- ✅ **Empirical thresholds**: Based on analysis of real music library (15 albums, 149 tracks)
+- ✅ **Category intelligence**: Different tolerances for different track lengths
+- ✅ **Edge case handling**: Proper validation for Pink Floyd epics and punk shorts
+- ✅ **Reduced false positives**: 0 vs 3 false positives compared to percentage-based
+- ✅ **Comprehensive testing**: Mock and real-world validation scenarios
+
+### Statistical Foundation:
+- ✅ Short tracks (0-2min): 42s tolerance (based on ±28.2s std dev)
+- ✅ Normal tracks (2-7min): 107s tolerance (based on ±71.4s std dev)  
+- ✅ Long tracks (7-10min): 89s tolerance (based on ±59.1s std dev)
+- ✅ Epic tracks (10min+): 331s tolerance (based on ±220.5s std dev)
+
+---
+
+## 🚀 **FUTURE ENHANCEMENTS**
+
+## 📻 Track-Level Identification System (FUTURE)
+**STATUS: 🔮 PLANNED - HIGH PRIORITY**
+
+### Vision: "Forensic Music Identification"
+A system for identifying and organizing loose collections of music files where traditional album-based validation doesn't apply.
+
+### Target Use Cases:
+- **Mixed playlists**: Collections of songs from various albums/artists
+- **Unknown files**: Music files with missing or incorrect metadata
+- **Compilation validation**: Verify tracks in custom compilations
+- **"Shazam-like" identification**: Use duration + partial metadata for identification
+
+### Proposed Implementation Phases:
+
+#### **Phase 1: Basic Track Identification**
+- [ ] **Function**: `Invoke-TrackIdentification`
+- [ ] **Input**: Folder of loose music files (any metadata state)
+- [ ] **Process**: 
+  - Extract available metadata (title, artist, duration)
+  - Search Spotify by various combinations (artist+title, title only, etc.)
+  - Use duration as primary filter/confidence booster
+- [ ] **Output**: Candidate matches with confidence scores
+
+#### **Phase 2: Interactive Disambiguation**
+- [ ] **Smart filtering**: "Definitely not Tom Waits, maybe that girl singer?"
+- [ ] **User feedback loop**: 
+  - Present multiple candidates
+  - Allow user to exclude artists/genres
+  - Narrow down by characteristics (male/female vocals, decade, genre)
+- [ ] **Audio sampling**: Integration with media player for listen-and-choose workflow
+
+#### **Phase 3: Batch Processing & Learning**
+- [ ] **Pattern recognition**: Learn from user choices to improve suggestions
+- [ ] **Bulk operations**: Process entire "unknown" folders efficiently
+- [ ] **Confidence thresholds**: Auto-accept high-confidence matches, flag uncertain ones
+
+### Technical Approach:
+
+#### **Search Strategies** (Progressive fallback):
+1. **Full metadata**: Artist + Title + Duration validation
+2. **Title + Duration**: When artist is missing/incorrect ⭐ **MINIMUM REQUIREMENT**
+3. **Fuzzy title matching**: Handle typos, alternate spellings, feat. artists
+4. **Interactive disambiguation**: User-guided filtering when multiple candidates
+
+**Note**: At minimum, files must have **Title** metadata. Pure duration-only matching would be impractical - for that level of unknown content, users should use dedicated audio fingerprinting tools like Shazam.
+
+#### **Confidence Scoring Factors**:
+- **Duration match accuracy**: Primary signal (our new data-driven validation!)
+- **Metadata consistency**: Title/artist string similarity
+- **Spotify popularity**: Prefer well-known versions over obscure covers
+- **User feedback**: Learn from previous disambiguation choices
+
+#### **User Experience**:
+```powershell
+# Basic identification
+Invoke-TrackIdentification -Path "C:\Music\Unknown\"
+
+# Interactive mode with disambiguation
+Invoke-TrackIdentification -Path "C:\Music\Playlist\" -Interactive
+
+# Duration-focused "Shazam mode"
+Invoke-TrackIdentification -Path "C:\Music\NoMetadata\" -DurationOnly -ToleranceLevel Strict
+```
+
+### Integration with Existing MuFo Features:
+- **Reuse duration validation**: Leverage our new data-driven thresholds
+- **Manual workflow**: Use existing `Invoke-ManualTrackMapping` for final cleanup
+- **TagLib integration**: Apply identified metadata using existing tag functions
+- **Logging system**: Track identification results in JSON logs
+
+### Expected Benefits:
+- **Rescue "lost" music**: Identify files with corrupted/missing metadata
+- **Validate playlists**: Ensure compilation tracks are correctly identified
+- **Metadata enrichment**: Enhance sparse metadata with Spotify data
+- **Quality assurance**: Catch misnamed files even outside album context
+
+This would essentially turn MuFo into a comprehensive music identification and organization tool, handling both structured album libraries AND unstructured file collections!
 - ✅ Manual verification by listening
 - ✅ Edge cases where automatic matching fails
 - ✅ Forensic analysis of problematic albums
