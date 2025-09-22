@@ -43,13 +43,10 @@ Always generate comprehensive and reliable tests that:
 ## Development Workflow
 
 ### Planning Documents (Keep Updated)
-- **`flow-mufo.md`**: Mermaid flowchart of execution logic
-- **`plan-mufo.md`**: Phase-based development roadmap with checkboxes
-- **Implementation docs**: `implement*.md` files for specific feature rollouts:
-  - `implementexcludefolders.md` (wire exclusions and exclusions store)
-  - `implementshowresults.md` (results viewer for -LogTo JSON)
-  - `implementartistat.md` (folder level detection)
-  - `implementtracktagging.md` (read-only track tagging groundwork)
+- **`documentation/CURRENT-ROADMAP.md`**: Current priorities and next steps (updated Sept 2025)
+- **`documentation/flow-mufo.md`**: Mermaid flowchart of execution logic
+- **`documentation/IMPLEMENTATION-STATUS.md`**: Consolidated feature implementation tracker
+- **Implementation docs**: Historical `implement*.md` files archived in `documentation/archive/`
 
 ### Module Structure (Standard PowerShell Pattern)
 ```
@@ -103,8 +100,8 @@ Always generate comprehensive and reliable tests that:
 4. **Consider performance impact** on large music libraries
 
 ### When Adding Features
-1. Update relevant `implement*.md` files
-2. Add to `plan-mufo.md` roadmap with checkboxes
+1. Check `documentation/CURRENT-ROADMAP.md` for current priorities
+2. Update `documentation/IMPLEMENTATION-STATUS.md` with progress
 3. Create test script following `tests/test-*.ps1` pattern
 4. Ensure classical music compatibility
 5. Consider API efficiency and rate limiting
