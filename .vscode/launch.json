@@ -1,0 +1,29 @@
+{
+  // VS Code PowerShell debugging configurations for MuFo
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "PowerShell: Launch MuFo WhatIf",
+      "type": "PowerShell",
+      "request": "launch",
+      "script": "${workspaceFolder}/debug/debug-mufo-whatif.ps1",
+      "cwd": "${workspaceFolder}",
+      "args": []
+    },
+    {
+      "name": "PowerShell: Launch Current File",
+      "type": "PowerShell",
+      "request": "launch",
+      "script": "${file}",
+      "cwd": "${workspaceFolder}",
+      "args": []
+    },
+    {
+      "name": "PowerShell: Interactive Session",
+      "type": "PowerShell",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "createTemporaryIntegratedConsole": true
+    }
+  ]
+}
