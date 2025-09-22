@@ -87,6 +87,21 @@ function Invoke-MuFo {
     Check for missing tracks, duplicates, and collection issues (works with -IncludeTracks).
     Compares local tracks against complete Spotify album to identify gaps.
 
+.PARAMETER ValidateDurations
+    Enable duration validation when matching albums and tracks. Compares track lengths between local files
+    and Spotify data to improve matching accuracy and detect potential order issues.
+
+.PARAMETER DurationValidationLevel
+    Set the strictness of duration validation:
+    - 'Strict': Tight tolerances (2% for percentage-based, strict empirical for DataDriven)
+    - 'Normal': Balanced tolerances (5% or normal empirical) - Default
+    - 'Relaxed': Loose tolerances (10% or relaxed empirical)
+    - 'DataDriven': Use empirical thresholds from real music library analysis (recommended)
+
+.PARAMETER ShowDurationMismatches
+    Display detailed information about duration mismatches when validation is enabled.
+    Shows which tracks have significant duration differences and provides recommendations.
+
 .PARAMETER BoxMode
     Treat subfolders as discs of a box set, aggregating all tracks into one album for validation.
     Useful for multi-disc releases stored in separate folders.
@@ -159,6 +174,12 @@ function Invoke-MuFo {
     Invoke-MuFo -Path "C:\Music\Classical" -OptimizeClassicalTags -IncludeTracks -FixTags
 
     Optimizes tag organization for classical music with composer and conductor enhancements.
+
+.EXAMPLE
+    Invoke-MuFo -Path "C:\Music\Progressive" -IncludeTracks -ValidateDurations -DurationValidationLevel DataDriven -ShowDurationMismatches
+
+    Validates progressive rock albums using data-driven duration thresholds optimized for varied track lengths,
+    displaying detailed information about any duration mismatches found.
 
 .EXAMPLE
     Invoke-MuFo -Path "C:\Music\Compilations" -FixTags -DontFix "TrackArtists" -DoIt Smart
@@ -264,7 +285,17 @@ function Invoke-MuFo {
         [string]$Action,
 
         [Parameter(Mandatory = $false)]
-        [double]$MinScore = 0.0
+        [double]$MinScore = 0.0,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$ValidateDurations,
+
+        [Parameter(Mandatory = $false)]
+        [ValidateSet('Strict', 'Normal', 'Relaxed', 'DataDriven')]
+        [string]$DurationValidationLevel = 'Normal',
+
+        [Parameter(Mandatory = $false)]
+        [switch]$ShowDurationMismatches
 
     )
 
@@ -496,6 +527,35 @@ function Invoke-MuFo {
                                     
                                     $missingTitle = ($tracks | Where-Object { -not $_.Title }).Count
                                     $c | Add-Member -NotePropertyName TracksWithMissingTitle -NotePropertyValue $missingTitle
+
+                                    # Duration validation if enabled
+                                    if ($ValidateDurations -and $c.SpotifyAlbum -and $tracks.Count -gt 0) {
+                                        try {
+                                            Write-Verbose "Performing duration validation for album: $($c.LocalAlbumName)"
+                                            $durationValidation = Test-AlbumDurationConsistency -AlbumPath $c.LocalPath -SpotifyAlbumData $c.SpotifyAlbum -ShowWarnings $ShowDurationMismatches -ValidationLevel $DurationValidationLevel
+                                            
+                                            if ($durationValidation) {
+                                                # Enhance album confidence based on duration validation
+                                                $originalConfidence = if ($c.ConfidenceScore) { $c.ConfidenceScore } else { 0.5 }
+                                                $durationConfidence = $durationValidation.Summary.AverageConfidence / 100
+                                                
+                                                # Weighted combination: 70% original matching, 30% duration validation
+                                                $enhancedConfidence = [math]::Round(($originalConfidence * 0.7) + ($durationConfidence * 0.3), 3)
+                                                
+                                                $c | Add-Member -NotePropertyName DurationValidation -NotePropertyValue $durationValidation -Force
+                                                $c | Add-Member -NotePropertyName OriginalConfidence -NotePropertyValue $originalConfidence -Force
+                                                $c | Add-Member -NotePropertyName DurationConfidence -NotePropertyValue $durationConfidence -Force
+                                                $c | Add-Member -NotePropertyName EnhancedConfidence -NotePropertyValue $enhancedConfidence -Force
+                                                
+                                                # Update the main confidence score with enhanced value
+                                                $c.ConfidenceScore = $enhancedConfidence
+                                                
+                                                Write-Verbose "Duration validation complete. Original: $($originalConfidence), Duration: $($durationConfidence), Enhanced: $($enhancedConfidence)"
+                                            }
+                                        } catch {
+                                            Write-Warning "Duration validation failed for album $($c.LocalAlbumName): $($_.Exception.Message)"
+                                        }
+                                    }
 
                                     # Classical music analysis
                                     $classicalTracks = $tracks | Where-Object { $_.IsClassical -eq $true }
