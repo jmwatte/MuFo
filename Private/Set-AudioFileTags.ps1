@@ -109,13 +109,13 @@ function Set-AudioFileTags {
         throw "Cannot specify both -FixOnly and -DontFix parameters. Use one or the other."
     }
     
-    # Determine which tags to fix - Default to AlbumArtists (80% use case)
+    # Determine which tags to fix - Include TrackArtists by default for comprehensive fixing
     $tagsToFix = if ($FixOnly.Count -gt 0) {
         $FixOnly
     } elseif ($DontFix.Count -gt 0) {
-        @('Titles', 'TrackNumbers', 'Years', 'Genres', 'AlbumArtists') | Where-Object { $_ -notin $DontFix }
+        @('Titles', 'TrackNumbers', 'Years', 'Genres', 'AlbumArtists', 'TrackArtists') | Where-Object { $_ -notin $DontFix }
     } else {
-        @('Titles', 'TrackNumbers', 'Years', 'Genres', 'AlbumArtists')  # Default: fix everything except TrackArtists
+        @('Titles', 'TrackNumbers', 'Years', 'Genres', 'AlbumArtists', 'TrackArtists')  # Default: fix everything including track artists
     }
     
     Write-Verbose "Tags to fix: $($tagsToFix -join ', ')"
@@ -229,10 +229,10 @@ function Set-AudioFileTags {
                         $changes += "⚠️ Title: '$($tag.Title)' needs manual review (appears to be placeholder/test data)"
                         # Don't set changesMadeToFile since we're not making changes, just flagging
                     } elseif ($suggestedTitle -ne $tag.Title) {
-                        if ($PSCmdlet.ShouldProcess($track.Path, "Set title to '$suggestedTitle'")) {
+                        if (-not $WhatIfPreference) {
                             $tag.Title = $suggestedTitle
-                            $changesMadeToFile = $true
                         }
+                        $changesMadeToFile = $true
                         $changes += "Title: '$suggestedTitle' (was: '$($tag.Title)')"
                     }
                 }
@@ -258,10 +258,10 @@ function Set-AudioFileTags {
                 }
                 
                 if ($suggestedTrackNumber) {
-                    if ($PSCmdlet.ShouldProcess($track.Path, "Set track number to $suggestedTrackNumber")) {
+                    if (-not $WhatIfPreference) {
                         $tag.Track = [uint32]$suggestedTrackNumber
-                        $changesMadeToFile = $true
                     }
+                    $changesMadeToFile = $true
                     $changes += "Track: $suggestedTrackNumber"
                 }
             }
@@ -293,10 +293,10 @@ function Set-AudioFileTags {
                 
                 # Update if we have a suggested year and it's different from current
                 if ($suggestedYear -and ($tag.Year -eq 0 -or $tag.Year -ne $suggestedYear)) {
-                    if ($PSCmdlet.ShouldProcess($track.Path, "Set year to $suggestedYear")) {
+                    if (-not $WhatIfPreference) {
                         $tag.Year = [uint32]$suggestedYear
-                        $changesMadeToFile = $true
                     }
+                    $changesMadeToFile = $true
                     if ($tag.Year -eq 0) {
                         $changes += "Year: $suggestedYear"
                     } else {
@@ -342,10 +342,10 @@ function Set-AudioFileTags {
                 if ($suggestedGenres.Count -gt 0) {
                     $finalGenres = @($existingGenres) + @($suggestedGenres)
                     
-                    if ($PSCmdlet.ShouldProcess($track.Path, "Add genres '$($suggestedGenres -join ', ')' to existing '$($existingGenres -join ', ')'")) {
+                    if (-not $WhatIfPreference) {
                         $tag.Genres = $finalGenres
-                        $changesMadeToFile = $true
                     }
+                    $changesMadeToFile = $true
                     
                     if ($existingGenres.Count -gt 0) {
                         $changes += "Genres: Added '$($suggestedGenres -join ', ')' to existing '$($existingGenres -join ', ')'"
@@ -359,10 +359,26 @@ function Set-AudioFileTags {
             $suggestedArtist = $null
             $suggestedAlbumArtist = $null
             
-            # Get artist from Spotify data
+            # Get track-specific artist from Spotify track data first
+            if ($SpotifyAlbum -and $SpotifyAlbum.tracks -and $SpotifyAlbum.tracks.items -and $track.Track -gt 0) {
+                $spotifyTrack = $SpotifyAlbum.tracks.items | Where-Object { $_.track_number -eq $track.Track }
+                if ($spotifyTrack -and $spotifyTrack.artists -and $spotifyTrack.artists.Count -gt 0) {
+                    # Use track-specific artists (handles featuring artists correctly)
+                    $trackArtistNames = $spotifyTrack.artists | ForEach-Object { $_.name }
+                    $suggestedArtist = $trackArtistNames -join ', '
+                    Write-Verbose "Track $($track.Track): Found track artists: $suggestedArtist"
+                }
+            }
+            
+            # Get album artist from Spotify album data
             if ($SpotifyAlbum -and $SpotifyAlbum.artists -and $SpotifyAlbum.artists.Count -gt 0) {
-                $suggestedArtist = $SpotifyAlbum.artists[0].name
-                $suggestedAlbumArtist = $suggestedArtist
+                $albumArtistNames = $SpotifyAlbum.artists | ForEach-Object { $_.name }
+                $suggestedAlbumArtist = $albumArtistNames -join ', '
+            }
+            
+            # Fall back to album artist for track artist if no track-specific data found
+            if (-not $suggestedArtist -and $suggestedAlbumArtist) {
+                $suggestedArtist = $suggestedAlbumArtist
             }
             
             # Check what needs fixing
@@ -371,19 +387,19 @@ function Set-AudioFileTags {
             
             # Handle TrackArtists (individual track performers)
             if ('TrackArtists' -in $tagsToFix -and $needsTrackArtistFix -and $suggestedArtist) {
-                if ($PSCmdlet.ShouldProcess($track.Path, "Set track artist to '$suggestedArtist'")) {
+                if (-not $WhatIfPreference) {
                     $tag.Performers = @($suggestedArtist)
-                    $changesMadeToFile = $true
                 }
+                $changesMadeToFile = $true
                 $changes += "TrackArtist: '$suggestedArtist'"
             }
             
             # Handle AlbumArtists (album-level artist - default behavior)
             if ('AlbumArtists' -in $tagsToFix -and $needsAlbumArtistFix -and $suggestedAlbumArtist) {
-                if ($PSCmdlet.ShouldProcess($track.Path, "Set album artist to '$suggestedAlbumArtist'")) {
+                if (-not $WhatIfPreference) {
                     $tag.AlbumArtists = @($suggestedAlbumArtist)
-                    $changesMadeToFile = $true
                 }
+                $changesMadeToFile = $true
                 $changes += "AlbumArtist: '$suggestedAlbumArtist'"
             }
             
@@ -393,11 +409,11 @@ function Set-AudioFileTags {
                 
                 # Set composer as album artist if not set
                 if ($track.Composer -and (-not $tag.AlbumArtists -or $tag.AlbumArtists.Count -eq 0)) {
-                    if ($PSCmdlet.ShouldProcess($track.Path, "Set album artist to composer '$($track.Composer)'")) {
+                    if (-not $WhatIfPreference) {
                         $tag.AlbumArtists = @($track.Composer)
-                        $optimizations += "AlbumArtist: '$($track.Composer)' (composer)"
-                        $changesMadeToFile = $true
                     }
+                    $optimizations += "AlbumArtist: '$($track.Composer)' (composer)"
+                    $changesMadeToFile = $true
                 }
                 
                 # Add conductor to comment if found and not already there
@@ -405,11 +421,11 @@ function Set-AudioFileTags {
                     $conductorInfo = "Conductor: $($track.Conductor)"
                     $newComment = if ($tag.Comment) { "$($tag.Comment); $conductorInfo" } else { $conductorInfo }
                     
-                    if ($PSCmdlet.ShouldProcess($track.Path, "Add conductor info to comment")) {
+                    if (-not $WhatIfPreference) {
                         $tag.Comment = $newComment
-                        $optimizations += "Comment: Added conductor info"
-                        $changesMadeToFile = $true
                     }
+                    $optimizations += "Comment: Added conductor info"
+                    $changesMadeToFile = $true
                 }
                 
                 if ($optimizations.Count -gt 0) {
@@ -428,7 +444,7 @@ function Set-AudioFileTags {
                         Write-Host "    $change" -ForegroundColor Gray
                     }
                 } else {
-                    # WhatIf mode - show what would be updated with same format
+                    # WhatIf mode - show what would be updated with clean list format
                     Write-Host "  ✓ Would update: $($track.FileName)" -ForegroundColor Yellow
                     foreach ($change in $changes) {
                         Write-Host "    $change" -ForegroundColor Gray

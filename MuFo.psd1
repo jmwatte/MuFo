@@ -69,7 +69,7 @@ RequiredModules = @('Spotishell')
 # NestedModules = @()
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = @('Invoke-MuFo', 'Install-TagLibSharp', 'Invoke-ManualTrackMapping')
+FunctionsToExport = @('Invoke-MuFo', 'Install-TagLibSharp', 'Invoke-ManualTrackMapping', 'Get-MuFoArtistReport')
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = @()

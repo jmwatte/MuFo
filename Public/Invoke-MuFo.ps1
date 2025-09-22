@@ -462,12 +462,71 @@ function Invoke-MuFo {
 
 
 
-            # Search Spotify for the artist and get top matches
+            # Enhanced artist search with variations (similar to Get-MuFoArtistReport)
+            Write-Verbose "Searching Spotify for artist: $localArtist"
             $topMatches = Get-SpotifyArtist -ArtistName $localArtist
+            
+            # If first search yields poor results, try variations (before "and", "&", etc.)
+            if (-not $topMatches -or ($topMatches.Count -gt 0 -and $topMatches[0].Score -lt 70)) {
+                $searchVariations = @()
+                
+                # Try part before common separators
+                $separators = @(' and ', ' & ', ' featuring ', ' feat ', ' feat. ', ' ft ', ' ft. ', ' with ')
+                foreach ($sep in $separators) {
+                    if ($localArtist -match [regex]::Escape($sep)) {
+                        $beforeSep = ($localArtist -split [regex]::Escape($sep), 2)[0].Trim()
+                        if ($beforeSep -and $beforeSep.Length -gt 2) {
+                            $searchVariations += $beforeSep
+                        }
+                        
+                        # Special case: if separator is " and ", also try without "and" (e.g., "Afrika Bambaataa the Soul Sonic Force")
+                        if ($sep -eq ' and ') {
+                            $withoutAnd = $localArtist -replace ' and ', ' '
+                            if ($withoutAnd -ne $localArtist) {
+                                $searchVariations += $withoutAnd.Trim()
+                            }
+                        }
+                        break # Only try the first separator found
+                    }
+                }
+                
+                # Try each variation and pick the best overall result
+                foreach ($variation in $searchVariations) {
+                    Write-Verbose "  Trying variation: $variation"
+                    $variationMatches = Get-SpotifyArtist -ArtistName $variation
+                    
+                    if ($variationMatches -and $variationMatches.Count -gt 0) {
+                        # Recalculate score against original artist name
+                        foreach ($match in $variationMatches) {
+                            $spotifyName = if ($match.Artist -and $match.Artist.Name) { $match.Artist.Name } else { "Unknown" }
+                            $variationScore = Get-StringSimilarity -String1 $variation -String2 $spotifyName
+                            $originalScore = Get-StringSimilarity -String1 $localArtist -String2 $spotifyName
+                            
+                            # If we have a very good match to the variation (main artist), boost the score
+                            if ($variationScore -ge 0.9) {
+                                # Use the higher of: original score or boosted variation score
+                                $boostedScore = [Math]::Max($originalScore, ($variationScore * 0.8)) # 80% of perfect variation match
+                                $match.Score = $boostedScore
+                                Write-Verbose "    Boosted score for '$spotifyName': variation=$([math]::Round($variationScore,2)) -> final=$([math]::Round($boostedScore,2))"
+                            } else {
+                                $match.Score = $originalScore
+                            }
+                        }
+                        
+                        # If this variation gives better results, use them
+                        if (-not $topMatches -or ($variationMatches[0].Score -gt $topMatches[0].Score)) {
+                            $topMatches = $variationMatches
+                            Write-Verbose "  Using variation '$variation' - improved score to $($topMatches[0].Score)"
+                        }
+                    }
+                }
+            }
             if ($topMatches) {
                 Write-Verbose "Found $($topMatches.Count) potential matches on Spotify"
 
-                # Use refactored artist selection logic
+                # Use refactored artist selection logic  
+                if (-not $effectiveExclusions) { $effectiveExclusions = @() }
+                if ($effectiveExclusions.Count -eq 0) { $effectiveExclusions = @('') }  # Non-empty array with empty string
                 $artistSelection = Get-ArtistSelection -LocalArtist $localArtist -TopMatches $topMatches -DoIt $DoIt -ConfidenceThreshold $ConfidenceThreshold -IsPreview $isPreview -CurrentPath $currentPath -EffectiveExclusions $effectiveExclusions -IncludeSingles $IncludeSingles -IncludeCompilations $IncludeCompilations
                 $selectedArtist = $artistSelection.SelectedArtist
                 $artistSelectionSource = $artistSelection.SelectionSource
@@ -685,7 +744,7 @@ function Invoke-MuFo {
                             $wantFull = ($ShowEverything -or $Detailed)
                             if (-not $wantFull) {
                                 $objDisplay = [PSCustomObject]([ordered]@{
-                                    LocalArtist   = $folderArtistName
+                                    LocalArtist   = $localArtist
                                     SpotifyArtist = $objFull.Artist
                                     LocalFolder   = $objFull.LocalFolder
                                     LocalAlbum    = $objFull.LocalAlbum
