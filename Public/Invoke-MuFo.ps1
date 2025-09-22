@@ -9,103 +9,164 @@ function Invoke-MuFo {
     for automation, manual confirmation, or smart application.
 
 .PARAMETER Path
-    The path to the music library folder. Defaults to current directory.
+    The path to the music library folder to validate. Can be an artist folder, album folder, or root music directory.
+    Defaults to current directory if not specified.
 
 .PARAMETER DoIt
-    The mode for applying changes: Automatic, Manual, or Smart.
+    The execution mode for applying changes:
+    - 'Automatic': Apply all changes without prompting
+    - 'Manual': Prompt for each change (Enter=accept, Esc=skip)
+    - 'Smart': Auto-apply high-confidence matches, prompt for uncertain ones
+    Default: Manual
 
 .PARAMETER ConfidenceThreshold
-    Minimum similarity score [0..1] to consider a match "confident". Used by Smart mode and album colorization. Default 0.9.
+    Minimum similarity score (0.0-1.0) to consider a match "confident". Used by Smart mode for automatic application.
+    Lower values are more permissive, higher values require closer matches. Default: 0.6
 
 .PARAMETER ArtistAt
-    Specifies the relative folder level to locate the artist folder. Options: 'Here' (current path is artist), '1U'/'2U' (go up 1 or 2 levels), '1D'/'2D' (artists are 1 or 2 levels down). Default 'Here'.
+    Specifies where artist folders are located relative to the current path:
+    - 'Here': Current path contains artist folders
+    - '1U'/'2U': Go up 1 or 2 levels to find artist folders
+    - '1D'/'2D': Artist folders are 1 or 2 levels down
+    Default: 'Here'
 
 .PARAMETER ExcludeFolders
-    Folders to exclude from scanning. Supports exact names and wildcard patterns (*, ?, []).
-    Examples: 'Bonus', 'E_*', '*_Live', 'Album?', 'Demo[0-9]', 'Track[A-Z]'
+    Array of folder names or patterns to exclude from scanning. Supports wildcards:
+    - Exact names: 'Bonus', 'Live'
+    - Wildcards: 'E_*', '*_Live', 'Album?'
+    - Character classes: 'Demo[0-9]', 'Track[A-Z]'
+
+.PARAMETER ExcludedFoldersSave
+    Save current exclusion list to a JSON file for reuse. Specify the file path to create.
+
+.PARAMETER ExcludedFoldersLoad
+    Load exclusion list from a previously saved JSON file. Specify the file path to load.
+
+.PARAMETER ExcludedFoldersReplace
+    When loading exclusions, replace the current list instead of adding to it.
+
+.PARAMETER ExcludedFoldersShow
+    Display the current exclusion list and exit without processing.
 
 .PARAMETER LogTo
-    Path to the log file for results.
+    Path to save detailed results in JSON format. Can be reviewed later with -ShowResults.
 
 .PARAMETER IncludeSingles
-    Include single releases when fetching albums from provider.
+    Include single releases when fetching album data from Spotify. Useful for comprehensive validation.
 
 .PARAMETER IncludeCompilations
-    Include compilation releases when fetching albums from provider.
+    Include compilation albums when fetching album data from Spotify. Helps validate various artist collections.
 
 .PARAMETER IncludeTracks
-    Include track tag inspection and validation metrics in the output. When enabled, also performs
-    classical music analysis including composer detection, conductor identification, and organization suggestions.
+    Enable track-level analysis and validation. Reads audio file tags and compares against Spotify track data.
+    Provides detailed metrics about missing titles, track mismatches, and completeness.
 
 .PARAMETER FixTags
-    Enable tag writing and enhancement. Fills missing titles, track numbers, and optimizes classical music tags.
+    Enable writing and enhancement of audio file tags. Fills missing information and corrects inconsistencies.
+    Requires TagLib-Sharp. Use with -WhatIf to preview changes before applying.
 
 .PARAMETER FixOnly
-    Only fix these specific tag types (requires -FixTags). Valid values: 'Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists'.
-    Cannot be used together with -DontFix. When specified, only these tag types will be fixed.
+    Limit tag fixing to specific types only (requires -FixTags):
+    'Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists'
+    Cannot be used with -DontFix. When specified, only these tag types will be modified.
 
 .PARAMETER DontFix
-    Exclude specific tag types from being fixed (requires -FixTags). Valid values: 'Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists'.
-    Cannot be used together with -FixOnly. By default, -FixTags will fix all detected issues unless excluded here.
+    Exclude specific tag types from being fixed (requires -FixTags):
+    'Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists'
+    Cannot be used with -FixOnly. All other detected issues will be fixed.
 
 .PARAMETER OptimizeClassicalTags
-    Optimize tags for classical music organization - composer as album artist, conductor info, etc. (requires -FixTags).
+    Apply special tag optimization for classical music (requires -FixTags):
+    - Use composer as album artist when appropriate
+    - Enhance conductor and performer information
+    - Optimize track titles for classical compositions
 
 .PARAMETER ValidateCompleteness
-    Check for missing tracks, duplicates, and other collection issues (works with -IncludeTracks).
+    Check for missing tracks, duplicates, and collection issues (works with -IncludeTracks).
+    Compares local tracks against complete Spotify album to identify gaps.
 
 .PARAMETER BoxMode
-    Treat subfolders as discs of a box set, aggregating tracks from all subfolders into one album.
-
-.PARAMETER AsObject
-    [Deprecated] Replaced by default object output plus -ShowSummary/-Preview switches.
+    Treat subfolders as discs of a box set, aggregating all tracks into one album for validation.
+    Useful for multi-disc releases stored in separate folders.
 
 .PARAMETER Preview
-    Perform analysis only and emit structured objects; do not prompt or rename. Use this to avoid WhatIf chatter.
-
-.PARAMETER ShowSummary
-    [Deprecated] Concise output and the rename map are now shown by default when using -WhatIf or -Preview.
-
-.PARAMETER Detailed
-    [Deprecated] Use -ShowEverything. When used with -Preview or -WhatIf, emit full object details instead of the concise view.
+    Perform analysis only without prompting or making changes. Outputs structured objects for review.
+    Use this for automation or when you want to examine results without interaction.
 
 .PARAMETER ShowEverything
-    Emit full object details (ArtistId, AlbumType, Score, LocalPath, Decision, Reason, etc.).
+    Include all available details in output: ArtistId, AlbumType, Score, LocalPath, Decision, Reason, etc.
+    Provides comprehensive information for debugging and detailed analysis.
 
 .PARAMETER ShowResults
-    Display results from a previous run's JSON log file. Requires -LogTo.
+    Display results from a previous run's JSON log file (requires -LogTo). Allows filtering and review
+    of past analysis without re-running the full validation process.
 
 .PARAMETER Action
-    Filter results by action: 'rename', 'skip', or 'error'.
+    Filter displayed results by action type when using -ShowResults:
+    - 'rename': Show only items that would be renamed
+    - 'skip': Show items that were skipped
+    - 'error': Show items that encountered errors
 
 .PARAMETER MinScore
-    Filter results to show only items with score >= MinScore.
-
-.PARAMETER Verbose
-    Provides detailed output.
-
-.PARAMETER Debug
-    Provides debug information.
+    Filter results to show only items with confidence score >= specified value (0.0-1.0).
+    Used with -ShowResults to focus on high-confidence matches.
 
 .EXAMPLE
     Invoke-MuFo -Path "C:\Music" -DoIt Smart
+    
+    Validates the entire music library using Smart mode, which automatically applies high-confidence matches
+    and prompts for uncertain ones.
 
 .EXAMPLE
-    Invoke-MuFo -Path "C:\Music\Artist" -LogTo "results.json" -WhatIf
-    Review the analysis results and then view them later with:
-    Invoke-MuFo -ShowResults -LogTo "results.json"
+    Invoke-MuFo -Path "C:\Music\Pink Floyd" -ArtistAt Here -WhatIf
+    
+    Analyzes a specific artist folder without making changes, showing what would be renamed or corrected.
 
 .EXAMPLE
-    Invoke-MuFo -ShowResults -LogTo "results.json" -Action "rename"
-    Show only albums that would be renamed from previous analysis.
+    Invoke-MuFo -Path "C:\Music" -ExcludeFolders "Bonus", "*_Live", "Demo*" -LogTo "results.json"
+    
+    Scans music library excluding bonus tracks, live albums, and demo releases, saving results for later review.
 
 .EXAMPLE
-    Invoke-MuFo -ShowResults -LogTo "results.json" -MinScore 0.9 -ShowEverything
-    Show high-confidence matches with full details.
+    Invoke-MuFo -Path "C:\Music\Albums" -ArtistAt 1U -IncludeTracks -FixTags -WhatIf
+    
+    Analyzes albums where artists are one level up, includes track validation, and previews tag fixes
+    without applying changes.
 
 .EXAMPLE
-    Invoke-MuFo -ShowResults -LogTo "results.json" -Action "error"
-    Review any errors from previous run for troubleshooting.
+    Invoke-MuFo -Path "C:\Music\Various" -IncludeCompilations -IncludeSingles -Preview
+    
+    Validates compilation albums and singles, outputting structured results without interaction.
+
+.EXAMPLE
+    Invoke-MuFo -ShowResults -LogTo "results.json" -Action "rename" -MinScore 0.8
+    
+    Reviews previous results, showing only items that would be renamed with confidence >= 80%.
+
+.EXAMPLE
+    Invoke-MuFo -Path "C:\Music\BoxSets" -BoxMode -IncludeTracks -ValidateCompleteness
+    
+    Validates box sets treating subfolders as discs, checking for missing tracks and completeness.
+
+.EXAMPLE
+    Invoke-MuFo -Path "C:\Music" -FixTags -FixOnly "Titles", "TrackNumbers" -DoIt Automatic
+    
+    Automatically fixes only missing titles and track numbers without prompting.
+
+.EXAMPLE
+    Invoke-MuFo -Path "C:\Music\Classical" -OptimizeClassicalTags -IncludeTracks -FixTags
+    
+    Optimizes tag organization for classical music with composer and conductor enhancements.
+
+.EXAMPLE
+    Invoke-MuFo -ExcludedFoldersLoad "my-exclusions.json" -Path "C:\Music" -DoIt Smart
+    
+    Loads previously saved exclusion patterns and validates library with Smart mode.
+
+.EXAMPLE
+    Invoke-MuFo -Path "C:\Music" -ConfidenceThreshold 0.9 -DoIt Smart -Verbose
+    
+    Uses high confidence threshold (90%) for Smart mode with detailed progress information.
 
 .NOTES
     Author: jmwatte
