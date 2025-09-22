@@ -458,9 +458,12 @@ function Invoke-MuFo {
                         Write-Verbose "Automatically selected: $($selectedArtist.Name)"
                     }
                     "Manual" {
-                        if ($localAlbumDirs.Count -eq 0) {
-                            Write-Verbose "No album directories found, will use artist inference"
-                            $selectedArtist = $null
+                        # Don't override high-confidence artist matches with inference
+                        # Use a higher threshold (0.8) to ensure we only skip inference for very confident matches
+                        if ($topMatches[0].Score -ge 0.8) {
+                            $selectedArtist = $topMatches[0].Artist
+                            $artistSelectionSource = 'search'
+                            Write-Verbose "High-confidence artist match found (score: $([math]::Round($topMatches[0].Score, 2))), using directly: $($selectedArtist.Name)"
                         } elseif (-not $isPreview) {
                             # Prompt user to choose (skip prompts in Preview/WhatIf)
                             for ($i = 0; $i -lt $topMatches.Count; $i++) {
