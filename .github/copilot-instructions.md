@@ -1,101 +1,133 @@
-If I ask you to do something, reflect back in your words what you think I asked and wait for my feedback before carrying out anything.
-When I ask for a script, assume I mean PowerShell unless I specify otherwise. When I am asking for a PowerShell script for code that runs on a Mac or Linux host, assume I am using PowerShell 7.3.On windows we also use the 7 version. 
-Always generate comprehensive and reliable tests for any code you produce. These tests must:
+# MuFo PowerShell Module - AI Coding Agent Instructions
 
-- Cover **all critical paths**, **edge cases**, and **error conditions**.
-- Include **positive and negative scenarios**, with clear assertions.
-- Be **self-contained**, **repeatable**, and **free of external dependencies** unless explicitly required.
-- Use **mocking or stubbing** where appropriate to isolate units.
-- Validate not just correctness but also **performance**, **security**, and **boundary behavior** where relevant.
-- Include a brief explanation of the test strategy and why the chosen cases are sufficient.
-- Never assume the code works—**prove it** through rigorous testing.
+## Development Approach - **ALWAYS REFLECT FIRST**
+If I ask you to do something, reflect back in your words what you think I asked and wait for my feedback before carrying out anything. When I state a problem, first restate it in your own words and wait for my confirmation before proceeding.
 
-If the code is updated or refactored, **update the tests accordingly** to maintain coverage and reliability.
-Never -except when I allow - offer solutions to problems that you have not tested. Never assume your solution will work. Set up a test fixture and try out your solutions and keep refining your solution till the problem is solved. Then offer that to me.
-If you need anything to test the code you write, that you cannot access yourself, ask me for it and wait for my response before you proceed.
+## Project Overview
+**MuFo** is a PowerShell module for music library validation and tagging using Spotify API. It validates folder structures (Artist/Album/Track), corrects naming inconsistencies, and enhances audio file tags with focus on classical music support.
 
-when I state somethin to you and I try to descirbe a problem before you fix anything or suggest anything. First restate my statement to you in such a way that I can see what you understand. Restate the problem i want a fix for in your own words the wait till i ok your rephasing of my statement till I see your understnad my question or problem.
+### Target Environment
+- PowerShell 7.3+ on Windows, Mac, and Linux
+- External dependencies: Spotishell (Spotify API), TagLib-Sharp (.NET audio library)
 
-After you provide a revision to code that successfully resolves an issue I've reported, I would like it to also suggest how I could alter my original prompt to obtain the working code directly in the future, thereby minimizing or eliminating the need for trial and error. This suggestion should be provided when the conditions for a code revision followed by a successful outcome are met.
+## Core Architecture
 
+### Main Entry Point
+- **`Invoke-MuFo`** in `Public/Invoke-MuFo.ps1` - 700+ line function with extensive parameter validation
+- Multiple execution modes: `-DoIt` (Automatic/Manual/Smart), `-Preview`, `-WhatIf`
+- Rich parameter system: `-ArtistAt`, `-ExcludeFolders`, `-LogTo`, `-IncludeTracks`, `-FixTags`
 
-If anything here is unclear or you want the guide expanded with concrete examples (test mocks, log schema, or the psm1 loader), tell me which area to expand and I will iterate.
+### Key Private Functions (Modular Design)
+- **Spotify Integration**: `Get-SpotifyAlbumMatches-Fast.ps1` (10-100x optimized), `Connect-Spotify.ps1`
+- **Audio Processing**: `Get-AudioFileTags.ps1` (TagLib-Sharp wrapper), `Set-AudioFileTags.ps1`
+- **Core Logic Modules**: `Invoke-MuFo-AlbumProcessing.ps1`, `Invoke-MuFo-ArtistSelection.ps1`, `Invoke-MuFo-Exclusions.ps1`
+- **Classical Music**: Special composer/conductor handling, album artist optimization
 
+### Performance & Testing Patterns
+- **Custom test scripts**: `tests/test-*.ps1` pattern (not Pester framework)
+- **Real-world validation**: Tests use actual Spotify API and audio files
+- **Performance focus**: Memory optimization, API call minimization, confidence scoring
+- **Debug scripts**: `debug/debug-*.ps1` for specific scenarios and issue reproduction
 
-Follow and update the flow-mufo.md and plan-mufo.md.
-Additionally, implement the step plans in these markdowns and keep them current:
-- implementexcludefolders.md (wire exclusions and exclusions store)
-- implementshowresults.md (results viewer for -LogTo JSON)
-- implementartistat.md (folder level detection)
-- implementtracktagging.md (read-only track tagging groundwork)
+## Testing Requirements - **NEVER ASSUME CODE WORKS**
+Always generate comprehensive and reliable tests that:
+- Cover **all critical paths**, **edge cases**, and **error conditions**
+- Include **positive and negative scenarios** with clear assertions
+- Be **self-contained**, **repeatable**, and **free of external dependencies** unless required
+- Use **mocking or stubbing** for isolating units (especially Spotify API)
+- Validate **performance**, **security**, and **boundary behavior**
+- Include brief explanation of test strategy and why cases are sufficient
 
-🗂️ Folder Structure
-Organize your PowerShell project like this:
-/MyPowerShellModule
-│
-├── Public/           # Public functions exposed to users
-│   └── Get-User.ps1
-│
-├── Private/          # Internal helper functions
-│   └── Convert-Name.ps1
-│
-├── MyPowerShellModule.psm1  # Module manifest
-├── MyPowerShellModule.psd1  # Module metadata
-├── README.md
-└── instructions.md
+**Never offer solutions without testing them first.** Set up test fixtures, validate solutions, and refine until the problem is solved.
 
-🔧 Function Organization
-✅ Public Functions (/Public)
-- These are the commands users will run directly.
-- Each function should be in its own .ps1 file.
-- Use comment-based help for documentation.
-🔒 Private Functions (/Private)
-- Internal logic not meant for external use.
-- Keep them modular and reusable.
-- No need for comment-based help unless used across multiple public functions.
+## Development Workflow
 
+### Planning Documents (Keep Updated)
+- **`flow-mufo.md`**: Mermaid flowchart of execution logic
+- **`plan-mufo.md`**: Phase-based development roadmap with checkboxes
+- **Implementation docs**: `implement*.md` files for specific feature rollouts:
+  - `implementexcludefolders.md` (wire exclusions and exclusions store)
+  - `implementshowresults.md` (results viewer for -LogTo JSON)
+  - `implementartistat.md` (folder level detection)
+  - `implementtracktagging.md` (read-only track tagging groundwork)
 
-1. Naming Conventions
-- Use Verb-Noun format (e.g., Get-User, Set-Config).
-- Stick to approved PowerShell verbs.
-1. Comment-Based Help
-Include this block at the top of each public function:
-<#
-.SYNOPSIS
-Brief description of the function.
+### Module Structure (Standard PowerShell Pattern)
+```
+/MuFo
+├── Public/           # Public functions exposed to users (Invoke-MuFo)
+├── Private/          # Internal helper functions (modular, reusable)
+├── MuFo.psm1        # Module loader (dot-sources all functions)
+├── MuFo.psd1        # Module manifest (dependencies, exports)
+├── lib/             # External libraries (TagLib-Sharp)
+└── Exclusions/      # Persistent exclusion storage
+```
 
-.DESCRIPTION
-Detailed explanation of what the function does.
+### Function Organization Rules
+- **One function per file** in Private/ and Public/
+- **Verb-Noun naming** using approved PowerShell verbs
+- **Comment-based help** for all public functions
+- **Modular design**: Break complex operations into focused helper functions
 
-.PARAMETER Name
-Description of the parameter.
+### Error Handling & Logging Patterns
+- Extensive use of `Write-Verbose`, `Write-Warning`, `Write-Debug`
+- JSON logging via `-LogTo` with structured data format
+- Color-coded console output with accessibility support (`-NoColor`)
+- Memory optimization helpers for large music library processing
 
-.EXAMPLE
-Get-User -Name "Alice"
+## Critical MuFo-Specific Knowledge
 
-.NOTES
-Author: jmw
-#>
+### Classical Music Specialization
+- **Composer detection**: Advanced parsing in `Get-AudioFileTags` with `IncludeComposer`
+- **Conductor recognition**: Album artist optimization for classical releases
+- **Complex naming**: Multi-disc sets, box sets (`-BoxMode`), special characters in paths
+- **String similarity**: Enhanced algorithms for matching classical album names with conductors
 
+### Spotify Integration Optimizations
+- **Fast search strategies**: Multiple query variations in `Get-SpotifyAlbumMatches-Fast.ps1`
+- **API efficiency**: Batch operations, confidence thresholds to minimize calls
+- **Rate limiting**: Built-in retry logic and error handling
+- **Authentication**: Persistent token management via Spotishell
 
-3. Dot Sourcing
+### Performance Patterns
+- **Memory management**: Explicit cleanup in long-running operations (`Add-MemoryOptimization.ps1`)
+- **Progress reporting**: Built-in progress bars for large collections
+- **Exclusion system**: Wildcard pattern support with persistence
+- **Confidence scoring**: Advanced similarity algorithms avoiding false positives
 
-In your .psm1 file, load functions like this:
-# Load Public functions
-Get-ChildItem -Path "$PSScriptRoot\Public" -Filter *.ps1 | ForEach-Object {
-    . $_.FullName
-}
+## AI Agent Development Guidelines
 
-# Load Private functions
-Get-ChildItem -Path "$PSScriptRoot\Private" -Filter *.ps1 | ForEach-Object {
-    . $_.FullName
-}
+### Before Any Implementation
+1. **Reflect the request** back in your own words
+2. **Wait for confirmation** before proceeding
+3. **Identify test scenarios** including edge cases
+4. **Consider performance impact** on large music libraries
 
-
-4. Testing
-- Use Pester for unit testing.
-- Place tests in a /Tests folder.
-5. Versioning
-- Use semantic versioning in your .psd1 manifest.
-- Example: ModuleVersion = '1.0.0'
+### When Adding Features
+1. Update relevant `implement*.md` files
+2. Add to `plan-mufo.md` roadmap with checkboxes
+3. Create test script following `tests/test-*.ps1` pattern
+4. Ensure classical music compatibility
+5. Consider API efficiency and rate limiting
 
+### Code Quality Standards
+- **Parameter validation**: Use ValidateSet, ValidateScript with clear error messages
+- **WhatIf support**: Full `$WhatIfPreference` integration for all destructive operations
+- **Verbose output**: Comprehensive logging for troubleshooting
+- **Error resilience**: Graceful degradation when external APIs fail
+
+### Testing Commands
+```powershell
+# Load and test functions directly
+.\tests\test-functions-simple.ps1
+
+# Integration testing with real data
+.\tests\test-integration.ps1
+.\tests\test-performance.ps1
+
+# Specific feature testing
+.\tests\test-track-tagging.ps1
+.\tests\test-wildcard-exclusions.ps1
+```
+
+### Post-Implementation Requirements
+After successfully resolving an issue, suggest how the original prompt could be improved to obtain working code directly in the future, minimizing trial and error iterations.

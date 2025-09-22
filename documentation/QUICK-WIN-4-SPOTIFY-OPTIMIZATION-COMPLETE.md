@@ -102,7 +102,7 @@ $albumComparisons = Optimize-SpotifyTrackValidation -Comparisons $albumCompariso
 - `Invoke-MuFo-AlbumProcessing.ps1`: Updated to defer Spotify API calls
 
 ### Test Scripts
-- `test-spotify-optimization.ps1`: Comprehensive validation testing
+- `tests/test-spotify-optimization.ps1`: Comprehensive validation testing
 
 ## Usage Examples
 
