@@ -54,25 +54,63 @@ function Test-ExclusionMatch {
     The folder name to test.
 
 .PARAMETER Exclusions
-    Array of exclusion patterns (supports wildcards).
+    Array of exclusion patterns (supports wildcards: *, ?, []).
 
 .OUTPUTS
     Boolean indicating if the folder should be excluded
+
+.EXAMPLE
+    Test-ExclusionMatch -FolderName "E_bonus" -Exclusions @("E_*")
+    Returns True (matches prefix wildcard)
+
+.EXAMPLE
+    Test-ExclusionMatch -FolderName "Album1" -Exclusions @("Album[0-9]")
+    Returns True (matches character class wildcard)
+
+.NOTES
+    Supports PowerShell wildcard patterns:
+    - * : Matches zero or more characters
+    - ? : Matches exactly one character  
+    - [] : Matches any character in the brackets (character classes)
+    All matches are case-insensitive for backward compatibility.
 #>
     param([string]$FolderName, [string[]]$Exclusions)
     
+    if (-not $Exclusions -or $Exclusions.Count -eq 0) { 
+        return $false 
+    }
+    
     foreach ($pattern in $Exclusions) {
+        if ([string]::IsNullOrWhiteSpace($pattern)) { 
+            # Empty or whitespace pattern matches only empty folder names
+            if ([string]::IsNullOrWhiteSpace($FolderName)) {
+                Write-Verbose "Empty folder name matched empty pattern"
+                return $true
+            }
+            continue 
+        }
+        
         try {
-            if ($pattern -like '*[*?]*') {
-                # Use wildcard matching
-                if ($FolderName -like $pattern) { return $true }
+            # Check if pattern contains any wildcard characters
+            $hasWildcards = $pattern.IndexOfAny(@('*', '?', '[', ']')) -ge 0
+            
+            if ($hasWildcards) {
+                # Use PowerShell's -like operator for wildcard matching (case-insensitive)
+                if ($FolderName -like $pattern) { 
+                    Write-Verbose "Folder '$FolderName' matched wildcard pattern '$pattern'"
+                    return $true 
+                }
             } else {
-                # Use exact case-insensitive matching for backwards compatibility
-                if ($FolderName -eq $pattern) { return $true }
+                # Use exact case-insensitive matching for non-wildcard patterns
+                if ([string]::Equals($FolderName, $pattern, [StringComparison]::InvariantCultureIgnoreCase)) { 
+                    Write-Verbose "Folder '$FolderName' matched exact pattern '$pattern'"
+                    return $true 
+                }
             }
         } catch {
-            # If pattern is invalid, skip it
+            # If pattern is invalid, skip it and continue with a warning
             Write-Verbose ("Invalid exclusion pattern '{0}': {1}" -f $pattern, $_.Exception.Message)
+            continue
         }
     }
     return $false

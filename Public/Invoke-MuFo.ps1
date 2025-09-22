@@ -21,8 +21,8 @@ function Invoke-MuFo {
     Specifies the relative folder level to locate the artist folder. Options: 'Here' (current path is artist), '1U'/'2U' (go up 1 or 2 levels), '1D'/'2D' (artists are 1 or 2 levels down). Default 'Here'.
 
 .PARAMETER ExcludeFolders
-    Folders to exclude from scanning. Supports exact names and wildcard patterns (* and ?).
-    Examples: 'Bonus', 'E_*', '*_Live', 'Album?'
+    Folders to exclude from scanning. Supports exact names and wildcard patterns (*, ?, []).
+    Examples: 'Bonus', 'E_*', '*_Live', 'Album?', 'Demo[0-9]', 'Track[A-Z]'
 
 .PARAMETER LogTo
     Path to the log file for results.
