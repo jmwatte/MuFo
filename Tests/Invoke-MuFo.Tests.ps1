@@ -1,4 +1,11 @@
-BeforeAll {
+# Basic tag enhancement
+Invoke-MuFo -Path "C:\Music" -IncludeTracks -FixTags -FillMissingTitles
+
+# Classical music optimization  
+Invoke-MuFo -Path "C:\Classical" -IncludeTracks -FixTags -OptimizeClassicalTags
+
+# Comprehensive validation
+Invoke-MuFo -Path "C:\Music" -IncludeTracks -ValidateCompleteness -FixTags -FillMissingTrackNumbersBeforeAll {
     # Import function under test and helpers (mocks will override as needed)
     . "$PSScriptRoot/../Public/Invoke-MuFo.ps1"
     . "$PSScriptRoot/../Private/Connect-Spotify.ps1"

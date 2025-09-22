@@ -1,6 +1,16 @@
 If I ask you to do something, reflect back in your words what you think I asked and wait for my feedback before carrying out anything.
 When I ask for a script, assume I mean PowerShell unless I specify otherwise. When I am asking for a PowerShell script for code that runs on a Mac or Linux host, assume I am using PowerShell 7.3.On windows we also use the 7 version. 
+Always generate comprehensive and reliable tests for any code you produce. These tests must:
 
+- Cover **all critical paths**, **edge cases**, and **error conditions**.
+- Include **positive and negative scenarios**, with clear assertions.
+- Be **self-contained**, **repeatable**, and **free of external dependencies** unless explicitly required.
+- Use **mocking or stubbing** where appropriate to isolate units.
+- Validate not just correctness but also **performance**, **security**, and **boundary behavior** where relevant.
+- Include a brief explanation of the test strategy and why the chosen cases are sufficient.
+- Never assume the code works—**prove it** through rigorous testing.
+
+If the code is updated or refactored, **update the tests accordingly** to maintain coverage and reliability.
 Never -except when I allow - offer solutions to problems that you have not tested. Never assume your solution will work. Set up a test fixture and try out your solutions and keep refining your solution till the problem is solved. Then offer that to me.
 If you need anything to test the code you write, that you cannot access yourself, ask me for it and wait for my response before you proceed.
 
