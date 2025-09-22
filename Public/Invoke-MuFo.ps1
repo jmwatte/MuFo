@@ -470,26 +470,6 @@ function Invoke-MuFo {
                                         $c | Add-Member -NotePropertyName TracksWithMissingTitleAfterFix -NotePropertyValue $updatedMissingTitles -Force
                                     }
 
-                                    # Compute mismatches against Spotify if album matched
-                                    $mismatches = 0
-                                    if ($c.MatchName -and $c.MatchScore -gt 0) {
-                                        # Find the matched album object
-                                        $matchedAlbum = $c.MatchedItem
-                                        if ($matchedAlbum -and $matchedAlbum.Item.Id) {
-                                            $spotifyTracks = Get-SpotifyAlbumTracks -AlbumId $matchedAlbum.Item.Id
-                                            foreach ($localTrack in $tracks) {
-                                                if (-not $localTrack.Title) { continue }
-                                                $bestScore = 0
-                                                foreach ($spotifyTrack in $spotifyTracks) {
-                                                    $score = Get-StringSimilarity -String1 $localTrack.Title -String2 $spotifyTrack.Name
-                                                    if ($score -gt $bestScore) { $bestScore = $score }
-                                                }
-                                                if ($bestScore -lt 0.8) { $mismatches++ }
-                                            }
-                                        }
-                                    }
-                                    $c | Add-Member -NotePropertyName TracksMismatchedToSpotify -NotePropertyValue $mismatches
-
                                     if ($ShowEverything) {
                                         $c | Add-Member -NotePropertyName Tracks -NotePropertyValue $tracks
                                     }
@@ -503,6 +483,11 @@ function Invoke-MuFo {
                                     }
                                 }
                             }
+                            
+                            # OPTIMIZATION: Batch process Spotify track validation for all albums at once
+                            # This replaces individual API calls with efficient batching, caching, and rate limiting
+                            Write-Verbose "Starting optimized Spotify track validation for $($albumComparisons.Count) albums"
+                            $albumComparisons = Optimize-SpotifyTrackValidation -Comparisons $albumComparisons -ShowProgress:$($albumComparisons.Count -gt 20)
                         }
 
                         # Display summary; later we'll wire -DoIt rename/apply

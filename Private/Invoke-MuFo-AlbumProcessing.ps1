@@ -446,13 +446,14 @@ function Add-TrackInformationToComparisons {
             $primaryComposer = if ($composers.Count -gt 0) { $composers[0].Name } else { $null }
             $c | Add-Member -NotePropertyName PrimaryComposer -NotePropertyValue $primaryComposer
             
-            # Get Spotify track information if available
+            # Get Spotify track information if available - optimized approach
             if ($c.MatchedItem -and $c.MatchedItem.Item) {
                 $spotifyAlbum = if ($c.MatchedItem -and $c.MatchedItem.Item) { $c.MatchedItem.Item } else { $null }
                 if ($spotifyAlbum -and $spotifyAlbum.Id) {
-                    $spotifyTracks = Get-SpotifyAlbumTracks -AlbumId $spotifyAlbum.Id -ErrorAction SilentlyContinue
-                    $c | Add-Member -NotePropertyName TrackCountSpotify -NotePropertyValue $spotifyTracks.Count
-                    $c | Add-Member -NotePropertyName SpotifyTracks -NotePropertyValue $spotifyTracks
+                    # Note: Spotify tracks will be populated later by batch optimization
+                    # Just set up the structure here for now
+                    $c | Add-Member -NotePropertyName TrackCountSpotify -NotePropertyValue 0
+                    $c | Add-Member -NotePropertyName SpotifyTracks -NotePropertyValue @()
                 } else {
                     $c | Add-Member -NotePropertyName TrackCountSpotify -NotePropertyValue 0
                     $c | Add-Member -NotePropertyName SpotifyTracks -NotePropertyValue @()
