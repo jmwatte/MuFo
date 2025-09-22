@@ -109,13 +109,13 @@ function Set-AudioFileTags {
         throw "Cannot specify both -FixOnly and -DontFix parameters. Use one or the other."
     }
     
-    # Determine which tags to fix
+    # Determine which tags to fix - Default to AlbumArtists (80% use case)
     $tagsToFix = if ($FixOnly.Count -gt 0) {
         $FixOnly
     } elseif ($DontFix.Count -gt 0) {
-        @('Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists') | Where-Object { $_ -notin $DontFix }
+        @('Titles', 'TrackNumbers', 'Years', 'Genres', 'AlbumArtists') | Where-Object { $_ -notin $DontFix }
     } else {
-        @('Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists')  # Fix everything by default
+        @('Titles', 'TrackNumbers', 'Years', 'Genres', 'AlbumArtists')  # Default: fix everything except TrackArtists
     }
     
     Write-Verbose "Tags to fix: $($tagsToFix -join ', ')"
@@ -130,6 +130,20 @@ function Set-AudioFileTags {
         IsClassical = ($existingTags | Where-Object { $_.IsClassical -eq $true }).Count -gt ($existingTags.Count / 2)
         TrackNumbers = $existingTags | Where-Object { $_.Track -gt 0 } | ForEach-Object { $_.Track } | Sort-Object
         ExpectedTracks = if ($SpotifyAlbum -and $SpotifyAlbum.total_tracks) { $SpotifyAlbum.total_tracks } else { $existingTags.Count }
+    }
+    
+    # Detect if this might be a compilation album (Various Artists scenario)
+    $artistVariations = $existingTags | Where-Object { $_.Artist -and $_.Artist -ne '' } | Group-Object Artist
+    $isLikelyCompilation = $artistVariations.Count -gt ($existingTags.Count * 0.5) -or 
+                          ($albumAnalysis.ArtistName -match "(?i)(various|compilation|mixed|soundtrack)")
+    
+    # Smart warnings for TrackArtist changes
+    if ('TrackArtists' -in $tagsToFix -and $artistVariations.Count -gt 1) {
+        Write-Warning "Track artist changes detected for album with multiple performers. This may overwrite performer credits."
+        Write-Host "  Current track artists: $($artistVariations.Name -join ', ')" -ForegroundColor Yellow
+        if ($isLikelyCompilation) {
+            Write-Host "  💡 Consider using -DontFix 'TrackArtists' for compilation albums" -ForegroundColor Cyan
+        }
     }
     
     Write-Host "Album Analysis:" -ForegroundColor Cyan
@@ -341,36 +355,36 @@ function Set-AudioFileTags {
                 }
             }
             
-            # Fill missing or correct incorrect artists
-            if ('Artists' -in $tagsToFix) {
-                $suggestedArtist = $null
-                $suggestedAlbumArtist = $null
-                
-                # Get artist from Spotify data
-                if ($SpotifyAlbum -and $SpotifyAlbum.artists -and $SpotifyAlbum.artists.Count -gt 0) {
-                    $suggestedArtist = $SpotifyAlbum.artists[0].name
-                    $suggestedAlbumArtist = $suggestedArtist
+            # Fill missing or correct artist information (separate track vs album artists)
+            $suggestedArtist = $null
+            $suggestedAlbumArtist = $null
+            
+            # Get artist from Spotify data
+            if ($SpotifyAlbum -and $SpotifyAlbum.artists -and $SpotifyAlbum.artists.Count -gt 0) {
+                $suggestedArtist = $SpotifyAlbum.artists[0].name
+                $suggestedAlbumArtist = $suggestedArtist
+            }
+            
+            # Check what needs fixing
+            $needsTrackArtistFix = [string]::IsNullOrWhiteSpace($track.Artist) -or $track.Artist.Length -le 2
+            $needsAlbumArtistFix = [string]::IsNullOrWhiteSpace($track.AlbumArtist) -or $track.AlbumArtist.Length -le 2
+            
+            # Handle TrackArtists (individual track performers)
+            if ('TrackArtists' -in $tagsToFix -and $needsTrackArtistFix -and $suggestedArtist) {
+                if ($PSCmdlet.ShouldProcess($track.Path, "Set track artist to '$suggestedArtist'")) {
+                    $tag.Performers = @($suggestedArtist)
+                    $changesMadeToFile = $true
                 }
-                
-                # Check if artist field is missing or obviously wrong (like single character)
-                $needsArtistFix = [string]::IsNullOrWhiteSpace($track.Artist) -or $track.Artist.Length -le 2
-                $needsAlbumArtistFix = [string]::IsNullOrWhiteSpace($track.AlbumArtist) -or $track.AlbumArtist.Length -le 2
-                
-                if ($needsArtistFix -and $suggestedArtist) {
-                    if ($PSCmdlet.ShouldProcess($track.Path, "Set artist to '$suggestedArtist'")) {
-                        $tag.Performers = @($suggestedArtist)
-                        $changesMadeToFile = $true
-                    }
-                    $changes += "Artist: '$suggestedArtist'"
+                $changes += "TrackArtist: '$suggestedArtist'"
+            }
+            
+            # Handle AlbumArtists (album-level artist - default behavior)
+            if ('AlbumArtists' -in $tagsToFix -and $needsAlbumArtistFix -and $suggestedAlbumArtist) {
+                if ($PSCmdlet.ShouldProcess($track.Path, "Set album artist to '$suggestedAlbumArtist'")) {
+                    $tag.AlbumArtists = @($suggestedAlbumArtist)
+                    $changesMadeToFile = $true
                 }
-                
-                if ($needsAlbumArtistFix -and $suggestedAlbumArtist) {
-                    if ($PSCmdlet.ShouldProcess($track.Path, "Set album artist to '$suggestedAlbumArtist'")) {
-                        $tag.AlbumArtists = @($suggestedAlbumArtist)
-                        $changesMadeToFile = $true
-                    }
-                    $changes += "AlbumArtist: '$suggestedAlbumArtist'"
-                }
+                $changes += "AlbumArtist: '$suggestedAlbumArtist'"
             }
             
             # Optimize classical music tags

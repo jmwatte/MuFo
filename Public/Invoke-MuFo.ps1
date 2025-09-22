@@ -67,13 +67,15 @@ function Invoke-MuFo {
 
 .PARAMETER FixOnly
     Limit tag fixing to specific types only (requires -FixTags):
-    'Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists'
+    'Titles', 'TrackNumbers', 'Years', 'Genres', 'AlbumArtists', 'TrackArtists'
     Cannot be used with -DontFix. When specified, only these tag types will be modified.
+    Default behavior fixes 'AlbumArtists' (80% of use cases). Use 'TrackArtists' for compilation albums.
 
 .PARAMETER DontFix
     Exclude specific tag types from being fixed (requires -FixTags):
-    'Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists'
+    'Titles', 'TrackNumbers', 'Years', 'Genres', 'AlbumArtists', 'TrackArtists'
     Cannot be used with -FixOnly. All other detected issues will be fixed.
+    By default, only 'AlbumArtists' are fixed to preserve track-level performer information.
 
 .PARAMETER OptimizeClassicalTags
     Apply special tag optimization for classical music (requires -FixTags):
@@ -150,20 +152,28 @@ function Invoke-MuFo {
 
 .EXAMPLE
     Invoke-MuFo -Path "C:\Music" -FixTags -FixOnly "Titles", "TrackNumbers" -DoIt Automatic
-    
+
     Automatically fixes only missing titles and track numbers without prompting.
 
 .EXAMPLE
     Invoke-MuFo -Path "C:\Music\Classical" -OptimizeClassicalTags -IncludeTracks -FixTags
-    
+
     Optimizes tag organization for classical music with composer and conductor enhancements.
 
 .EXAMPLE
-    Invoke-MuFo -ExcludedFoldersLoad "my-exclusions.json" -Path "C:\Music" -DoIt Smart
-    
-    Loads previously saved exclusion patterns and validates library with Smart mode.
+    Invoke-MuFo -Path "C:\Music\Compilations" -FixTags -DontFix "TrackArtists" -DoIt Smart
+
+    Fixes album-level information but preserves individual track artists for compilation albums.
 
 .EXAMPLE
+    Invoke-MuFo -Path "C:\Music" -FixTags -FixOnly "AlbumArtists" -WhatIf
+
+    Preview album artist fixes without changing track-level performer information.
+
+.EXAMPLE
+    Invoke-MuFo -ExcludedFoldersLoad "my-exclusions.json" -Path "C:\Music" -DoIt Smart
+
+    Loads previously saved exclusion patterns and validates library with Smart mode..EXAMPLE
     Invoke-MuFo -Path "C:\Music" -ConfidenceThreshold 0.9 -DoIt Smart -Verbose
     
     Uses high confidence threshold (90%) for Smart mode with detailed progress information.
@@ -221,11 +231,11 @@ function Invoke-MuFo {
         [switch]$FixTags,
 
         [Parameter(Mandatory = $false)]
-        [ValidateSet('Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists')]
+        [ValidateSet('Titles', 'TrackNumbers', 'Years', 'Genres', 'AlbumArtists', 'TrackArtists')]
         [string[]]$FixOnly = @(),
 
         [Parameter(Mandatory = $false)]
-        [ValidateSet('Titles', 'TrackNumbers', 'Years', 'Genres', 'Artists')]
+        [ValidateSet('Titles', 'TrackNumbers', 'Years', 'Genres', 'AlbumArtists', 'TrackArtists')]
         [string[]]$DontFix = @(),
 
         [Parameter(Mandatory = $false)]
