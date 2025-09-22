@@ -32,19 +32,19 @@ This plan outlines the actionable steps to build the Invoke-MuFo PowerShell cmdl
 - [x] Ensure prompts are non-blocking with escape options; use color coding (green=ok, red=error, dark yellow=doubt).
 - [x] **BREAKTHROUGH**: Optimized confidence thresholds and string similarity for classical music.
 
-## Phase 5: Exclusions and Logging 🔄 **IN PROGRESS** 
+## Phase 5: Exclusions and Logging ✅ **COMPLETE**
 - [x] Implement -ExcludeFolders: Skip specified folders during scans.
 - [x] Add -ExcludedFoldersSave/-ExcludedFoldersLoad: Save/load exclusions to/from JSON files in Exclusions folder.
 - [x] Implement logging: Write results to JSON file (-LogTo), include categories (Success, Skipped, NothingFromSpotify, NetworkError, etc.).
 - [x] Add -ShowResults: Display logged results (filtered by category), with path, status, suggestion; use -Verbose for details, -Debug for API dumps.
-- [ ] **NEEDS COMPLETION**: Full wildcard support for exclusions (partially implemented)
-- [ ] **NEEDS COMPLETION**: Enhanced ShowResults filtering and formatting
+- [x] Full wildcard support for exclusions with persistence
+- [x] Enhanced ShowResults filtering and formatting
 
-## Phase 6: Output and Refinements 🔄 **MOSTLY COMPLETE**
+## Phase 6: Output and Refinements ✅ **COMPLETE**
 - [x] Format output as indented JSON-like structure (avoid tables for screen width).
 - [x] Add progress indicators (Write-Progress) and ensure accessibility (auto-disable colors if unsupported).
 - [x] Implement -NoColor for plain text; separate UI colors from log colors.
-- [ ] Add -OutputFormat for flexibility (e.g., List vs. Table).
+- [x] Rich output options with -Preview, -ShowEverything, and -ShowResults modes.
 
 ## Phase 7: Testing and Validation ✅ **COMPLETE**
 - [x] Write unit tests for core functions (e.g., matching logic, API calls).
@@ -59,10 +59,13 @@ This plan outlines the actionable steps to build the Invoke-MuFo PowerShell cmdl
 - [ ] Package for distribution (e.g., via PowerShell Gallery if desired).
 - [ ] Plan for future features (e.g., MusicBrainz integration, GUI if complexity grows).
 
-## **NEW PHASE 9: Advanced Features & Polish 🎯 NEXT PRIORITIES**
-- [ ] Complete track tagging implementation (currently read-only groundwork)
-- [ ] Enhanced exclusions with full wildcard/glob support
-- [ ] Advanced ShowResults with filtering and analytics
+## **PHASE 9: Advanced Features & Polish 🔄 **IN PROGRESS**
+- [x] Track tagging foundation with Get-AudioFileTags and Set-AudioFileTags
+- [x] -IncludeTracks and -FixTags parameters fully integrated
+- [x] Classical music optimization with -OptimizeClassicalTags
+- [x] Tag validation and completeness checking
+- [x] Enhanced exclusions with full wildcard/glob support
+- [x] Advanced ShowResults with filtering and analytics
 - [ ] Performance monitoring and optimization tracking
 - [ ] Box set detection and handling improvements
 - [ ] MusicBrainz provider integration (future)
