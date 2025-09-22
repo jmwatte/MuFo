@@ -75,9 +75,55 @@ function Install-TagLibSharp {
     $installSuccess = $false
     
     try {
-        # Method 1: Try PackageManagement
-        if (Get-Command Install-Package -ErrorAction SilentlyContinue) {
-            Write-Host "Using PackageManagement to install TagLib-Sharp..." -ForegroundColor Yellow
+        # Method 1: Setup NuGet provider and install properly
+        Write-Host "Setting up NuGet provider for TagLib-Sharp installation..." -ForegroundColor Yellow
+        
+        # Ensure NuGet provider is available
+        $nugetProvider = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
+        if (-not $nugetProvider) {
+            Write-Host "Installing NuGet provider..." -ForegroundColor Cyan
+            Find-PackageProvider -Name NuGet | Install-PackageProvider -Force -Scope $Scope
+        }
+        
+        # Register nuget.org source if not already registered
+        $nugetSource = Get-PackageSource -Name "nuget.org" -ErrorAction SilentlyContinue
+        if (-not $nugetSource) {
+            Write-Host "Registering NuGet package source..." -ForegroundColor Cyan
+            Register-PackageSource -Name "nuget.org" -Location "https://www.nuget.org/api/v2" -ProviderName NuGet -Force
+        }
+        
+        # Create destination folder in module directory
+        $moduleDir = Split-Path $PSScriptRoot -Parent
+        $libDir = Join-Path $moduleDir "lib"
+        if (-not (Test-Path $libDir)) {
+            New-Item -ItemType Directory -Path $libDir -Force | Out-Null
+        }
+        
+        # Find and install TagLibSharp package
+        Write-Host "Locating TagLibSharp package..." -ForegroundColor Cyan
+        $package = Find-Package -ProviderName NuGet -Name TagLibSharp -ErrorAction Stop
+        Write-Host "Found TagLibSharp version: $($package.Version)" -ForegroundColor Green
+        
+        # Install to our lib directory
+        Write-Host "Installing TagLibSharp to module directory..." -ForegroundColor Cyan
+        Install-Package -InputObject $package -Destination $libDir -Force -ErrorAction Stop
+        
+        # Find the installed TagLib.dll
+        $installedDll = Get-ChildItem -Path $libDir -Name "TagLib.dll" -Recurse | Select-Object -First 1
+        if ($installedDll) {
+            $dllPath = Join-Path $libDir $installedDll
+            Write-Host "✓ TagLib-Sharp installed successfully to: $dllPath" -ForegroundColor Green
+            $installSuccess = $true
+        } else {
+            throw "TagLib.dll not found after installation"
+        }
+    }
+    catch {
+        Write-Warning "NuGet provider installation failed: $($_.Exception.Message)"
+        
+        # Method 2: Fallback to PackageManagement
+        try {
+            Write-Host "Trying PackageManagement fallback..." -ForegroundColor Yellow
             
             $installParams = @{
                 Name = 'TagLibSharp'
@@ -92,39 +138,22 @@ function Install-TagLibSharp {
             $installSuccess = $true
             Write-Host "✓ TagLib-Sharp installed via PackageManagement" -ForegroundColor Green
         }
-        else {
-            throw "PackageManagement not available"
-        }
-    }
-    catch {
-        Write-Warning "PackageManagement installation failed: $($_.Exception.Message)"
-        
-        # Method 2: Try alternative NuGet approach
-        try {
-            Write-Host "Trying alternative installation method..." -ForegroundColor Yellow
-            
-            # Try installing with different parameters
-            $altParams = @{
-                Name = 'TagLibSharp'
-                Scope = $Scope
-                Force = $true
-                AllowClobber = $true
-                ErrorAction = 'Stop'
-            }
-            
-            Install-Package @altParams
-            $installSuccess = $true
-            Write-Host "✓ TagLib-Sharp installed via alternative method" -ForegroundColor Green
-        }
         catch {
-            Write-Warning "Alternative installation failed: $($_.Exception.Message)"
+            Write-Warning "PackageManagement fallback failed: $($_.Exception.Message)"
             
-            # Method 3: Download directly to module folder (simplest approach)
+            # Method 3: Download from GitHub releases (preferred direct method)
             try {
-                Write-Host "Downloading TagLib-Sharp directly to module folder..." -ForegroundColor Yellow
+                Write-Host "Downloading TagLib-Sharp from GitHub releases..." -ForegroundColor Yellow
                 
-                $nugetUrl = "https://www.nuget.org/api/v2/package/TagLibSharp"
-                $tempZip = "$env:TEMP\TagLibSharp.zip"
+                # Get the latest release from GitHub API
+                $apiUrl = "https://api.github.com/repos/mono/taglib-sharp/releases/latest"
+                $releaseInfo = Invoke-RestMethod -Uri $apiUrl -ErrorAction Stop
+                
+                # Find the source code zip
+                $downloadUrl = $releaseInfo.zipball_url
+                Write-Host "Found latest release: $($releaseInfo.tag_name)" -ForegroundColor Cyan
+                
+                $tempZip = "$env:TEMP\TagLibSharp-GitHub.zip"
                 $moduleDir = Split-Path $PSScriptRoot -Parent  # Get MuFo module root
                 $libDir = Join-Path $moduleDir "lib"
                 
@@ -133,11 +162,12 @@ function Install-TagLibSharp {
                     New-Item -ItemType Directory -Path $libDir -Force | Out-Null
                 }
                 
-                # Download the package
-                Invoke-WebRequest -Uri $nugetUrl -OutFile $tempZip -ErrorAction Stop
+                # Download the release
+                Write-Host "Downloading from: $downloadUrl" -ForegroundColor Gray
+                Invoke-WebRequest -Uri $downloadUrl -OutFile $tempZip -ErrorAction Stop
                 
-                # Extract to temp location first
-                $tempExtract = "$env:TEMP\TagLibSharp_Extract"
+                # Extract to temp location
+                $tempExtract = "$env:TEMP\TagLibSharp_GitHub_Extract"
                 if (Test-Path $tempExtract) {
                     Remove-Item $tempExtract -Recurse -Force
                 }
@@ -146,16 +176,29 @@ function Install-TagLibSharp {
                 Add-Type -AssemblyName System.IO.Compression.FileSystem
                 [System.IO.Compression.ZipFile]::ExtractToDirectory($tempZip, $tempExtract)
                 
-                # Find the TagLib.dll and copy it to module lib folder
-                $tagLibDll = Get-ChildItem -Path $tempExtract -Name "TagLib.dll" -Recurse | Select-Object -First 1
+                # Find the compiled TagLib.dll (look in bin/Debug or bin/Release directories)
+                $possiblePaths = @(
+                    "src\bin\Release\*\TagLib.dll",
+                    "src\bin\Debug\*\TagLib.dll", 
+                    "**\TagLib.dll"
+                )
+                
+                $tagLibDll = $null
+                foreach ($pattern in $possiblePaths) {
+                    $tagLibDll = Get-ChildItem -Path $tempExtract -Filter "TagLib.dll" -Recurse -ErrorAction SilentlyContinue | 
+                                 Select-Object -First 1
+                    if ($tagLibDll) { break }
+                }
+                
                 if ($tagLibDll) {
-                    $sourceDll = Join-Path $tempExtract $tagLibDll
                     $destDll = Join-Path $libDir "TagLib.dll"
-                    Copy-Item $sourceDll $destDll -Force
-                    Write-Host "✓ TagLib.dll installed to: $destDll" -ForegroundColor Green
+                    Copy-Item $tagLibDll.FullName $destDll -Force
+                    Write-Host "✓ TagLib.dll installed from GitHub to: $destDll" -ForegroundColor Green
                     $installSuccess = $true
                 } else {
-                    throw "TagLib.dll not found in downloaded package"
+                    # If no compiled DLL found, this is source code - need to inform user
+                    Write-Warning "GitHub release contains source code, not compiled binaries."
+                    throw "No compiled TagLib.dll found in GitHub release"
                 }
                 
                 # Clean up
@@ -163,22 +206,89 @@ function Install-TagLibSharp {
                 Remove-Item $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
             }
             catch {
-                Write-Error "All installation methods failed:"
-                Write-Host ""
-                Write-Host "The automatic installation encountered errors. Please try manual installation:" -ForegroundColor Yellow
-                Write-Host ""
-                Write-Host "Option 1: PowerShell Package Manager (retry)" -ForegroundColor Cyan
-                Write-Host "  Install-Package TagLibSharp -Scope CurrentUser -Force" -ForegroundColor White
-                Write-Host ""
-                Write-Host "Option 2: NuGet CLI" -ForegroundColor Cyan
-                Write-Host "  nuget install TagLibSharp -OutputDirectory `$env:USERPROFILE\.nuget\packages" -ForegroundColor White
-                Write-Host ""
-                Write-Host "Option 3: Manual Download" -ForegroundColor Cyan
-                Write-Host "  1. Visit: https://www.nuget.org/packages/TagLibSharp/" -ForegroundColor White
-                Write-Host "  2. Download the .nupkg file" -ForegroundColor White
-                Write-Host "  3. Extract TagLib.dll to the MuFo module directory" -ForegroundColor White
+                Write-Warning "GitHub installation failed: $($_.Exception.Message)"
                 
-                return
+                # Method 4: Download directly from NuGet API (fallback)
+                try {
+                    Write-Host "Downloading TagLib-Sharp directly from NuGet..." -ForegroundColor Yellow
+                    
+                    $nugetUrl = "https://www.nuget.org/api/v2/package/TagLibSharp"
+                    $tempZip = "$env:TEMP\TagLibSharp-NuGet.zip"
+                    $moduleDir = Split-Path $PSScriptRoot -Parent  # Get MuFo module root
+                    $libDir = Join-Path $moduleDir "lib"
+                    
+                    # Create lib directory if it doesn't exist
+                    if (-not (Test-Path $libDir)) {
+                        New-Item -ItemType Directory -Path $libDir -Force | Out-Null
+                    }
+                    
+                    # Download the package
+                    Invoke-WebRequest -Uri $nugetUrl -OutFile $tempZip -ErrorAction Stop
+                    
+                    # Extract to temp location first
+                    $tempExtract = "$env:TEMP\TagLibSharp_NuGet_Extract"
+                    if (Test-Path $tempExtract) {
+                        Remove-Item $tempExtract -Recurse -Force
+                    }
+                    
+                    # Extract using .NET
+                    Add-Type -AssemblyName System.IO.Compression.FileSystem
+                    [System.IO.Compression.ZipFile]::ExtractToDirectory($tempZip, $tempExtract)
+                    
+                    # Find the TagLib.dll in lib folder (look for .NET versions)
+                    $possibleDlls = Get-ChildItem -Path $tempExtract -Name "TagLib.dll" -Recurse | 
+                                   Where-Object { $_ -like "*lib*" } | 
+                                   Select-Object -First 1
+                    
+                    if ($possibleDlls) {
+                        $sourceDll = Join-Path $tempExtract $possibleDlls
+                        $destDll = Join-Path $libDir "TagLib.dll"
+                        Copy-Item $sourceDll $destDll -Force
+                        Write-Host "✓ TagLib.dll installed from NuGet to: $destDll" -ForegroundColor Green
+                        $installSuccess = $true
+                    } else {
+                        throw "TagLib.dll not found in NuGet package"
+                    }
+                    
+                    # Clean up
+                    Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
+                    Remove-Item $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
+                }
+                catch {
+                    Write-Error "All automatic installation methods failed:"
+                    Write-Host ""
+                    Write-Host "The automatic installation encountered errors. Please try manual installation:" -ForegroundColor Yellow
+                    Write-Host ""
+                    Write-Host "Option 1: NuGet Provider Setup (recommended)" -ForegroundColor Cyan
+                    Write-Host "  # Setup NuGet support" -ForegroundColor White
+                    Write-Host "  Find-PackageProvider -Name NuGet | Install-PackageProvider -Force" -ForegroundColor White
+                    Write-Host "  Register-PackageSource -Name nuget.org -Location https://www.nuget.org/api/v2 -ProviderName NuGet" -ForegroundColor White
+                    Write-Host "  # Install TagLibSharp" -ForegroundColor White
+                    Write-Host "  Find-Package -ProviderName NuGet -Name TagLibSharp | Install-Package -Destination $(Join-Path $moduleDir 'lib')" -ForegroundColor White
+                    Write-Host ""
+                    Write-Host "Option 2: PowerShell Package Manager (retry)" -ForegroundColor Cyan
+                    Write-Host "  Install-Package TagLibSharp -Scope CurrentUser -Force" -ForegroundColor White
+                    Write-Host ""
+                    Write-Host "Option 3: NuGet CLI" -ForegroundColor Cyan
+                    Write-Host "  nuget install TagLibSharp -OutputDirectory `$env:USERPROFILE\.nuget\packages" -ForegroundColor White
+                    Write-Host ""
+                    Write-Host "Option 4: Manual NuGet Download" -ForegroundColor Cyan
+                    Write-Host "  1. Visit: https://www.nuget.org/packages/TagLibSharp/" -ForegroundColor White
+                    Write-Host "  2. Download the .nupkg file" -ForegroundColor White
+                    Write-Host "  3. Extract TagLib.dll to the MuFo module lib directory" -ForegroundColor White
+                    Write-Host ""
+                    Write-Host "Option 5: GitHub Release (latest)" -ForegroundColor Cyan
+                    Write-Host "  1. Visit: https://github.com/mono/taglib-sharp/releases/latest" -ForegroundColor White
+                    Write-Host "  2. Download the compiled binaries or source" -ForegroundColor White
+                    Write-Host "  3. Copy TagLib.dll to: $(Join-Path $moduleDir 'lib')" -ForegroundColor White
+                    Write-Host ""
+                    Write-Host "Option 6: Direct GitHub Archive" -ForegroundColor Cyan
+                    Write-Host "  1. Download: https://github.com/mono/taglib-sharp/archive/refs/tags/TaglibSharp-2.3.0.0.zip" -ForegroundColor White
+                    Write-Host "  2. Compile or extract TagLib.dll" -ForegroundColor White
+                    Write-Host "  3. Copy to MuFo lib directory" -ForegroundColor White
+                    
+                    return
+                }
             }
         }
     }
@@ -242,7 +352,7 @@ function Install-TagLibSharp {
     
     # Test loading
     try {
-        Add-Type -Path $dll.FullName
+        Add-Type -Path $foundDll.FullName
         Write-Host "✓ TagLib-Sharp loaded successfully!" -ForegroundColor Green
         Write-Host ""
         Write-Host "You can now use MuFo's track tagging features:" -ForegroundColor Cyan

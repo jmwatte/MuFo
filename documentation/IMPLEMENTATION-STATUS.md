@@ -41,6 +41,17 @@ This document consolidates the implementation tracking for major MuFo features, 
   - Multiple audio format support
 - **Status**: Fully implemented with comprehensive capabilities
 
+### **5. Artist/Album Artist Parameter Split** ✅ **COMPLETE** ⭐ **NEW**
+- **Critical Fix**: Split ambiguous 'Artists' parameter into clear distinctions
+- **Parameters**: `'AlbumArtists'`, `'TrackArtists'` (replaced old `'Artists'`)
+- **Features**:
+  - Default behavior: Fix AlbumArtists only (80% use case)
+  - Smart compilation album detection with warnings
+  - Preserve individual track performers when appropriate
+  - Classical music optimization (composer vs performer)
+  - WhatIf preview shows exact artist changes
+- **Status**: ✅ **Production-ready** - Addresses critical user confusion issue
+
 ## 🔄 **ONGOING DEVELOPMENT**
 
 ### **5. Performance Optimization** 🔄 **CONTINUOUS**
@@ -84,5 +95,31 @@ MuFo now provides:
 - **Results logging and viewing** with filtering capabilities
 - **Multiple execution modes** (Automatic, Manual, Smart)
 - **Rich output options** with accessibility support
+
+## 🔧 Manual Override System (NEW - Sept 22, 2025)
+**STATUS: ✅ COMPLETE**
+
+### Functions Implemented:
+- ✅ `Invoke-ManualTrackMapping` - Public command for manual workflow
+- ✅ `New-TrackMapping` - Generate playlist + editable mapping file  
+- ✅ `Import-TrackMapping` - Apply user edits to update tags/filenames
+- ✅ `Get-TrackTags` - Manual tag inspection for forensic analysis
+- ✅ `Set-TrackTags` - Direct tag modification for edge cases
+
+### Workflow Features:
+- ✅ **Two-step process**: Generate → Edit → Import
+- ✅ **Playlist generation**: .m3u files for listening while editing
+- ✅ **Editable mapping**: Simple text file format for reordering tracks
+- ✅ **File renaming**: Optional filename updates to match new order
+- ✅ **Backup system**: Automatic backup creation before changes
+- ✅ **WhatIf support**: Preview changes before applying
+- ✅ **Comprehensive help**: Examples and usage documentation
+
+### Use Cases Supported:
+- ✅ Track order mismatches (tags vs. actual audio)
+- ✅ Filename order vs. actual album sequence
+- ✅ Manual verification by listening
+- ✅ Edge cases where automatic matching fails
+- ✅ Forensic analysis of problematic albums
 
 All major planned features are implemented and working in production use.
