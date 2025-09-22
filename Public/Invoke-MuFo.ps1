@@ -90,6 +90,23 @@ function Invoke-MuFo {
 .EXAMPLE
     Invoke-MuFo -Path "C:\Music" -DoIt Smart
 
+.EXAMPLE
+    Invoke-MuFo -Path "C:\Music\Artist" -LogTo "results.json" -WhatIf
+    Review the analysis results and then view them later with:
+    Invoke-MuFo -ShowResults -LogTo "results.json"
+
+.EXAMPLE
+    Invoke-MuFo -ShowResults -LogTo "results.json" -Action "rename"
+    Show only albums that would be renamed from previous analysis.
+
+.EXAMPLE
+    Invoke-MuFo -ShowResults -LogTo "results.json" -MinScore 0.9 -ShowEverything
+    Show high-confidence matches with full details.
+
+.EXAMPLE
+    Invoke-MuFo -ShowResults -LogTo "results.json" -Action "error"
+    Review any errors from previous run for troubleshooting.
+
 .NOTES
     Author: jmwatte
     Requires: Spotify API access, TagLib-Sharp
@@ -224,13 +241,52 @@ function Invoke-MuFo {
             }
             try {
                 $data = Get-Content -LiteralPath $LogTo -Encoding UTF8 | ConvertFrom-Json
-                $items = $data.Items
+                $allItems = $data.Items
+                $originalCount = $allItems.Count
+                
+                # Apply filters
+                $items = $allItems
                 if ($Action) {
                     $items = $items | Where-Object { $_.Action -eq $Action }
                 }
                 if ($MinScore -gt 0) {
                     $items = $items | Where-Object { $_.Score -ge $MinScore }
                 }
+                
+                # Display summary header
+                Write-Host "`n=== MuFo Results Summary ===" -ForegroundColor Cyan
+                Write-Host "Log file: $LogTo" -ForegroundColor Gray
+                Write-Host "Generated: $($data.Timestamp)" -ForegroundColor Gray
+                Write-Host "Original path: $($data.Path)" -ForegroundColor Gray
+                Write-Host "Mode: $($data.Mode), Threshold: $($data.ConfidenceThreshold)" -ForegroundColor Gray
+                
+                # Summary statistics
+                if ($originalCount -gt 0) {
+                    $stats = $allItems | Group-Object -Property Action | Sort-Object Name
+                    Write-Host "`nSummary Statistics:" -ForegroundColor Yellow
+                    foreach ($stat in $stats) {
+                        $color = switch ($stat.Name) {
+                            'rename' { 'Green' }
+                            'skip' { 'Yellow' }
+                            'error' { 'Red' }
+                            default { 'White' }
+                        }
+                        Write-Host "  $($stat.Name): $($stat.Count)" -ForegroundColor $color
+                    }
+                    
+                    if ($Action -or $MinScore -gt 0) {
+                        Write-Host "`nFiltered Results: $($items.Count) of $originalCount items" -ForegroundColor Cyan
+                        if ($Action) { Write-Host "  Action filter: $Action" -ForegroundColor Gray }
+                        if ($MinScore -gt 0) { Write-Host "  MinScore filter: $MinScore" -ForegroundColor Gray }
+                    }
+                } else {
+                    Write-Host "No items found in log file." -ForegroundColor Yellow
+                }
+                
+                if ($items.Count -gt 0) {
+                    Write-Host "`n--- Results ---" -ForegroundColor Cyan
+                }
+                
                 foreach ($item in $items) {
                     $wantFull = ($ShowEverything -or $Detailed)
                     if (-not $wantFull) {
