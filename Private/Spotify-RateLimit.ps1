@@ -225,8 +225,8 @@ function Search-Spotify-Batch {
     return $results
 }
 
-Export-ModuleMember -Function @(
+<# Export-ModuleMember -Function @(
     'Invoke-SpotifyCall-Enhanced',
     'Get-SpotifyArtist-Throttled', 
     'Search-Spotify-Batch'
-)
+) #>
