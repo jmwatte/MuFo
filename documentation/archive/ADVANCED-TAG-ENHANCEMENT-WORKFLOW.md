@@ -1,3 +1,18 @@
+# ⚠️ OUTDATED DOCUMENT - SUPERSEDED BY CURRENT ROADMAP
+
+**STATUS**: This document is **OUTDATED** and preserved for historical reference only.
+
+**WHAT'S OUTDATED**:
+- **Stage 1 & 2** described here are **ALREADY COMPLETE** (not "current" or "next")
+- **Phase 1 (Logic Inversion)** with `-FixTags`/`-DontFix` parameters is **FULLY IMPLEMENTED**
+- **Parameter examples** like `-FillMissingTitles` never existed in the actual implementation
+
+**CURRENT STATUS**: See [`documentation/CURRENT-ROADMAP.md`](../CURRENT-ROADMAP.md) for accurate project status.
+
+**VALUABLE CONTENT EXTRACTED**: Forensic analysis and human verification concepts from this document have been integrated into Phase 12 of the current roadmap.
+
+---
+
 # Advanced Tag Enhancement Workflow
 ## Comprehensive Music Metadata Correction System
 
