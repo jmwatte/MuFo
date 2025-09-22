@@ -390,6 +390,21 @@ function Invoke-MuFo {
                         # Use refactored album processing logic
                         $albumComparisons = Get-AlbumComparisons -CurrentPath $currentPath -SelectedArtist $selectedArtist -EffectiveExclusions $effectiveExclusions
                         
+                        # Memory optimization for large collections
+                        $null = Add-MemoryOptimization -AlbumCount $albumComparisons.Count -Phase 'Start'
+                        $sizeRecommendations = Get-CollectionSizeRecommendations -AlbumCount $albumComparisons.Count -IncludeTracks:$IncludeTracks
+                        
+                        # Display warnings and recommendations for large collections
+                        foreach ($warning in $sizeRecommendations.Warnings) {
+                            Write-Warning $warning
+                        }
+                        foreach ($recommendation in $sizeRecommendations.Recommendations) {
+                            Write-Host "💡 $recommendation" -ForegroundColor Cyan
+                        }
+                        if ($sizeRecommendations.EstimatedProcessingMinutes -gt 5) {
+                            Write-Host "⏱️ Estimated processing time: ~$($sizeRecommendations.EstimatedProcessingMinutes) minutes" -ForegroundColor Yellow
+                        }
+                        
                         # Add track information if requested
                         if ($IncludeTracks) {
                             Add-TrackInformationToComparisons -AlbumComparisons $albumComparisons -BoxMode $BoxMode
@@ -496,7 +511,14 @@ function Invoke-MuFo {
 
                         # Prepare decisions and emit structured objects
                         $records = @()
+                        $processedCount = 0
                         foreach ($c in ($albumComparisons | Sort-Object -Property MatchScore -Descending)) {
+                            $processedCount++
+                            
+                            # Periodic memory monitoring for large collections
+                            if ($albumComparisons.Count -gt 500 -and ($processedCount % 100) -eq 0) {
+                                $null = Add-MemoryOptimization -Phase 'Progress'
+                            }
                             $decision = 'skip'
                             $reason = ''
                             switch ($DoIt) {
@@ -711,6 +733,9 @@ function Invoke-MuFo {
     }
 
     end {
+        # Final memory cleanup for large collections
+        $null = Add-MemoryOptimization -Phase 'End' -ForceCleanup:($PSCmdlet.MyInvocation.BoundParameters.Count -gt 0)
+        
         # Cleanup code here
         Write-Verbose "Invoke-MuFo completed"
     }
