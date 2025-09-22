@@ -17,6 +17,12 @@ function Get-AudioFileTags {
 .PARAMETER LogTo
     Optional path to log detailed tag information for debugging.
 
+.PARAMETER MaxFileSizeMB
+    Maximum file size in MB to process (default: 500MB). Larger files are skipped to avoid performance issues.
+
+.PARAMETER ShowProgress
+    Display progress bar for large collections (automatically enabled for >10 files).
+
 .OUTPUTS
     Array of PSCustomObject with comprehensive tag fields including classical music metadata.
 
@@ -37,7 +43,11 @@ function Get-AudioFileTags {
         
         [switch]$IncludeComposer,
         
-        [string]$LogTo
+        [string]$LogTo,
+        
+        [long]$MaxFileSizeMB = 500,
+        
+        [switch]$ShowProgress
     )
 
     begin {
@@ -172,15 +182,62 @@ function Get-AudioFileTags {
             return @()
         }
 
-        Write-Verbose "Processing $($files.Count) audio files"
+        Write-Verbose "Processing $($files.Count) audio files (max size: $MaxFileSizeMB MB)"
+        
+        # Initialize progress tracking
+        $processedCount = 0
+        $errorCount = 0
+        $startTime = Get-Date
 
         foreach ($file in $files) {
+            $processedCount++
+            
+            # Show progress for large collections
+            if ($ShowProgress -and $files.Count -gt 10) {
+                $percentComplete = [math]::Round(($processedCount / $files.Count) * 100, 1)
+                $elapsed = (Get-Date) - $startTime
+                $estimatedTotal = if ($processedCount -gt 0) { $elapsed.TotalSeconds * ($files.Count / $processedCount) } else { 0 }
+                $remaining = [TimeSpan]::FromSeconds([math]::Max(0, $estimatedTotal - $elapsed.TotalSeconds))
+                
+                Write-Progress -Activity "Reading Audio File Tags" `
+                              -Status "Processing file $processedCount of $($files.Count) ($percentComplete%)" `
+                              -CurrentOperation "$(Split-Path $file -Leaf)" `
+                              -PercentComplete $percentComplete `
+                              -SecondsRemaining $remaining.TotalSeconds
+            }
+            
             try {
                 Write-Verbose "Reading tags from: $(Split-Path $file -Leaf)"
                 
-                $fileObj = [TagLib.File]::Create($file)
-                $tag = $fileObj.Tag
-                $properties = $fileObj.Properties
+                try {
+                    # Check if file is accessible before attempting to read
+                if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+                    Write-Warning "File no longer exists: $(Split-Path $file -Leaf)"
+                    $errorCount++
+                    continue
+                }
+                
+                # Check file size again in case it changed
+                $fileInfo = Get-Item -LiteralPath $file
+                if ($fileInfo.Length -gt ($MaxFileSizeMB * 1MB)) {
+                    Write-Verbose "Skipping large file: $(Split-Path $file -Leaf) ($([math]::Round($fileInfo.Length / 1MB, 1)) MB)"
+                    continue
+                }
+                
+                $fileObj = $null
+                try {
+                    $tag = $fileObj.Tag
+                    $properties = $fileObj.Properties
+                } catch {
+                    # Handle TagLib-specific errors
+                    if ($_.Exception.Message -like "*not supported*" -or $_.Exception.Message -like "*corrupted*") {
+                        Write-Verbose "Unsupported or corrupted file: $(Split-Path $file -Leaf)"
+                    } else {
+                        Write-Warning "TagLib error reading '$(Split-Path $file -Leaf)': $($_.Exception.Message)"
+                    }
+                    $errorCount++
+                    continue
+                }
 
                 # Extract comprehensive tag information with proper array handling
                 $artists = @()
@@ -315,12 +372,22 @@ function Get-AudioFileTags {
                     }
                     $logEntry | ConvertTo-Json -Depth 10 | Add-Content -Path $LogTo
                 }
-
-                # Clean up
-                $fileObj.Dispose()
+                
+                } finally {
+                    # Always clean up TagLib resources
+                    if ($fileObj) {
+                        try {
+                            $fileObj.Dispose()
+                        } catch {
+                            Write-Verbose "Warning: Could not dispose TagLib file object for $(Split-Path $file -Leaf)"
+                        }
+                    }
+                }
                 
             } catch {
-                Write-Warning "Failed to read tags from '$(Split-Path $file -Leaf)': $($_.Exception.Message)"
+                $errorCount++
+                $errorMsg = "Failed to read tags from '$(Split-Path $file -Leaf)': $($_.Exception.Message)"
+                Write-Warning $errorMsg
                 
                 # Log error if requested
                 if ($LogTo) {
@@ -332,6 +399,24 @@ function Get-AudioFileTags {
                     $errorEntry | ConvertTo-Json | Add-Content -Path $LogTo
                 }
             }
+        }
+        
+        # Clear progress display
+        if ($ShowProgress -and $files.Count -gt 10) {
+            Write-Progress -Activity "Reading Audio File Tags" -Completed
+        }
+        
+        # Performance summary
+        $endTime = Get-Date
+        $duration = $endTime - $startTime
+        $successCount = $results.Count
+        
+        Write-Verbose "Tag reading complete: $successCount successful, $errorCount errors in $([math]::Round($duration.TotalSeconds, 1))s"
+        
+        if ($errorCount -gt 0 -and $errorCount -lt $files.Count) {
+            Write-Host "Tag reading: $successCount/$($files.Count) files processed successfully" -ForegroundColor Yellow
+        } elseif ($successCount -gt 0) {
+            Write-Verbose "All $successCount files processed successfully"
         }
 
         return $results

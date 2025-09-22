@@ -405,7 +405,7 @@ function Invoke-MuFo {
                                     }
                                     $tracks = @()
                                     foreach ($p in $scanPaths) {
-                                        $tracks += Get-AudioFileTags -Path $p -IncludeComposer
+                                        $tracks += Get-AudioFileTags -Path $p -IncludeComposer -ShowProgress
                                     }
                                     
                                     $missingTitle = ($tracks | Where-Object { -not $_.Title }).Count
@@ -465,7 +465,7 @@ function Invoke-MuFo {
                                         $c | Add-Member -NotePropertyName TagEnhancementResults -NotePropertyValue $tagResults
                                         
                                         # Update track count after enhancements
-                                        $enhancedTracks = Get-AudioFileTags -Path $c.LocalPath -IncludeComposer
+                                        $enhancedTracks = Get-AudioFileTags -Path $c.LocalPath -IncludeComposer -ShowProgress
                                         $updatedMissingTitles = ($enhancedTracks | Where-Object { -not $_.Title }).Count
                                         $c | Add-Member -NotePropertyName TracksWithMissingTitleAfterFix -NotePropertyValue $updatedMissingTitles -Force
                                     }

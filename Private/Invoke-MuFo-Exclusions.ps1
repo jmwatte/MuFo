@@ -193,8 +193,12 @@ function Get-EffectiveExclusions {
         }
     }
 
-    # Remove duplicates and return
-    return @($effectiveExclusions | Select-Object -Unique)
+    # Remove duplicates and return (ensure we always return an array, never null)
+    $result = @($effectiveExclusions | Select-Object -Unique)
+    if ($null -eq $result) {
+        return @()
+    }
+    return $result
 }
 
 function Show-Exclusions {
