@@ -1,5 +1,5 @@
 function Write-AlbumComparisonResult {
-<#
+    <#
 .SYNOPSIS
     Writes album comparison results in a consistent multi-line format.
 
@@ -31,11 +31,13 @@ function Write-AlbumComparisonResult {
 
     if ($IsAlbumMatch -and $IsArtistMatch) {
         Write-Host "Album '$Album': No changes needed" -ForegroundColor Green
-    } elseif ($IsAlbumMatch -and -not $IsArtistMatch) {
+    }
+    elseif ($IsAlbumMatch -and -not $IsArtistMatch) {
         Write-Host "Album '$Album': No rename needed" -ForegroundColor DarkYellow
         Write-Host "  LocalArtist  : " -ForegroundColor Green -NoNewline; Write-Host $LocalArtist
         Write-Host "  SpotifyArtist: " -ForegroundColor Green -NoNewline; Write-Host $SpotifyArtist
-    } else {
+    }
+    else {
         Write-Host "Album '$Album': Rename suggested" -ForegroundColor Yellow
         Write-Host "  LocalArtist  : " -ForegroundColor Green -NoNewline; Write-Host $LocalArtist
         Write-Host "  SpotifyArtist: " -ForegroundColor Green -NoNewline; Write-Host $SpotifyArtist
@@ -43,7 +45,7 @@ function Write-AlbumComparisonResult {
 }
 
 function Write-RenameOperation {
-<#
+    <#
 .SYNOPSIS
     Writes rename operations in a consistent multi-line format.
 
@@ -58,7 +60,7 @@ function Write-RenameOperation {
 #>
     param(
         [hashtable]$RenameMap,
-        [string]$Title = "What If: Performing Rename Operation"
+        [string]$Title = "WhatIf: Performing Rename Operation"
     )
 
     if ($RenameMap.Count -gt 0) {
@@ -66,12 +68,14 @@ function Write-RenameOperation {
         foreach ($kv in $RenameMap.GetEnumerator()) {
             Write-Host "Name  : " -ForegroundColor Green -NoNewline; Write-Host $kv.Key
             Write-Host "Value : " -ForegroundColor Green -NoNewline; Write-Host $kv.Value
+            Write-Host "`n"
+            Write-Host "`n"
         }
     }
 }
 
 function Write-ArtistSelectionPrompt {
-<#
+    <#
 .SYNOPSIS
     Writes artist selection prompts in a consistent format.
 
@@ -127,7 +131,7 @@ function Write-ArtistRenameMessage {
         [string]$AlbumStatus = "No changes needed (already correctly named)"
     )
     
-    Write-Host "Artist Rename Suggested: '$LocalArtist' → '$SpotifyArtist'" -ForegroundColor Yellow
+    Write-Host "Artist Rename Suggested:`n '$LocalArtist' → '$SpotifyArtist'" -ForegroundColor Yellow
     Write-Host "Album Folders: $AlbumStatus" -ForegroundColor DarkYellow
 }
 
@@ -153,9 +157,11 @@ function Write-AlbumNoRenameNeeded {
         [string]$Reason = "No rename needed"
     )
     
-    Write-Host "Album '$LocalAlbum': $Reason" -ForegroundColor DarkYellow
+    Write-Host "$Reason" -ForegroundColor DarkYellow
     Write-Host "  LocalArtist  : " -ForegroundColor Green -NoNewline; Write-Host $LocalArtist
     Write-Host "  SpotifyArtist: " -ForegroundColor Green -NoNewline; Write-Host $SpotifyArtist
+    Write-Host "on Album $LocalAlbum"
+    Write-Host "`n"
 }
 
 function Write-NothingToRenameMessage {
@@ -170,6 +176,8 @@ function Write-NothingToRenameMessage {
     param([string]$Message = "Nothing to Rename: LocalFolder = NewFolderName")
     
     Write-Host $Message -ForegroundColor DarkYellow
+    Write-Host "`n"
+    Write-Host "`n"
 }
 
 function Write-WhatIfMessage {
@@ -185,11 +193,11 @@ function Write-WhatIfMessage {
         [string]$Message
     )
     
-    Write-Host "What If: $Message" -ForegroundColor DarkYellow
+    Write-Host "WhatIf: $Message" -ForegroundColor DarkYellow
 }
 
 function Write-AlbumAnalysisHeader {
-<#
+    <#
 .SYNOPSIS
     Writes album analysis information in a consistent format.
 
@@ -223,7 +231,7 @@ function Write-AlbumAnalysisHeader {
 }
 
 function Write-ProcessingStatus {
-<#
+    <#
 .SYNOPSIS
     Writes processing status in a consistent format.
 
@@ -243,9 +251,9 @@ function Write-ProcessingStatus {
     )
 
     $color = switch ($Type) {
-        'Info'    { 'Cyan' }
+        'Info' { 'Cyan' }
         'Warning' { 'Yellow' }
-        'Error'   { 'Red' }
+        'Error' { 'Red' }
         'Success' { 'Green' }
     }
 
@@ -253,7 +261,7 @@ function Write-ProcessingStatus {
 }
 
 function Write-DecisionPrompt {
-<#
+    <#
 .SYNOPSIS
     Writes decision prompts in a consistent format.
 
@@ -282,7 +290,7 @@ function Write-DecisionPrompt {
 }
 
 function ConvertTo-SafeFileName {
-<#
+    <#
 .SYNOPSIS
     Converts a string to a safe filename by removing invalid characters.
 
@@ -303,7 +311,7 @@ function ConvertTo-SafeFileName {
 }
 
 function ConvertTo-ComparableName {
-<#
+    <#
 .SYNOPSIS
     Converts a name to a comparable format for matching.
 

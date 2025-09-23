@@ -1,5 +1,5 @@
 function Invoke-MuFo {
-<#
+    <#
 .SYNOPSIS
     Validates and corrects music library folders and files using Spotify API.
 
@@ -214,11 +214,11 @@ function Invoke-MuFo {
         [string]$DoIt = "Manual",
 
         [Parameter(Mandatory = $false)]
-        [ValidateRange(0.0,1.0)]
+        [ValidateRange(0.0, 1.0)]
         [double]$ConfidenceThreshold = 0.6,
 
         [Parameter(Mandatory = $false)]
-        [ValidateSet('Here','1U','2U','1D','2D')]
+        [ValidateSet('Here', '1U', '2U', '1D', '2D')]
         [string]$ArtistAt = 'Here',
 
         [Parameter(Mandatory = $false)]
@@ -281,7 +281,7 @@ function Invoke-MuFo {
         [switch]$ShowResults,
 
         [Parameter(Mandatory = $false)]
-        [ValidateSet('rename','skip','error')]
+        [ValidateSet('rename', 'skip', 'error')]
         [string]$Action,
 
         [Parameter(Mandatory = $false)]
@@ -305,7 +305,8 @@ function Invoke-MuFo {
         # Connect to Spotify (validate Spotishell setup)
         if (Get-Module -ListAvailable -Name Spotishell) {
             Connect-SpotifyService
-        } else {
+        }
+        else {
             Write-Warning "Spotishell module not found. Install-Module Spotishell to enable Spotify integration."
         }
 
@@ -381,7 +382,8 @@ function Invoke-MuFo {
                         if ($Action) { Write-Host "  Action filter: $Action" -ForegroundColor Gray }
                         if ($MinScore -gt 0) { Write-Host "  MinScore filter: $MinScore" -ForegroundColor Gray }
                     }
-                } else {
+                }
+                else {
                     Write-Host "No items found in log file." -ForegroundColor Yellow
                 }
                 
@@ -393,72 +395,87 @@ function Invoke-MuFo {
                     $wantFull = ($ShowEverything -or $Detailed)
                     if (-not $wantFull) {
                         $objDisplay = [PSCustomObject]([ordered]@{
-                            LocalArtist   = $item.LocalArtist
-                            SpotifyArtist = $item.Artist
-                            LocalFolder   = $item.LocalFolder
-                            LocalAlbum    = $item.LocalAlbum
-                            SpotifyAlbum  = $item.SpotifyAlbum
-                            NewFolderName = $item.NewFolderName
-                            Decision      = $item.Decision
-                            ArtistSource  = $item.ArtistSource
-                        })
+                                LocalArtist   = $item.LocalArtist
+                                SpotifyArtist = $item.Artist
+                                LocalFolder   = $item.LocalFolder
+                                LocalAlbum    = $item.LocalAlbum
+                                SpotifyAlbum  = $item.SpotifyAlbum
+                                NewFolderName = $item.NewFolderName
+                                Decision      = $item.Decision
+                                ArtistSource  = $item.ArtistSource
+                            })
                         Write-Output $objDisplay
-                    } else {
-                        Write-Output $item
+
+                        if (-not $Preview -and -not $WhatIfPreference) {
+                            if ([string]::Equals($c.LocalAlbum, $c.ProposedName, [StringComparison]::InvariantCultureIgnoreCase)) {
+                                Write-Verbose ("Nothing to Rename: LocalFolder '{0}' equals NewFolderName '{1}' (LocalPath: {2})" -f $c.LocalAlbum, $c.ProposedName, $c.LocalPath)
+                            }
+                        }
+
+
+                    }
+                    else {
+                        Write-Output $objFull
+                        if (-not $Preview -and -not $WhatIfPreference) {
+                            if ([string]::Equals($c.LocalAlbum, $c.ProposedName, [StringComparison]::InvariantCultureIgnoreCase)) {
+                                Write-Verbose ("Nothing to Rename: LocalFolder '{0}' equals NewFolderName '{1}' (LocalPath: {2})" -f $c.LocalAlbum, $c.ProposedName, $c.LocalPath)
+                            }
+                        }
                     }
                 }
-            } catch {
+            }
+            catch {
                 Write-Warning "Failed to read or parse log file '$LogTo': $($_.Exception.Message)"
             }
             return
         }
 
         # Main analysis logic always runs; actual changes are guarded by ShouldProcess
-    $isPreview = $Preview -or $WhatIfPreference
+        $isPreview = $Preview -or $WhatIfPreference
 
-            # Compute effective exclusions using refactored functions
-            $effectiveExclusions = Get-EffectiveExclusions -ExcludeFolders $ExcludeFolders -ExcludedFoldersLoad $ExcludedFoldersLoad -ExcludedFoldersReplace:$ExcludedFoldersReplace
-            Write-Verbose "Final effective exclusions: $($effectiveExclusions -join ', ')"
+        # Compute effective exclusions using refactored functions
+        $effectiveExclusions = Get-EffectiveExclusions -ExcludeFolders $ExcludeFolders -ExcludedFoldersLoad $ExcludedFoldersLoad -ExcludedFoldersReplace:$ExcludedFoldersReplace
+        Write-Verbose "Final effective exclusions: $($effectiveExclusions -join ', ')"
 
-            # Show exclusions if requested
-            if ($ExcludedFoldersShow) {
-                Show-Exclusions -EffectiveExclusions $effectiveExclusions -ExcludedFoldersLoad $ExcludedFoldersLoad
+        # Show exclusions if requested
+        if ($ExcludedFoldersShow) {
+            Show-Exclusions -EffectiveExclusions $effectiveExclusions -ExcludedFoldersLoad $ExcludedFoldersLoad
+        }
+
+        # Compute artist paths based on -ArtistAt
+        $artistPaths = switch ($ArtistAt) {
+            'Here' { @($Path) }
+            '1U' {
+                $p = Split-Path $Path -Parent
+                if (-not $p) { Write-Warning "Cannot go up from '$Path'"; @() } else { @($p) }
             }
-
-            # Compute artist paths based on -ArtistAt
-            $artistPaths = switch ($ArtistAt) {
-                'Here' { @($Path) }
-                '1U' {
-                    $p = Split-Path $Path -Parent
-                    if (-not $p) { Write-Warning "Cannot go up from '$Path'"; @() } else { @($p) }
+            '2U' {
+                $p = $Path
+                for ($i = 0; $i -lt 2; $i++) {
+                    $p = Split-Path $p -Parent
+                    if (-not $p) { Write-Warning "Cannot go up $($i+1) levels from '$Path'"; @(); break }
                 }
-                '2U' {
-                    $p = $Path
-                    for ($i = 0; $i -lt 2; $i++) {
-                        $p = Split-Path $p -Parent
-                        if (-not $p) { Write-Warning "Cannot go up $($i+1) levels from '$Path'"; @(); break }
-                    }
-                    if ($p) { @($p) } else { @() }
-                }
-                '1D' {
-                    Get-ChildItem -Directory $Path | Where-Object { -not (Test-ExclusionMatch $_.Name $effectiveExclusions) } | Select-Object -ExpandProperty FullName
-                }
-                '2D' {
-                    Get-ChildItem -Directory $Path | Where-Object { -not (Test-ExclusionMatch $_.Name $effectiveExclusions) } | ForEach-Object {
-                        Get-ChildItem -Directory $_.FullName | Where-Object { -not (Test-ExclusionMatch $_.Name $effectiveExclusions) } | Select-Object -ExpandProperty FullName
-                    }
+                if ($p) { @($p) } else { @() }
+            }
+            '1D' {
+                Get-ChildItem -Directory $Path | Where-Object { -not (Test-ExclusionMatch $_.Name $effectiveExclusions) } | Select-Object -ExpandProperty FullName
+            }
+            '2D' {
+                Get-ChildItem -Directory $Path | Where-Object { -not (Test-ExclusionMatch $_.Name $effectiveExclusions) } | ForEach-Object {
+                    Get-ChildItem -Directory $_.FullName | Where-Object { -not (Test-ExclusionMatch $_.Name $effectiveExclusions) } | Select-Object -ExpandProperty FullName
                 }
             }
-            if ($artistPaths.Count -eq 0) {
-                Write-Warning "No artist paths found for ArtistAt '$ArtistAt' at '$Path'"
-                return
-            }
+        }
+        if ($artistPaths.Count -eq 0) {
+            Write-Warning "No artist paths found for ArtistAt '$ArtistAt' at '$Path'"
+            return
+        }
 
-            # Process each artist path
-            foreach ($artistPath in $artistPaths) {
-                $currentPath = $artistPath
-                $localArtist = Split-Path $currentPath -Leaf
-                Write-Verbose "Processing artist: $localArtist at $currentPath"
+        # Process each artist path
+        foreach ($artistPath in $artistPaths) {
+            $currentPath = $artistPath
+            $localArtist = Split-Path $currentPath -Leaf
+            Write-Verbose "Processing artist: $localArtist at $currentPath"
 
 
 
@@ -508,7 +525,8 @@ function Invoke-MuFo {
                                 $boostedScore = [Math]::Max($originalScore, ($variationScore * 0.8)) # 80% of perfect variation match
                                 $match.Score = $boostedScore
                                 Write-Verbose "    Boosted score for '$spotifyName': variation=$([math]::Round($variationScore,2)) -> final=$([math]::Round($boostedScore,2))"
-                            } else {
+                            }
+                            else {
                                 $match.Score = $originalScore
                             }
                         }
@@ -576,7 +594,8 @@ function Invoke-MuFo {
                                     # Get track information that was added by Add-TrackInformationToComparisons
                                     $scanPaths = if ($BoxMode -and (Get-ChildItem -LiteralPath $c.LocalPath -Directory -ErrorAction SilentlyContinue)) {
                                         Get-ChildItem -LiteralPath $c.LocalPath -Directory | Select-Object -ExpandProperty FullName
-                                    } else {
+                                    }
+                                    else {
                                         @($c.LocalPath)
                                     }
                                     $tracks = @()
@@ -611,7 +630,8 @@ function Invoke-MuFo {
                                                 
                                                 Write-Verbose "Duration validation complete. Original: $($originalConfidence), Duration: $($durationConfidence), Enhanced: $($enhancedConfidence)"
                                             }
-                                        } catch {
+                                        }
+                                        catch {
                                             Write-Warning "Duration validation failed for album $($c.LocalAlbumName): $($_.Exception.Message)"
                                         }
                                     }
@@ -646,7 +666,7 @@ function Invoke-MuFo {
                                         Write-Verbose "Enhancing tags for: $($c.LocalPath)"
                                         
                                         $tagParams = @{
-                                            Path = $c.LocalPath
+                                            Path   = $c.LocalPath
                                             WhatIf = $WhatIfPreference
                                         }
                                         
@@ -678,7 +698,8 @@ function Invoke-MuFo {
                                     if ($ShowEverything) {
                                         $c | Add-Member -NotePropertyName Tracks -NotePropertyValue $tracks
                                     }
-                                } catch {
+                                }
+                                catch {
                                     Write-Warning "Failed to read tracks for '$($c.LocalPath)': $($_.Exception.Message)"
                                     $c | Add-Member -NotePropertyName TrackCountLocal -NotePropertyValue 0 -Force
                                     $c | Add-Member -NotePropertyName TracksWithMissingTitle -NotePropertyValue 0
@@ -713,8 +734,8 @@ function Invoke-MuFo {
                             $reason = ''
                             switch ($DoIt) {
                                 'Automatic' { if ($c.MatchScore -ge $goodThreshold -and $c.ProposedName) { $decision = 'rename' } else { $reason = 'below-threshold-or-no-proposal' } }
-                                'Smart'     { if ($c.MatchScore -ge $goodThreshold -and $c.ProposedName) { $decision = 'rename' } else { $decision = 'prompt'; $reason = if ($c.ProposedName) { 'manual-confirmation' } else { 'no-proposal' } } }
-                                'Manual'    { $decision = if ($c.ProposedName) { 'prompt' } else { 'skip' }; if (-not $c.ProposedName) { $reason = 'no-proposal' } }
+                                'Smart' { if ($c.MatchScore -ge $goodThreshold -and $c.ProposedName) { $decision = 'rename' } else { $decision = 'prompt'; $reason = if ($c.ProposedName) { 'manual-confirmation' } else { 'no-proposal' } } }
+                                'Manual' { $decision = if ($c.ProposedName) { 'prompt' } else { 'skip' }; if (-not $c.ProposedName) { $reason = 'no-proposal' } }
                             }
                             $rec = [ordered]@{
                                 Artist        = $selectedArtist.Name
@@ -742,22 +763,23 @@ function Invoke-MuFo {
                             $records += $objFull
                             # Default to concise view unless -ShowEverything/-Detailed is set
                             $wantFull = ($ShowEverything -or $Detailed)
-                            if (-not $wantFull) {
-                                $objDisplay = [PSCustomObject]([ordered]@{
-                                    LocalArtist   = $localArtist
-                                    SpotifyArtist = $objFull.Artist
-                                    LocalFolder   = $objFull.LocalFolder
-                                    LocalAlbum    = $objFull.LocalAlbum
-                                    SpotifyAlbum  = $objFull.SpotifyAlbum
-                                    NewFolderName = $objFull.NewFolderName
-                                    Decision      = $objFull.Decision
-                                    ArtistSource  = $objFull.ArtistSource
-                                })
-                                Write-Output $objDisplay
-                            } else {
-                                Write-Output $objFull
-                            }
-                            # Intentionally suppress verbose per-album UI line to avoid redundancy when objects are emitted.
+                                if (-not $wantFull) {
+                                	$objDisplay = [PSCustomObject]([ordered]@{
+                                        LocalArtist   = $localArtist
+                                        SpotifyArtist = $objFull.Artist
+                                        LocalFolder   = $objFull.LocalFolder
+                                        LocalAlbum    = $objFull.LocalAlbum
+                                        SpotifyAlbum  = $objFull.SpotifyAlbum
+                                        NewFolderName = $objFull.NewFolderName
+                                        Decision      = $objFull.Decision
+                                        ArtistSource  = $objFull.ArtistSource
+                                    })
+                                	Write-Output $objDisplay
+                                }
+                                else {
+                                	Write-Output $objFull
+                                }
+                                # Intentionally suppress verbose per-album UI line to avoid redundancy when objects are emitted.
                         }
 
                         # If running in WhatIf or -Preview, always print a concise rename map by default
@@ -780,25 +802,33 @@ function Invoke-MuFo {
                             }
                             if ($renameMap.Count -gt 0) {
                                 Write-RenameOperation -RenameMap $renameMap -Mode 'WhatIf'
-                            } else {
+                            }
+                            else {
                                 # Check if artist rename is suggested but albums don't need renaming
                                 if ($localArtist -ne $selectedArtist.Name) {
                                     Write-ArtistRenameMessage -LocalArtist $localArtist -SpotifyArtist $selectedArtist.Name
-                                } else {
+                                }
+                                else {
                                     # If nothing to rename, check for equal-name cases and surface that clearly
                                     $equalCases = $albumComparisons | Where-Object { $_.ProposedName -and [string]::Equals($_.LocalAlbum, $_.ProposedName, [StringComparison]::InvariantCultureIgnoreCase) }
                                     if ($equalCases) {
                                         foreach ($e in $equalCases) {
                                             # Check if artist rename is suggested but this album doesn't need renaming
                                             if ($localArtist -cne $selectedArtist.Name) {
-                                                Write-AlbumNoRenameNeeded -LocalAlbum $e.LocalAlbum -LocalArtist $localArtist -SpotifyArtist $selectedArtist.Name
-                                            } else {
+                                                $reason = if ($PSBoundParameters.ContainsKey('DoIt') -and $DoIt) { 'No rename needed' } else { 'Whatif will rename' }
+                                                Write-AlbumNoRenameNeeded -LocalAlbum $e.LocalAlbum -LocalArtist $localArtist -SpotifyArtist $selectedArtist.Name -Reason $reason    
+                                            }
+                                            else {
                                                 Write-NothingToRenameMessage
                                             }
                                             Write-Verbose ("Nothing to Rename: LocalFolder '{0}' equals NewFolderName '{1}'" -f $e.LocalAlbum, $e.ProposedName)
                                         }
-                                    } else {
+                                    }
+                                    else {
                                         Write-WhatIfMessage -Message "No rename candidates at the current threshold."
+                                        if ($currentPath) {
+                                            Write-ClickableFilePath -Path $currentPath -Label "Folder" -Color "Gray"
+                                        }
                                     }
                                 }
                             }
@@ -810,24 +840,28 @@ function Invoke-MuFo {
                             foreach ($c in $albumComparisons) {
                                 try {
                                     $action = 'skip'; $message = ''
-                                    if (-not $c.ProposedName) { $message = 'no-proposal'; $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
+                                    if (-not $c.ProposedName) { $message = 'no-proposal'; $outcomes += [PSCustomObject]@{ LocalFolder = $c.LocalAlbum; LocalPath = $c.LocalPath; NewFolderName = $c.ProposedName; Action = $action; Reason = $message; Score = $c.MatchScore; SpotifyAlbum = $c.MatchName }; continue }
                                     if ([string]::Equals($c.LocalAlbum, $c.ProposedName, [StringComparison]::InvariantCultureIgnoreCase)) { 
                                         # Check if artist rename is suggested but this album doesn't need renaming
                                         if ($localArtist -cne $selectedArtist.Name) {
-                                            Write-AlbumNoRenameNeeded -LocalAlbum $c.LocalAlbum -LocalArtist $localArtist -SpotifyArtist $selectedArtist.Name
-                                        } else {
+                                            # around line ~817
+                                            $reason = if ($PSBoundParameters.ContainsKey('DoIt') -and $DoIt) { 'No rename needed' } else { 'WhatIf Will rename ' }
+                                            Write-AlbumNoRenameNeeded -LocalAlbum $c.LocalAlbum -LocalArtist $localArtist -SpotifyArtist $selectedArtist.Name -Reason $reason      
+                                        }
+                                        else {
                                             Write-NothingToRenameMessage
                                         }
-                                        Write-Verbose ("Nothing to Rename: LocalFolder '{0}' equals NewFolderName '{1}'" -f $c.LocalAlbum, $c.ProposedName); $message = 'already-matching'; $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
+                                        Write-Verbose ("Nothing to Rename: LocalFolder '{0}' equals NewFolderName '{1}'" -f $c.LocalAlbum, $c.ProposedName); $message = 'already-matching'; $outcomes += [PSCustomObject]@{ LocalFolder = $c.LocalAlbum; LocalPath = $c.LocalPath; NewFolderName = $c.ProposedName; Action = $action; Reason = $message; Score = $c.MatchScore; SpotifyAlbum = $c.MatchName }; continue 
+                                    }
                                     $currentPath = [string]$c.LocalPath
-                                    $targetPath  = Join-Path -Path $currentPath -ChildPath $c.ProposedName
-                                    if (Test-Path -LiteralPath $targetPath) { Write-Warning ("Skip rename: Target already exists: {0}" -f $targetPath); $message = 'target-exists'; $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
+                                    $targetPath = Join-Path -Path $currentPath -ChildPath $c.ProposedName
+                                    if (Test-Path -LiteralPath $targetPath) { Write-Warning ("Skip rename: Target already exists: {0}" -f $targetPath); $message = 'target-exists'; $outcomes += [PSCustomObject]@{ LocalFolder = $c.LocalAlbum; LocalPath = $c.LocalPath; NewFolderName = $c.ProposedName; Action = $action; Reason = $message; Score = $c.MatchScore; SpotifyAlbum = $c.MatchName }; continue }
 
                                     $shouldRename = $false
                                     switch ($DoIt) {
                                         'Automatic' { $shouldRename = ($c.MatchScore -ge $goodThreshold) }
-                                        'Smart'     { if ($c.MatchScore -ge $goodThreshold) { $shouldRename = $true } else { $resp = Read-Host ("Rename '{0}' -> '{1}'? [y/N]" -f $c.LocalAlbum, $c.ProposedName); if ($resp -match '^(?i)y(es)?$') { $shouldRename = $true } } }
-                                        'Manual'    { $resp = Read-Host ("Rename '{0}' -> '{1}'? [y/N]" -f $c.LocalAlbum, $c.ProposedName); if ($resp -match '^(?i)y(es)?$') { $shouldRename = $true } }
+                                        'Smart' { if ($c.MatchScore -ge $goodThreshold) { $shouldRename = $true } else { $resp = Read-Host ("Rename '{0}' -> '{1}'? [y/N]" -f $c.LocalAlbum, $c.ProposedName); if ($resp -match '^(?i)y(es)?$') { $shouldRename = $true } } }
+                                        'Manual' { $resp = Read-Host ("Rename '{0}' -> '{1}'? [y/N]" -f $c.LocalAlbum, $c.ProposedName); if ($resp -match '^(?i)y(es)?$') { $shouldRename = $true } }
                                     }
                                     if ($shouldRename) {
                                         if ($PSCmdlet.ShouldProcess($currentPath, ("Rename to '{0}'" -f $c.ProposedName))) {
@@ -835,21 +869,24 @@ function Invoke-MuFo {
                                             Write-Verbose ("Renamed: '{0}' -> '{1}'" -f $c.LocalAlbum, $c.ProposedName)
                                             $action = 'rename'; $message = 'renamed'
                                         }
-                                    } else {
+                                    }
+                                    else {
                                         Write-Verbose ("Skipped rename for '{0}' (score {1})" -f $c.LocalAlbum, $c.MatchScore)
                                         $action = 'skip'; $message = if ($c.MatchScore -ge $goodThreshold) { 'user-declined' } else { 'below-threshold' }
                                     }
-                                    $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }
-                                } catch { Write-Warning ("Rename failed for '{0}': {1}" -f $c.LocalAlbum, $_.Exception.Message); $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action='error'; Reason=$_.Exception.Message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName } }
+                                    $outcomes += [PSCustomObject]@{ LocalFolder = $c.LocalAlbum; LocalPath = $c.LocalPath; NewFolderName = $c.ProposedName; Action = $action; Reason = $message; Score = $c.MatchScore; SpotifyAlbum = $c.MatchName }
+                                }
+                                catch { Write-Warning ("Rename failed for '{0}': {1}" -f $c.LocalAlbum, $_.Exception.Message); $outcomes += [PSCustomObject]@{ LocalFolder = $c.LocalAlbum; LocalPath = $c.LocalPath; NewFolderName = $c.ProposedName; Action = 'error'; Reason = $_.Exception.Message; Score = $c.MatchScore; SpotifyAlbum = $c.MatchName } }
                             }
                             # After album renames, perform artist folder rename if proposed
                             if ($artistRenameName) {
                                 try {
                                     $currentArtistPath = [string]$currentPath
-                                    $targetArtistPath  = Join-Path -Path (Split-Path -Parent -Path $currentArtistPath) -ChildPath $artistRenameName
+                                    $targetArtistPath = Join-Path -Path (Split-Path -Parent -Path $currentArtistPath) -ChildPath $artistRenameName
                                     if (Test-Path -LiteralPath $targetArtistPath) {
                                         Write-Warning ("Skip artist rename: Target already exists: {0}" -f $targetArtistPath)
-                                    } else {
+                                    }
+                                    else {
                                         if ($PSCmdlet.ShouldProcess($currentArtistPath, ("Rename artist folder to '{0}'" -f $artistRenameName))) {
                                             Rename-Item -LiteralPath $currentArtistPath -NewName $artistRenameName -ErrorAction Stop
                                             Write-Verbose ("Renamed artist folder: '{0}' -> '{1}'" -f (Split-Path -Leaf $currentArtistPath), $artistRenameName)
@@ -858,7 +895,8 @@ function Invoke-MuFo {
                                             $artistRenameTo = $targetArtistPath
                                         }
                                     }
-                                } catch {
+                                }
+                                catch {
                                     Write-Warning ("Artist folder rename failed: {0}" -f $_.Exception.Message)
                                 }
                             }
@@ -880,9 +918,11 @@ function Invoke-MuFo {
                                     $payload = [PSCustomObject]@{ Timestamp = (Get-Date).ToString('o'); Path = $currentPath; Mode = $DoIt; ConfidenceThreshold = $ConfidenceThreshold; ExcludedFolders = @($effectiveExclusions); Items = $outcomes }
                                     ($payload | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $LogTo -Encoding utf8
                                     Write-Verbose ("Wrote JSON log: {0}" -f $LogTo)
-                                } catch { Write-Warning ("Failed to write log '{0}': {1}" -f $LogTo, $_.Exception.Message) }
+                                }
+                                catch { Write-Warning ("Failed to write log '{0}': {1}" -f $LogTo, $_.Exception.Message) }
                             }
-                        } else {
+                        }
+                        else {
                             # Preview-only logging
                             if ($LogTo) {
                                 try {
@@ -891,10 +931,12 @@ function Invoke-MuFo {
                                     $payload = [PSCustomObject]@{ Timestamp = (Get-Date).ToString('o'); Path = $currentPath; Mode = 'Preview'; ConfidenceThreshold = $ConfidenceThreshold; ExcludedFolders = @($effectiveExclusions); Items = $records }
                                     ($payload | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $LogTo -Encoding utf8
                                     Write-Verbose ("Wrote JSON log: {0}" -f $LogTo)
-                                } catch { Write-Warning ("Failed to write log '{0}': {1}" -f $LogTo, $_.Exception.Message) }
+                                }
+                                catch { Write-Warning ("Failed to write log '{0}': {1}" -f $LogTo, $_.Exception.Message) }
                             }
                         }
-                    } catch {
+                    }
+                    catch {
                         $msg = $_.Exception.Message
                         $stack = $_.ScriptStackTrace
                         $inner = if ($_.Exception.InnerException) { $_.Exception.InnerException.Message } else { $null }
@@ -902,7 +944,8 @@ function Invoke-MuFo {
                         $stackText = if ($stack) { " | Stack: $stack" } else { '' }
                         Write-Warning ("Album verification failed: {0}{1}{2}" -f $msg, $innerText, $stackText)
                     }
-                } else {
+                }
+                else {
                     Write-Warning "No artist selected"
                 }
 
@@ -912,11 +955,13 @@ function Invoke-MuFo {
                         $saveFile = if ($ExcludedFoldersSave) { Join-Path $storePath.Dir $ExcludedFoldersSave } else { $storePath.File }
                         Write-ExcludedFoldersToDisk -FilePath $saveFile -ExcludedFolders $effectiveExclusions
                         Write-Verbose ("Saved exclusions to disk: {0} folders excluded" -f $effectiveExclusions.Count)
-                    } catch {
+                    }
+                    catch {
                         Write-Warning ("Failed to save exclusions: {0}" -f $_.Exception.Message)
                     }
                 }
-            } else {
+            }
+            else {
                 Write-Warning "No matches found on Spotify for '$localArtist'"
             }
         } # End foreach artistPath

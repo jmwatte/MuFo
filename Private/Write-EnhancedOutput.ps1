@@ -132,48 +132,46 @@ function Write-DurationMismatchWarning {
     Write-Host ""
 }
 
+
 function Write-ClickableFilePath {
-<#
-.SYNOPSIS
-    Display file paths in clickable format for modern terminals.
-
-.DESCRIPTION
-    Formats file paths to be clickable in Windows Terminal, VS Code Terminal, and other
-    modern terminals that support file path clicking.
-
-.PARAMETER Path
-    The file path to display.
-
-.PARAMETER Label
-    Optional label to display before the path.
-
-.PARAMETER Color
-    Color for the file path display.
-
-.EXAMPLE
-    Write-ClickableFilePath -Path "C:\Music\track.mp3" -Label "Problem file"
-
-.NOTES
-    Works with Windows Terminal (Ctrl+Click), VS Code Terminal, and modern terminal emulators.
-#>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory = $true, Position = 0)]
         [string]$Path,
-        
-        [string]$Label = "File",
-        
+
+        [Parameter(Mandatory = $false)]
+        [string]$Label = "📁 Location",
+
+        [Parameter(Mandatory = $false)]
         [string]$Color = "Cyan"
     )
-    
-    Write-Host "${Label}: " -NoNewline -ForegroundColor Gray
-    Write-Host $Path -ForegroundColor $Color
-    
-    # Additional formats for better compatibility
-    if ($env:WT_SESSION -or $env:TERM_PROGRAM -eq "vscode") {
-        # These terminals support enhanced clicking
-        Write-Verbose "Terminal supports clickable paths"
+
+    # Try to get an absolute, provider path; fall back to the original input if resolve fails
+    try {
+        $resolved = (Resolve-Path -LiteralPath $Path -ErrorAction Stop).ProviderPath
     }
+    catch {
+        $resolved = $Path
+    }
+
+    # Normalize separators for URIs (use forward slashes)
+    $pathForUri = $resolved -replace '\\', '/'
+
+    # Percent-encode each segment to preserve separators and avoid encoding '/' characters
+    $segments = $pathForUri -split '/'
+    $encodedSegments = $segments | ForEach-Object { [System.Uri]::EscapeDataString($_) }
+    $encodedPath = ($encodedSegments -join '/')
+
+    # Build clickable URIs
+    $vscodeUri = "vscode://file/$encodedPath"
+    $fileUri   = "file:///$encodedPath"
+
+    # Print a quoted filesystem path for easy copy/paste
+    Write-Host ("{0}: '{1}'" -f $Label, $resolved) -ForegroundColor Gray
+
+    # Print clickable URIs — terminals that support them will allow Ctrl/Cmd+Click
+    Write-Host $vscodeUri -ForegroundColor $Color
+    Write-Host $fileUri -ForegroundColor $Color
 }
 
 function Write-TrackAnalysisResults {

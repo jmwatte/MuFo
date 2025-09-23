@@ -107,7 +107,7 @@ function Get-ArtistSelection {
                 # In WhatIf/Preview, pick the top match for analysis so we still produce results
                 $selectedArtist = $TopMatches[0].Artist
                 $artistSelectionSource = 'search'
-                Write-Verbose "Preview/WhatIf: assuming top search match '$($selectedArtist.Name)' for analysis."
+                Write-WhatIfMessage "Preview/WhatIf: assuming top search match '$($selectedArtist.Name)' for analysis."
             }
         }
         "Smart" {
@@ -159,7 +159,7 @@ function Get-ArtistSelection {
     if (-not $selectedArtist -and $IsPreview -and $TopMatches -and $TopMatches.Count -gt 0) {
         $selectedArtist = $TopMatches[0].Artist
         $artistSelectionSource = 'search'
-        Write-Verbose "Preview/WhatIf: no confident or inferred artist; assuming top search match '$($selectedArtist.Name)' for analysis."
+        Write-WhatIfMessage "Preview/WhatIf: no confident or inferred artist; assuming top search match '$($selectedArtist.Name)' for analysis."
     }
     
     return [PSCustomObject]@{

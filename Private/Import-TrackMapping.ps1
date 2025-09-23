@@ -194,7 +194,7 @@ function Import-TrackMapping {
     }
     
     if ($WhatIfPreference) {
-        Write-Host "`n[WhatIf] No changes made - this was a preview only" -ForegroundColor Magenta
+        Write-WhatIfMessage "`n[WhatIf] No changes made - this was a preview only" -ForegroundColor Magenta
         return
     }
     

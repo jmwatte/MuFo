@@ -1,0 +1,25 @@
+{
+  "Timestamp": "2025-09-23T15:46:37.6672941+02:00",
+  "Path": "E:\\_CorrectedMusic\\808 State",
+  "Mode": "Preview",
+  "ConfidenceThreshold": 0.6,
+  "ExcludedFolders": [
+    ""
+  ],
+  "Items": [
+    {
+      "Artist": "808 State",
+      "ArtistId": "7hFdUW64G4iU1tz46ITRfN",
+      "ArtistSource": "search",
+      "LocalFolder": "1989 - 90",
+      "LocalAlbum": "90",
+      "SpotifyAlbum": "Pacific",
+      "AlbumType": "single",
+      "Score": 1.3,
+      "LocalPath": "E:\\_CorrectedMusic\\808 State\\1989 - 90",
+      "NewFolderName": "1989 - Pacific",
+      "Decision": "prompt",
+      "Reason": ""
+    }
+  ]
+}
