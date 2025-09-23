@@ -1,3 +1,36 @@
+function Get-PartialTokenSetSimilarity {
+    param([string]$a, [string]$b)
+    $setA = ($a -replace '[^\w\s]', '').ToLower().Split(' ') | Where-Object { $_ }
+    $setB = ($b -replace '[^\w\s]', '').ToLower().Split(' ') | Where-Object { $_ }
+    $allAinB = ($setA | Where-Object { $setB -notcontains $_ }).Count -eq 0
+    if ($allAinB) { return 1.0 }
+    # fallback to normal token set ratio
+    $intersection = $setA | Where-Object { $setB -contains $_ }
+    $union = $setA + ($setB | Where-Object { $setA -notcontains $_ })
+    if ($union.Count -eq 0) { return 0 }
+    return ($intersection.Count / $union.Count)
+}
+function Get-TokenSetSimilarity {
+    param([string]$a, [string]$b)
+    $setA = ($a -replace '[^\w\s]', '').ToLower().Split(' ') | Where-Object { $_ }
+    $setB = ($b -replace '[^\w\s]', '').ToLower().Split(' ') | Where-Object { $_ }
+    $intersection = $setA | Where-Object { $setB -contains $_ }
+    $union = $setA + ($setB | Where-Object { $setA -notcontains $_ })
+    if ($union.Count -eq 0) { return 0 }
+    return ($intersection.Count / $union.Count)
+}
+function Remove-EditionSuffix {
+    param(
+        [string]$albumName,
+        [string]$searchTerm
+    )
+    # Only strip if searchTerm does not contain a parenthetical or bracketed suffix
+    if ($searchTerm -notmatch '\([^)]+\)|\[[^\]]+\]' -and $albumName -match '\s*[\(\[][^)\]]+[\)\]]\s*$') {
+        return ($albumName -replace '\s*[\(\[][^)\]]+[\)\]]\s*$', '')
+    }
+    return $albumName
+}
+
 function Get-SpotifyAlbumMatches {
     <#
 .SYNOPSIS
@@ -36,7 +69,7 @@ function Get-SpotifyAlbumMatches {
         [Parameter(Mandatory)][string]$AlbumName,
         [string]$ArtistName,
         [string]$Year,
-        [int]$Top = 5,
+        [int]$Top = 2,
         [double]$AlbumWeight = 0.7,
         [double]$ArtistWeight = 0.3,
         [double]$ArtistPriorityThreshold = 0.90,
@@ -76,9 +109,16 @@ function Get-SpotifyAlbumMatches {
                     if ($result.PSObject.Properties.Match('Albums').Count -gt 0 -and $result.Albums -and $result.Albums.Items) { $items = $result.Albums.Items }
                     elseif ($result.PSObject.Properties.Match('Items').Count -gt 0 -and $result.Items) { $items = $result.Items }
                 }
-
+                #filter $items so we only get albums
+                if ($searchType -eq 'All' -or $searchType -eq 'Album') {
+                    $items = $items | Where-Object { 
+                        ($_ -and $_.PSObject.Properties.Match('AlbumType').Count -gt 0 -and ($_.AlbumType -eq 'album') -or
+                        ($_ -and $_.PSObject.Properties.Match('album_type').Count -gt 0 -and ($_.album_type -eq 'album')))
+                    }
+                }
                 # Keep inner-result scanning isolated so we can return immediately on high-confidence match
                 foreach ($i in $items) {
+
                     try {
                         # Album name (robust to Name/name)
                         $name = if ($i.PSObject.Properties.Match('Name').Count) { [string]$i.Name }
@@ -87,7 +127,7 @@ function Get-SpotifyAlbumMatches {
                         if ([string]::IsNullOrWhiteSpace($name)) { continue }
 
                         # Normalize Spotify album name minimally (keep for similarity)
-                        $normalizedSpotifyName = $name
+                        $normalizedSpotifyName = Remove-EditionSuffix $name $AlbumName
 
                         # Build artists array robustly (handles single artist or array of objects)
                         $artists = @()
@@ -192,33 +232,59 @@ function Get-SpotifyAlbumMatches {
                             # else: fall through to combined scoring below
                         }
 
-                        # If we didn't compute albumScore earlier, compute it now
-                        if (-not ($PSBoundParameters.ContainsKey('albumScore')) -and -not ($null -ne $albumScore)) {
-                            try {
-                                $albumScore = Get-StringSimilarity -String1 $AlbumName -String2 $normalizedSpotifyName
-                            }
-                            catch {
-                                Write-Verbose "Get-StringSimilarity failed for album: $_"
-                                $albumScore = 0.0
-                            }
-                        }
+                        # Use partial token set similarity for album name
+                        $albumScore = Get-PartialTokenSetSimilarity $AlbumName $normalizedSpotifyName
+                        # Also compute token set similarity for diagnostics
+                        $tokenSetScore = Get-TokenSetSimilarity $AlbumName $normalizedSpotifyName
 
-                        # Conductor/performer boost (kept additive)
+
+                        # Only apply conductor/performer boost if artistScore is strong
                         $conductorBoost = 0.0
-                        $albumWords = $AlbumName -split '\s+' | Where-Object { $_.Length -gt 3 }
-                        foreach ($artistObj in $artists) {
-                            $aName = $artistObj.Name
-                            foreach ($w in $albumWords) {
-                                if ($aName -like "*$w*") {
-                                    $conductorBoost += 0.3
-                                    break
+                        if ($artistScore -ge 0.7) {
+                            $albumWords = $AlbumName -split '\s+' | Where-Object { $_.Length -gt 3 }
+                            foreach ($artistObj in $artists) {
+                                $aName = $artistObj.Name
+                                foreach ($w in $albumWords) {
+                                    if ($aName -like "*$w*") {
+                                        $conductorBoost += 0.3
+                                        break
+                                    }
                                 }
                             }
                         }
 
-                        # Combined score and clamps
+
+                        # Query specificity boost: if the query contains both artist and album, and both match strongly, add a bigger boost
+                        $hasArtistInQuery = $false
+                        $hasAlbumInQuery = $false
+                        if ($ArtistName) {
+                            try {
+                                $hasArtistInQuery = $searchQuery -match [regex]::Escape($ArtistName)
+                            } catch {}
+                        }
+                        if ($AlbumName) {
+                            try {
+                                $hasAlbumInQuery = $searchQuery -match [regex]::Escape($AlbumName)
+                            } catch {}
+                        }
+
                         $combinedScore = [double](($albumScore * $AlbumWeight) + ($artistScore * $ArtistWeight) + $conductorBoost)
+
+                        # Stronger boost for highly specific query and strong match
+                        if ($hasArtistInQuery -and $hasAlbumInQuery -and $artistScore -ge 0.9 -and $albumScore -ge 0.9) {
+                            $combinedScore += 0.6
+                        }
+                        # Penalize if query is for both but artist match is weak
+                        if ($hasArtistInQuery -and $hasAlbumInQuery -and $artistScore -lt 0.5) {
+                            $combinedScore -= 0.2
+                        }
+                        # Penalize weak album matches for specific queries
+                        if ($hasArtistInQuery -and $hasAlbumInQuery -and $albumScore -lt 0.7) {
+                            $combinedScore -= 0.3
+                        }
+                        # Clamp
                         if ($combinedScore -gt 1.0) { $combinedScore = 1.0 }
+                        if ($combinedScore -lt 0) { $combinedScore = 0 }
 
                         $ReleaseDate = if ($i.PSObject.Properties.Match('ReleaseDate').Count) { [string]$i.ReleaseDate }
                         elseif ($i.PSObject.Properties.Match('release_date').Count) { [string]$i.release_date }
@@ -232,6 +298,7 @@ function Get-SpotifyAlbumMatches {
                         $albumResult = [PSCustomObject]@{
                             AlbumName      = $name
                             AlbumScore     = [double]$albumScore
+                            TokenSetScore  = [double]$tokenSetScore
                             ArtistScore    = [double]$artistScore
                             ConductorBoost = [double]$conductorBoost
                             Score          = [double]$combinedScore
@@ -251,6 +318,7 @@ function Get-SpotifyAlbumMatches {
                         else { $allResults | Where-Object { $_.AlbumName -eq $name -and ( ($_.Artists | ForEach-Object { $_.Name }) -join ' & ' ) -eq $artistString } }
 
                         if (-not $existing) {
+                            $queryScore= Get-StringSimilarity -String1 $searchQuery -String2 $( $artistString+" "+$name)
                             $allResults += $albumResult
                         }
                         else {
@@ -267,7 +335,7 @@ function Get-SpotifyAlbumMatches {
                 }
 
                 # After processing items, check if we already have enough good results to stop
-                $goodResults = $allResults | Where-Object { $_.Score -ge 0.8 }
+                $goodResults = $allResults | Where-Object { $_.Score -ge 0.7 }
                 if ($goodResults.Count -ge $Top) {
                     Write-Verbose "Found enough good results, stopping search"
                     break

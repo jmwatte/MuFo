@@ -223,8 +223,8 @@ function Get-AudioFileTags {
                     Write-Verbose "Skipping large file: $(Split-Path $file -Leaf) ($([math]::Round($fileInfo.Length / 1MB, 1)) MB)"
                     continue
                 }
-                
-                $fileObj = $null
+                $fileObj = [TagLib.File]::Create($file)
+                #$fileObj = $null
                 try {
                     $tag = $fileObj.Tag
                     $properties = $fileObj.Properties

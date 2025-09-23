@@ -194,7 +194,7 @@ function Set-AudioFileTags {
                 # Check if title is missing or obviously wrong
                 if ([string]::IsNullOrWhiteSpace($tag.Title)) {
                     $needsTitleFix = $true
-                } elseif ($tag.Title -like "*test*" -or $tag.Title -like "*missing*" -or $tag.Title -eq [System.IO.Path]::GetFileNameWithoutExtension($track.FileName)) {
+                } elseif ($tag.Title -eq [System.IO.Path]::GetFileNameWithoutExtension($track.FileName)) {
                     # Title looks like a placeholder or just the filename
                     $needsTitleFix = $true
                 }
@@ -358,7 +358,18 @@ function Set-AudioFileTags {
             # Fill missing or correct artist information (separate track vs album artists)
             $suggestedArtist = $null
             $suggestedAlbumArtist = $null
-            
+            # Fetch album tracks if not already available in SpotifyAlbum
+            if ($SpotifyAlbum -and -not $SpotifyAlbum.tracks) {
+                try {
+                    $albumTracks = Get-AlbumTracks -Id $SpotifyAlbum.id
+                    # Assume Get-AlbumTracks returns an array of track objects
+                    $SpotifyAlbum | Add-Member -MemberType NoteProperty -Name tracks -Value @{ items = $albumTracks }
+                    $SpotifyAlbum.tracks = @{ items = $albumTracks }
+                    Write-Verbose "Fetched $($albumTracks.Count) tracks for album '$($SpotifyAlbum.name)'"
+                } catch {
+                    Write-Verbose "Could not fetch album tracks: $($_.Exception.Message)"
+                }
+            }
             # Get track-specific artist from Spotify track data first
             if ($SpotifyAlbum -and $SpotifyAlbum.tracks -and $SpotifyAlbum.tracks.items -and $track.Track -gt 0) {
                 $spotifyTrack = $SpotifyAlbum.tracks.items | Where-Object { $_.track_number -eq $track.Track }
