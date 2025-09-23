@@ -1,0 +1,33 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug MuFo WhatIf",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": "${workspaceFolder}/debug/debug-mufo-whatif.ps1",
+            "cwd": "${workspaceFolder}",
+            "createTemporaryIntegratedConsole": true
+        },
+        {
+            "name": "Debug Current PowerShell File",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": "${file}",
+            "cwd": "${workspaceFolder}",
+            "createTemporaryIntegratedConsole": true
+        },
+        {
+            "name": "Debug MuFo Module",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": "${workspaceFolder}/MuFo.psm1",
+            "cwd": "${workspaceFolder}",
+            "createTemporaryIntegratedConsole": true,
+            "args": [
+                "-Command",
+                "Import-Module '${workspaceFolder}/MuFo.psd1' -Force; Write-Host 'MuFo module loaded. Ready for debugging.'"
+            ]
+        }
+    ]
+}

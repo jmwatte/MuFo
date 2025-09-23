@@ -32,11 +32,14 @@ function Get-SpotifyAlbumMatches {
     
     # Add fallback strategies if we have artist name
     if ($ArtistName) {
+
+ # Strategy 3: Simple artist + album without prefixes
+        $searchQueries += "$ArtistName $AlbumName"
+
         # Strategy 2: Direct album name search (like manual Spotify search)
         $searchQueries += "`"$AlbumName`""
         
-        # Strategy 3: Simple artist + album without prefixes
-        $searchQueries += "$ArtistName $AlbumName"
+       
         
         # Strategy 4: Your successful pattern - artist + year + full album name
         if ($Year) {
@@ -66,13 +69,13 @@ function Get-SpotifyAlbumMatches {
                             elseif ($page.PSObject.Properties.Match('Items').Count -gt 0 -and $page.Items) { $items += $page.Items }
                         }
                     } else {
-                        if ($result.PSObject.Properties.Match('Albums').Count -gt 0 -and $result.Albums -and $result.Albums.Items) { $items = $result.Albums.Items }
+                        if ($result.PSObject.Properties.Match('Albums').Count -gt 0 -and $result.Albums -and $result.Albums.Items) { $items = $result.Albums.Items |?{ $_."album_type" -eq 'album'} }
                         elseif ($result.PSObject.Properties.Match('Items').Count -gt 0 -and $result.Items) { $items = $result.Items }
                     }
                 } else {
                     # For 'All' search type, extract albums
                     if ($result.PSObject.Properties.Match('Albums').Count -gt 0 -and $result.Albums -and $result.Albums.Items) {
-                        $items = $result.Albums.Items
+                        $items = $result.Albums.Items |?{ $_."album_type" -eq 'album'}
                     }
                 }
             
@@ -82,7 +85,7 @@ function Get-SpotifyAlbumMatches {
                     if ([string]::IsNullOrWhiteSpace($name)) { continue }
                     
                     # Check if this is an Arvo Pärt album (for direct searches that return many results)
-                    $isArvoPart = $false
+                   <#  $isArvoPart = $false
                     if ($ArtistName -and $i.PSObject.Properties.Match('Artists').Count -gt 0 -and $i.Artists) {
                         foreach ($artist in $i.Artists) {
                             $artistName = if ($artist.PSObject.Properties.Match('Name').Count) { [string]$artist.Name } else { $null }
@@ -95,14 +98,14 @@ function Get-SpotifyAlbumMatches {
                         if ($searchQuery -eq "`"$AlbumName`"" -or $searchQuery -eq $AlbumName) {
                             if (-not $isArvoPart) { continue }
                         }
-                    }
+                    } #>
                     
                     # Normalize album name by removing common artist prefixes for better matching
                     $normalizedSpotifyName = $name
                     # Remove "Artist: " or "Artist - " prefixes
-                    $normalizedSpotifyName = $normalizedSpotifyName -replace '^[^:]+:\s*', '' -replace '^[^-]+\s*-\s*', ''
+                    #$normalizedSpotifyName = $normalizedSpotifyName -replace '^[^:]+:\s*', '' -replace '^[^-]+\s*-\s*', ''
                     # Remove common classical music prefixes like "Pärt: "
-                    $normalizedSpotifyName = $normalizedSpotifyName -replace '^(Pärt|Part|Arvo Pärt|Arvo Part):\s*', ''
+                   # $normalizedSpotifyName = $normalizedSpotifyName -replace '^(Pärt|Part|Arvo Pärt|Arvo Part):\s*', ''
                     
                     $score = Get-StringSimilarity -String1 $AlbumName -String2 $normalizedSpotifyName
                     

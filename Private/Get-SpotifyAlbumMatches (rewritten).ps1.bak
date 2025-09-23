@@ -1,0 +1,299 @@
+function Get-SpotifyAlbumMatches {
+<#
+.SYNOPSIS
+  Spotify album search with strong album-token gating, artist gating, and targeted boosts.
+  Returns albums only (album_type=album). Falls back to a relaxed pass if strict gating yields no results.
+
+.DESCRIPTION
+  - De-duplicated multi-query strategy (Album and All).
+  - Filters out non-album items (e.g., singles).
+  - Strict pass: requires reasonable overlap between AlbumName tokens and candidate title tokens to avoid decoys,
+    and a minimal artist match if ArtistName is supplied.
+  - If strict pass yields zero results, a relaxed pass runs with lower token/artist thresholds and returns best candidates.
+  - Applies boosts for exact/phrase matches and strong artist similarity.
+  - Year is a small positive-only bonus (no penalty on mismatch).
+#>
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory)][string]$Query,
+    [Parameter(Mandatory)][string]$AlbumName,
+    [string]$ArtistName,
+    [string]$Year,
+    [int]$Top = 5,
+    [double]$MinScore = 0.6
+  )
+
+  function Add-Query([string]$q, [ref]$bag, [hashtable]$seen) {
+    if ([string]::IsNullOrWhiteSpace($q)) { return }
+    $key = $q.Trim()
+    if (-not $seen.ContainsKey($key)) { $bag.Value += $key; $seen[$key] = $true }
+  }
+
+  function Get-Prop($obj, [string]$name) {
+    if ($null -eq $obj) { return $null }
+    $p = $obj.PSObject.Properties.Match($name)
+    if ($p.Count -gt 0) { return $p[0].Value }
+    $p2 = $obj.PSObject.Properties.Match($name.ToLowerInvariant())
+    if ($p2.Count -gt 0) { return $p2[0].Value }
+    return $null
+  }
+
+  function Clamp([double]$v, [double]$lo, [double]$hi) {
+    if ($v -lt $lo) { return $lo }
+    if ($v -gt $hi) { return $hi }
+    return $v
+  }
+
+  # Token helpers
+  function Get-Tokens([string]$s) {
+    if ([string]::IsNullOrWhiteSpace($s)) { return @() }
+    return ($s -split '[^\p{L}\p{Nd}]+' |
+      Where-Object { $_.Length -ge 3 } |
+      ForEach-Object { $_.ToLowerInvariant() })
+  }
+  $albumTokens = Get-Tokens $AlbumName
+
+  # Strict gating thresholds
+  $strictTokenRecallMin = 0.5     # e.g., for "Planet Rock", expect both tokens ideally
+  $strictArtistMin      = 0.55    # modest artist match to avoid decoys
+
+  # Relaxed fallback thresholds (only used if strict yields no results)
+  $relaxedTokenRecallMin = 0.25
+  $relaxedArtistMin      = 0.35
+  $relaxedMinScore       = [double][math]::Max($MinScore * 0.75, 0.45)
+
+  # Build query variants
+  $searchQueries = @(); $seen = @{}
+  Add-Query -q $Query -bag ([ref]$searchQueries) -seen $seen
+
+  $albumQuoted  = if ($AlbumName) { '"{0}"' -f $AlbumName } else { $null }
+  $artistQuoted = if ($ArtistName) { '"{0}"' -f $ArtistName } else { $null }
+
+  if ($ArtistName -and $AlbumName -and $Year) {
+    Add-Query -q ('artist:{0} album:{1} year:{2}' -f $artistQuoted, $albumQuoted, $Year) -bag ([ref]$searchQueries) -seen $seen
+    Add-Query -q ('{0} {1} {2}' -f $albumQuoted, $artistQuoted, $Year) -bag ([ref]$searchQueries) -seen $seen
+  }
+  if ($ArtistName -and $AlbumName) {
+    Add-Query -q ('artist:{0} album:{1}' -f $artistQuoted, $albumQuoted) -bag ([ref]$searchQueries) -seen $seen
+    Add-Query -q ('{0} {1}' -f $albumQuoted, $artistQuoted) -bag ([ref]$searchQueries) -seen $seen
+    Add-Query -q ('{0} {1}' -f $ArtistName, $AlbumName) -bag ([ref]$searchQueries) -seen $seen
+  }
+  if ($ArtistName -and $AlbumName -and $Year) {
+    Add-Query -q ('{0} {1} - {2}' -f $ArtistName, $Year, $AlbumName) -bag ([ref]$searchQueries) -seen $seen
+  }
+  if ($AlbumName) {
+    Add-Query -q $albumQuoted -bag ([ref]$searchQueries) -seen $seen
+    Add-Query -q $AlbumName -bag ([ref]$searchQueries) -seen $seen
+  }
+  # Cleaned combo
+  $cleanAlbum  = ($AlbumName  -replace '[^\w\s]', '' -replace '\s+', ' ').Trim()
+  $cleanArtist = ($ArtistName -replace '[^\w\s]', '' -replace '\s+', ' ').Trim()
+  if ($ArtistName -and $AlbumName) {
+    Add-Query -q ("$cleanAlbum $cleanArtist") -bag ([ref]$searchQueries) -seen $seen
+  }
+
+  Write-Verbose ("Query variants: {0}" -f ($searchQueries -join ' || '))
+
+  $resultsById = @{}
+  $allResults = New-Object System.Collections.Generic.List[object]
+  $relaxPool  = New-Object System.Collections.Generic.List[object]
+  $skipStats  = [ordered]@{ TokenGate=0; ArtistGate=0; Parse=0; NonAlbum=0 }
+  $searchTypes = @('Album', 'All')
+
+  foreach ($searchQuery in $searchQueries) {
+    foreach ($searchType in $searchTypes) {
+      try {
+        Write-Verbose ("Search-Item {0} query: '{1}'" -f $searchType, $searchQuery)
+        $result = Search-Item -Type $searchType -Query $searchQuery -ErrorAction Stop
+        if ($null -eq $result) { continue }
+
+        # Extract items
+        $items = @()
+        if ($searchType -eq 'Album') {
+          if ($result -is [System.Array]) {
+            foreach ($page in $result) {
+              $albums = Get-Prop $page 'Albums'
+              $itemsProp = if ($albums) { Get-Prop $albums 'Items' } else { Get-Prop $page 'Items' }
+              if ($itemsProp) { $items += $itemsProp }
+            }
+          } else {
+            $albums = Get-Prop $result 'Albums'
+            $items  = if ($albums) { Get-Prop $albums 'Items' } else { Get-Prop $result 'Items' }
+          }
+        } else {
+          $albumsAll = Get-Prop $result 'Albums'
+          $items     = if ($albumsAll) { Get-Prop $albumsAll 'Items' } else { @() }
+        }
+        if (-not $items) { continue }
+
+        foreach ($i in $items) {
+          try {
+            $id   = Get-Prop $i 'Id'
+            $name = [string](Get-Prop $i 'Name')
+            if ([string]::IsNullOrWhiteSpace($name)) { continue }
+
+            # albums only
+            $albumType = [string](Get-Prop $i 'AlbumType'); if (-not $albumType) { $albumType = [string](Get-Prop $i 'album_type') }
+            if ($albumType -and ($albumType -ne 'album')) { $skipStats.NonAlbum++; continue }
+
+            # Normalize name for comparison
+            $normalized = $name
+            $normalized = $normalized -replace '^[^:]{2,40}:\s*', ''
+            $normalized = $normalized -replace '^[^-]{2,40}\s*-\s*', ''
+            $candTokens = Get-Tokens $normalized
+
+            # Token recall (how much of AlbumName tokens appear in candidate)
+            $tokenRecall = 0.0
+            if ($albumTokens.Count -gt 0) {
+              $hits = 0
+              foreach ($t in $albumTokens) { if ($candTokens -contains $t) { $hits++ } }
+              $tokenRecall = $hits / $albumTokens.Count
+            }
+
+            # Artists and best artist similarity
+            $artists = @()
+            $bestArtistScore = 0.0
+            $iArtists = Get-Prop $i 'Artists'
+            if ($iArtists) {
+              foreach ($a in $iArtists) {
+                $an  = [string](Get-Prop $a 'Name')
+                $aid = [string](Get-Prop $a 'Id')
+                if ($an) { $artists += [PSCustomObject]@{ Name=$an; Id=$aid } }
+                if ($ArtistName -and $an) {
+                  $as = Get-StringSimilarity -String1 $ArtistName -String2 $an
+                  if ($as -gt $bestArtistScore) { $bestArtistScore = $as }
+                }
+              }
+            }
+
+            # Album similarity
+            $albumScore = if ($AlbumName) { Get-StringSimilarity -String1 $AlbumName -String2 $normalized } else { 0.0 }
+
+            # Base combine
+            $finalScore = if ($ArtistName) { (0.7 * $albumScore) + (0.3 * $bestArtistScore) } else { $albumScore }
+
+            # Boosts
+            if ($albumTokens.Count -gt 0 -and $tokenRecall -ge 1.0) { $finalScore += 0.20 }
+            $normA = ($AlbumName -replace '[^\p{L}\p{Nd}\s-]', '').Trim().ToLowerInvariant()
+            $normB = ($normalized -replace '[^\p{L}\p{Nd}\s-]', '').Trim().ToLowerInvariant()
+            if ($normA -and $normB -and $normA -eq $normB) { $finalScore += 0.40 }
+            if ($normB -and $normA -and $normB.StartsWith($normA)) { $finalScore += 0.10 }
+            if ($bestArtistScore -ge 0.85) { $finalScore += 0.10 }
+
+            # Year small bonus
+            $releaseDate = [string](Get-Prop $i 'ReleaseDate'); if (-not $releaseDate) { $releaseDate = [string](Get-Prop $i 'release_date') }
+            if ($Year -and $releaseDate -and $releaseDate.StartsWith([string]$Year)) { $finalScore += 0.05 }
+
+            # Clamp to [0,1]
+            $finalScore = Clamp $finalScore 0.0 1.0
+
+            # Decide strict gating pass
+            $passesToken = ($albumTokens.Count -eq 0) -or ($tokenRecall -ge $strictTokenRecallMin)
+            $passesArtist = (-not $ArtistName) -or ($bestArtistScore -ge $strictArtistMin)
+
+            $obj = [PSCustomObject]@{
+              AlbumName       = $name
+              Score           = [double]$finalScore
+              Artists         = $artists
+              ReleaseDate     = $releaseDate
+              AlbumType       = $albumType
+              Item            = $i
+              Query           = $searchQuery
+              TokenRecall     = [double]$tokenRecall
+              BestArtistScore = [double]$bestArtistScore
+              Phase           = 'strict'
+            }
+
+            if ($passesToken -and $passesArtist) {
+              if ($id) {
+                if ($resultsById.ContainsKey($id)) {
+                  if ($obj.Score -gt $resultsById[$id].Score) { $resultsById[$id] = $obj }
+                } else {
+                  $resultsById[$id] = $obj
+                }
+              } else {
+                $allResults.Add($obj) | Out-Null
+              }
+            } else {
+              if (-not $passesToken) { $skipStats.TokenGate++ }
+              if (-not $passesArtist) { $skipStats.ArtistGate++ }
+              # Store for potential relaxed fallback
+              $relaxPool.Add($obj) | Out-Null
+            }
+          } catch {
+            $skipStats.Parse++
+            Write-Verbose ("  Skipped item due to parse/scoring error: {0}" -f $_.Exception.Message)
+          }
+        }
+
+        # Early-stop check (strict only)
+        $combined = @($resultsById.Values) + @($allResults.ToArray())
+        $good = $combined | Where-Object { $_.Score -ge [double][math]::Max($MinScore, 0.0) }
+        if (($good | Measure-Object).Count -ge [int][math]::Max($Top,1)) {
+          Write-Verbose "Early stop: collected >= $Top good results (strict)"
+          break
+        }
+      } catch {
+        Write-Verbose ("Album search failed for query '{0}' type '{1}': {2}" -f $searchQuery, $searchType, $_.Exception.Message)
+      }
+    }
+
+    # Early-stop after each query (strict only)
+    $combinedAfterQuery = @($resultsById.Values) + @($allResults.ToArray())
+    $goodAfterQuery = $combinedAfterQuery | Where-Object { $_.Score -ge [double][math]::Max($MinScore, 0.0) }
+    if (($goodAfterQuery | Measure-Object).Count -ge [int][math]::Max($Top,1)) {
+      Write-Verbose "Early stop after query: collected >= $Top good results (strict)"
+      break
+    }
+  }
+
+  # Final strict results
+  $finalStrict = @($resultsById.Values) + @($allResults.ToArray())
+  if ($finalStrict.Count -gt 0) {
+    if ($PSBoundParameters.Verbose) {
+      Write-Verbose ("Strict pass results: {0}, skips => TokenGate={1}, ArtistGate={2}, NonAlbum={3}, Parse={4}" -f $finalStrict.Count, $skipStats.TokenGate, $skipStats.ArtistGate, $skipStats.NonAlbum, $skipStats.Parse)
+    }
+    return ($finalStrict | Sort-Object -Property Score -Descending | Select-Object -First $Top)
+  }
+
+  # Relaxed fallback
+  if ($PSBoundParameters.Verbose) {
+    Write-Verbose ("Strict pass yielded 0 results. Falling back to relaxed thresholds: TokenRecall >= {0}, Artist >= {1}, MinScore >= {2}" -f $relaxedTokenRecallMin, $relaxedArtistMin, $relaxedMinScore)
+    Write-Verbose ("Skips in strict pass => TokenGate={0}, ArtistGate={1}, NonAlbum={2}, Parse={3}" -f $skipStats.TokenGate, $skipStats.ArtistGate, $skipStats.NonAlbum, $skipStats.Parse)
+  }
+
+  $relaxedById = @{}
+  $relaxedList = New-Object System.Collections.Generic.List[object]
+  foreach ($obj in $relaxPool) {
+    $passesTokenR = ($albumTokens.Count -eq 0) -or ($obj.TokenRecall -ge $relaxedTokenRecallMin)
+    $passesArtistR = (-not $ArtistName) -or ($obj.BestArtistScore -ge $relaxedArtistMin)
+    $passesScoreR  = ($obj.Score -ge $relaxedMinScore)
+    if ($passesTokenR -and $passesArtistR -and $passesScoreR) {
+      $copy = [PSCustomObject]@{
+        AlbumName       = $obj.AlbumName
+        Score           = $obj.Score
+        Artists         = $obj.Artists
+        ReleaseDate     = $obj.ReleaseDate
+        AlbumType       = $obj.AlbumType
+        Item            = $obj.Item
+        Query           = $obj.Query
+        TokenRecall     = $obj.TokenRecall
+        BestArtistScore = $obj.BestArtistScore
+        Phase           = 'relaxed'
+      }
+      $id = Get-Prop $obj.Item 'Id'
+      if ($id) {
+        if ($relaxedById.ContainsKey($id)) {
+          if ($copy.Score -gt $relaxedById[$id].Score) { $relaxedById[$id] = $copy }
+        } else {
+          $relaxedById[$id] = $copy
+        }
+      } else {
+        $relaxedList.Add($copy) | Out-Null
+      }
+    }
+  }
+
+  $finalRelaxed = @($relaxedById.Values) + @($relaxedList.ToArray())
+  $finalRelaxed | Sort-Object -Property Score -Descending | Select-Object -First $Top
+}
