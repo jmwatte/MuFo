@@ -843,6 +843,10 @@ function Invoke-MuFo {
                                 if ($objFull.SpotifyAlbumId) {
                                     Write-Host "Found at: https://open.spotify.com/album/$($objFull.SpotifyAlbumId)" -ForegroundColor Cyan
                                 }
+                                # Check if this album needs renaming and display message immediately
+                                if ([string]::Equals($objFull.LocalFolder, $objFull.NewFolderName, [StringComparison]::InvariantCultureIgnoreCase)) {
+                                    Write-NothingToRenameMessage
+                                }
                                 # Intentionally suppress verbose per-album UI line to avoid redundancy when objects are emitted.
                         }
 
@@ -876,17 +880,8 @@ function Invoke-MuFo {
                                     # If nothing to rename, check for equal-name cases and surface that clearly
                                     $equalCases = $albumComparisons | Where-Object { $_.ProposedName -and [string]::Equals($_.LocalAlbum, $_.ProposedName, [StringComparison]::InvariantCultureIgnoreCase) }
                                     if ($equalCases) {
-                                        foreach ($e in $equalCases) {
-                                            # Check if artist rename is suggested but this album doesn't need renaming
-                                            if ($artistRenameName -and $localArtist -cne $selectedArtist.Name) {
-                                                $reason = if (-not $Preview -and -not $WhatIfPreference) { 'No rename needed' } else { 'Whatif will rename' }
-                                                Write-AlbumNoRenameNeeded -LocalAlbum $e.LocalAlbum -LocalArtist $localArtist -SpotifyArtist $selectedArtist.Name -Reason $reason    
-                                            }
-                                            else {
-                                                Write-NothingToRenameMessage
-                                            }
-                                            Write-Verbose ("Nothing to Rename: LocalFolder '{0}' equals NewFolderName '{1}'" -f $e.LocalAlbum, $e.ProposedName)
-                                        }
+                                        # Individual "Nothing to Rename" messages are now displayed per album above
+                                        Write-Verbose ("Nothing to Rename: LocalFolder '{0}' equals NewFolderName '{1}'" -f $equalCases[0].LocalAlbum, $equalCases[0].ProposedName)
                                     }
                                     else {
                                         Write-WhatIfMessage -Message "No rename candidates at the current threshold."
