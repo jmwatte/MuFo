@@ -55,16 +55,22 @@ function Write-RenameOperation {
 .PARAMETER RenameMap
     Hashtable of rename operations (source -> target).
 
-.PARAMETER Title
-    Title to display for the rename section.
+.PARAMETER Mode
+    The mode of operation ('WhatIf', 'Performed', etc.) to determine the title.
 #>
     param(
         [hashtable]$RenameMap,
-        [string]$Title = "WhatIf: Performing Rename Operation"
+        [string]$Mode = 'WhatIf'
     )
 
+    $title = switch ($Mode) {
+        'WhatIf' { 'WhatIf: Performing Rename Operation' }
+        'Performed' { 'Performed: Rename Operation' }
+        default { "$Mode`: Performing Rename Operation" }
+    }
+
     if ($RenameMap.Count -gt 0) {
-        Write-Host $Title -ForegroundColor DarkYellow
+        Write-Host $title -ForegroundColor DarkYellow
         foreach ($kv in $RenameMap.GetEnumerator()) {
             Write-Host "Name  : " -ForegroundColor Green -NoNewline; Write-Host $kv.Key
             Write-Host "Value : " -ForegroundColor Green -NoNewline; Write-Host $kv.Value

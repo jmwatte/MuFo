@@ -62,7 +62,7 @@ function Get-MuFoTrackArtistRecommendation {
     
     # Logic 4: Different artists entirely (collaboration or remix)
     $recommendation = $TrackArtists -join ' & '
-    Write-Host "   → DIFFERENT: '$recommendation'" -ForegroundColor Orange
+    Write-Host "   → DIFFERENT: '$recommendation'" -ForegroundColor DarkYellow
     return @{
         Artist = $recommendation
         Type = "Different"

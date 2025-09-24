@@ -759,6 +759,7 @@ function Invoke-MuFo {
                                 Decision      = $decision
                                 Reason        = $reason
                                 SpotifyAlbumObject = if ($IncludeSpotifyObjects -and $c.MatchedItem -and $c.MatchedItem.Item) { $c.MatchedItem.Item } else { $null }
+                                SpotifyAlbumId = if ($c.MatchedItem -and $c.MatchedItem.Item -and $c.MatchedItem.Item.id) { $c.MatchedItem.Item.id } else { $null }
                             }
                             if ($IncludeTracks) {
                                 $rec['TrackCountLocal'] = $c.TrackCountLocal
@@ -787,6 +788,10 @@ function Invoke-MuFo {
                                 }
                                 else {
                                 	Write-Output $objFull
+                                }
+                                # Add Spotify webpage link if available
+                                if ($objFull.SpotifyAlbumId) {
+                                    Write-Host "Found at: https://open.spotify.com/album/$($objFull.SpotifyAlbumId)" -ForegroundColor Cyan
                                 }
                                 # Intentionally suppress verbose per-album UI line to avoid redundancy when objects are emitted.
                         }

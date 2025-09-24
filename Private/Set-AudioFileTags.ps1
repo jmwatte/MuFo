@@ -132,19 +132,58 @@ function Set-AudioFileTags {
         ExpectedTracks = if ($SpotifyAlbum -and $SpotifyAlbum.total_tracks) { $SpotifyAlbum.total_tracks } else { $existingTags.Count }
     }
     
+    # Fetch album tracks early so we can check for actual track artist changes
+    if ($SpotifyAlbum -and 'TrackArtists' -in $tagsToFix -and -not $SpotifyAlbum.tracks) {
+        try {
+            $albumTracks = Get-AlbumTracks -Id $SpotifyAlbum.id
+            $SpotifyAlbum | Add-Member -MemberType NoteProperty -Name tracks -Value @{ items = $albumTracks } -Force
+            Write-Verbose "Fetched $($albumTracks.Count) tracks for album '$($SpotifyAlbum.name)' for change detection"
+        } catch {
+            Write-Verbose "Could not fetch album tracks for change detection: $($_.Exception.Message)"
+        }
+    }
+    
     # Detect if this might be a compilation album (Various Artists scenario)
     $artistVariations = $existingTags | Where-Object { $_.Artist -and $_.Artist -ne '' } | Group-Object Artist
     $isLikelyCompilation = $artistVariations.Count -gt ($existingTags.Count * 0.5) -or 
                           ($albumAnalysis.ArtistName -match "(?i)(various|compilation|mixed|soundtrack)")
     
-    # Smart warnings for TrackArtist changes
-    if ('TrackArtists' -in $tagsToFix -and $artistVariations.Count -gt 1) {
-        Write-Warning "Track artist changes detected for album with multiple performers. This may overwrite performer credits."
-        Write-Host "  Current track artists: $($artistVariations.Name -join ', ')" -ForegroundColor Yellow
-        if ($isLikelyCompilation) {
-            Write-Host "  💡 Consider using -DontFix 'TrackArtists' for compilation albums" -ForegroundColor Cyan
+    # Check if any track artists will actually be changed
+    $tracksWithArtistChanges = 0
+    if ('TrackArtists' -in $tagsToFix) {
+        foreach ($track in $existingTags) {
+            $suggestedArtist = $null
+            # Get track-specific artist from Spotify track data first
+            if ($SpotifyAlbum -and $SpotifyAlbum.tracks -and $SpotifyAlbum.tracks.items -and $track.Track -gt 0) {
+                $spotifyTrack = $SpotifyAlbum.tracks.items | Where-Object { $_.track_number -eq $track.Track }
+                if ($spotifyTrack -and $spotifyTrack.artists -and $spotifyTrack.artists.Count -gt 0) {
+                    $trackArtistNames = $spotifyTrack.artists | ForEach-Object { $_.name }
+                    $suggestedArtist = $trackArtistNames -join ', '
+                }
+            }
+            
+            # Fall back to album artist for track artist if no track-specific data found
+            if (-not $suggestedArtist -and $SpotifyAlbum -and $SpotifyAlbum.artists -and $SpotifyAlbum.artists.Count -gt 0) {
+                $albumArtistNames = $SpotifyAlbum.artists | ForEach-Object { $_.name }
+                $suggestedArtist = $albumArtistNames -join ', '
+            }
+            
+            if ($suggestedArtist -and $suggestedArtist -ne $track.Artist) {
+                $tracksWithArtistChanges++
+            }
         }
     }
+    
+    # Smart warnings for TrackArtist changes - only if there are actual changes pending
+    # Disabled warning as it was showing even when no changes were needed
+    # if ('TrackArtists' -in $tagsToFix -and $tracksWithArtistChanges -gt 0) {
+    #     Write-Warning "Track artist changes detected for album with multiple performers. This may overwrite performer credits."
+    #     Write-Host "  Current track artists: $($artistVariations.Name -join ', ')" -ForegroundColor Yellow
+    #     Write-Host "  Tracks that will be updated: $tracksWithArtistChanges" -ForegroundColor Yellow
+    #     if ($isLikelyCompilation) {
+    #         Write-Host "  💡 Consider using -DontFix 'TrackArtists' for compilation albums" -ForegroundColor Cyan
+    #     }
+    # }
     
     Write-Host "Album Analysis:" -ForegroundColor Cyan
     Write-Host "  Album: $($albumAnalysis.AlbumName)" -ForegroundColor Gray
@@ -397,21 +436,29 @@ function Set-AudioFileTags {
             $needsAlbumArtistFix = [string]::IsNullOrWhiteSpace($track.AlbumArtist) -or $track.AlbumArtist.Length -le 2
             
             # Handle TrackArtists (individual track performers)
-            if ('TrackArtists' -in $tagsToFix -and $needsTrackArtistFix -and $suggestedArtist) {
+            if ('TrackArtists' -in $tagsToFix -and $suggestedArtist -and $suggestedArtist -ne $track.Artist) {
                 if (-not $WhatIfPreference) {
                     $tag.Performers = @($suggestedArtist)
                 }
                 $changesMadeToFile = $true
-                $changes += "TrackArtist: '$suggestedArtist'"
+                if ($needsTrackArtistFix) {
+                    $changes += "TrackArtist: '$suggestedArtist'"
+                } else {
+                    $changes += "TrackArtist: '$suggestedArtist' (was: '$($track.Artist)')"
+                }
             }
             
             # Handle AlbumArtists (album-level artist - default behavior)
-            if ('AlbumArtists' -in $tagsToFix -and $needsAlbumArtistFix -and $suggestedAlbumArtist) {
+            if ('AlbumArtists' -in $tagsToFix -and $suggestedAlbumArtist -and $suggestedAlbumArtist -ne $track.AlbumArtist) {
                 if (-not $WhatIfPreference) {
                     $tag.AlbumArtists = @($suggestedAlbumArtist)
                 }
                 $changesMadeToFile = $true
-                $changes += "AlbumArtist: '$suggestedAlbumArtist'"
+                if ($needsAlbumArtistFix) {
+                    $changes += "AlbumArtist: '$suggestedAlbumArtist'"
+                } else {
+                    $changes += "AlbumArtist: '$suggestedAlbumArtist' (was: '$($track.AlbumArtist)')"
+                }
             }
             
             # Optimize classical music tags
