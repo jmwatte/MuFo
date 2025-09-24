@@ -53,6 +53,9 @@ function Get-AudioFileTags {
     begin {
         # Supported audio file extensions
         $supportedExtensions = @('.mp3', '.flac', '.m4a', '.ogg', '.wav', '.wma')
+        
+        # Extensions that should be skipped without warning
+        $excludedExtensions = @('.dll', '.exe', '.pdb', '.xml', '.config', '.json', '.txt', '.md', '.ps1', '.psm1')
 
         # Check for TagLib-Sharp and offer installation if missing
         $tagLibLoaded = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -like '*TagLib*' }
@@ -161,14 +164,17 @@ function Get-AudioFileTags {
         if (Test-Path -LiteralPath $Path -PathType Leaf) {
             # Single file - validate it's an audio file
             $fileExtension = [System.IO.Path]::GetExtension($Path).ToLower()
-            if ($supportedExtensions -contains $fileExtension) {
+            if ($excludedExtensions -contains $fileExtension) {
+                Write-Verbose "Skipping non-audio file: $(Split-Path $Path -Leaf)"
+                return @()
+            } elseif ($supportedExtensions -contains $fileExtension) {
                 $files = @($Path)
             } else {
                 Write-Warning "File '$Path' is not a supported audio format"
                 return @()
             }
         } elseif (Test-Path -LiteralPath $Path -PathType Container) {
-            # Directory - scan for audio files, excluding system/library folders
+            # Directory - scan for audio files, excluding system/library folders and non-audio files
             $files = Get-ChildItem -LiteralPath $Path -File | 
                      Where-Object { 
                          $_.Extension.ToLower() -in $supportedExtensions -and
