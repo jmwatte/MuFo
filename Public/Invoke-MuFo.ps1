@@ -844,10 +844,6 @@ function Invoke-MuFo {
                                 if ($objFull.SpotifyAlbumId) {
                                     Write-Host "Found at: https://open.spotify.com/album/$($objFull.SpotifyAlbumId)" -ForegroundColor Cyan
                                 }
-                                # Print "Nothing to Rename" message immediately after album details if names match
-                                if ($c.ProposedName -and [string]::Equals($c.LocalAlbum, $c.ProposedName, [StringComparison]::InvariantCultureIgnoreCase)) {
-                                    Write-NothingToRenameMessage
-                                }
                                 # Intentionally suppress verbose per-album UI line to avoid redundancy when objects are emitted.
                         }
 
