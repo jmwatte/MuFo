@@ -41,15 +41,18 @@ This document consolidates the implementation tracking for major MuFo features, 
   - Multiple audio format support
 - **Status**: Fully implemented with comprehensive capabilities
 
-### **8. Various Artists Compilation Handling** ✅ **COMPLETE** ⭐ **NEW**
+### **8. Various Artists Compilation Handling** ✅ **COMPLETE** ⭐ **ENHANCED Sept 2025**
 - **Issue**: "Various Artists" folders were incorrectly matched to individual artists like "Van Morrison"
-- **Fix**: Added special handling for compilation albums with synthetic Various Artists artist object
+- **Root Cause**: Compilation albums filtered out by album type check (`album_type != 'album'`)
+- **Fix**: Enhanced compilation search with multiple query patterns and album type filtering
 - **Features**:
   - Detects "Various Artists" as compilation scenario, not individual artist
   - Creates synthetic artist object to maintain compatibility with existing code
-  - Searches for compilation albums using `tag:compilation` queries
-  - Tiered search strategy: compilation-specific → general album search
+  - **NEW**: Tiered search strategy prioritizing "various artists" queries (user's working pattern)
+  - **NEW**: Includes compilation albums in search results (`album_type: 'compilation'`)
+  - Searches for compilation albums using `tag:compilation` and direct "various artists" queries
   - Prevents wrong-artist matches for compilation collections
+  - Year matching bonuses for accurate release identification
 - **Status**: ✅ **Production-ready** - Resolves critical issue with compilation album matching
 
 ## 🔄 **ONGOING DEVELOPMENT**
