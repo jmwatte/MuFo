@@ -194,7 +194,8 @@ function Set-AudioFileTags {
     Write-Host "  Album: $($albumAnalysis.AlbumName)" -ForegroundColor Gray
     Write-Host "  Artist: $($albumAnalysis.ArtistName)" -ForegroundColor Gray
     Write-Host "  Tracks Found: $($existingTags.Count) / " -ForegroundColor Gray -NoNewline
-    Write-Host "Expected: $($albumAnalysis.ExpectedTracks)" -ForegroundColor Red
+    $expectedColor = if ($existingTags.Count -ne $albumAnalysis.ExpectedTracks) { 'Red' } else { 'Gray' }
+    Write-Host "Expected: $($albumAnalysis.ExpectedTracks)" -ForegroundColor $expectedColor
     
     # Validate completeness if requested
     if ($ValidateCompleteness) {
