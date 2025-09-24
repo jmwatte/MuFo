@@ -87,6 +87,10 @@ function Invoke-MuFo {
     Check for missing tracks, duplicates, and collection issues (works with -IncludeTracks).
     Compares local tracks against complete Spotify album to identify gaps.
 
+.PARAMETER CreateMissingFilesLog
+    Create log files listing missing tracks when completeness validation finds gaps.
+    Generates timestamped log files in the current directory for each album with missing tracks.
+
 .PARAMETER ValidateDurations
     Enable duration validation when matching albums and tracks. Compares track lengths between local files
     and Spotify data to improve matching accuracy and detect potential order issues.
@@ -268,6 +272,9 @@ function Invoke-MuFo {
 
         [Parameter(Mandatory = $false)]
         [switch]$ValidateCompleteness,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$CreateMissingFilesLog,
 
         [Parameter(Mandatory = $false)]
         [switch]$BoxMode,
@@ -682,6 +689,7 @@ function Invoke-MuFo {
                                         if ($DontFix.Count -gt 0) { $tagParams.DontFix = $DontFix }
                                         if ($OptimizeClassicalTags) { $tagParams.OptimizeClassicalTags = $true }
                                         if ($ValidateCompleteness) { $tagParams.ValidateCompleteness = $true }
+                                        if ($CreateMissingFilesLog) { $tagParams.CreateMissingFilesLog = $true }
                                         
                                         # Add Spotify album data if available
                                         if ($c.MatchedItem -and $c.MatchedItem.Item) {
@@ -793,6 +801,10 @@ function Invoke-MuFo {
                                 if ($objFull.SpotifyAlbumId) {
                                     Write-Host "Found at: https://open.spotify.com/album/$($objFull.SpotifyAlbumId)" -ForegroundColor Cyan
                                 }
+                                # Print "Nothing to Rename" message immediately after album details if names match
+                                if ($c.ProposedName -and [string]::Equals($c.LocalAlbum, $c.ProposedName, [StringComparison]::InvariantCultureIgnoreCase)) {
+                                    Write-NothingToRenameMessage
+                                }
                                 # Intentionally suppress verbose per-album UI line to avoid redundancy when objects are emitted.
                         }
 
@@ -828,8 +840,8 @@ function Invoke-MuFo {
                                     if ($equalCases) {
                                         foreach ($e in $equalCases) {
                                             # Check if artist rename is suggested but this album doesn't need renaming
-                                            if ($localArtist -cne $selectedArtist.Name) {
-                                                $reason = if ($PSBoundParameters.ContainsKey('DoIt') -and $DoIt) { 'No rename needed' } else { 'Whatif will rename' }
+                                            if ($artistRenameName -and $localArtist -cne $selectedArtist.Name) {
+                                                $reason = if (-not $Preview -and -not $WhatIfPreference) { 'No rename needed' } else { 'Whatif will rename' }
                                                 Write-AlbumNoRenameNeeded -LocalAlbum $e.LocalAlbum -LocalArtist $localArtist -SpotifyArtist $selectedArtist.Name -Reason $reason    
                                             }
                                             else {
@@ -857,13 +869,10 @@ function Invoke-MuFo {
                                     if (-not $c.ProposedName) { $message = 'no-proposal'; $outcomes += [PSCustomObject]@{ LocalFolder = $c.LocalAlbum; LocalPath = $c.LocalPath; NewFolderName = $c.ProposedName; Action = $action; Reason = $message; Score = $c.MatchScore; SpotifyAlbum = $c.MatchName }; continue }
                                     if ([string]::Equals($c.LocalAlbum, $c.ProposedName, [StringComparison]::InvariantCultureIgnoreCase)) { 
                                         # Check if artist rename is suggested but this album doesn't need renaming
-                                        if ($localArtist -cne $selectedArtist.Name) {
+                                        if ($artistRenameName -and $localArtist -cne $selectedArtist.Name) {
                                             # around line ~817
-                                            $reason = if ($PSBoundParameters.ContainsKey('DoIt') -and $DoIt) { 'No rename needed' } else { 'WhatIf Will rename ' }
+                                            $reason = if (-not $Preview -and -not $WhatIfPreference) { 'No rename needed' } else { 'WhatIf Will rename ' }
                                             Write-AlbumNoRenameNeeded -LocalAlbum $c.LocalAlbum -LocalArtist $localArtist -SpotifyArtist $selectedArtist.Name -Reason $reason      
-                                        }
-                                        else {
-                                            Write-NothingToRenameMessage
                                         }
                                         Write-Verbose ("Nothing to Rename: LocalFolder '{0}' equals NewFolderName '{1}'" -f $c.LocalAlbum, $c.ProposedName); $message = 'already-matching'; $outcomes += [PSCustomObject]@{ LocalFolder = $c.LocalAlbum; LocalPath = $c.LocalPath; NewFolderName = $c.ProposedName; Action = $action; Reason = $message; Score = $c.MatchScore; SpotifyAlbum = $c.MatchName }; continue 
                                     }
