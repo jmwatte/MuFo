@@ -91,6 +91,30 @@ function Compare-TrackDurations {
         Write-Verbose "Comparing durations with $TolerancePercent% tolerance (min: ${MinToleranceSeconds}s, max: ${MaxToleranceSeconds}s)"
     }
     
+    $convertToSeconds = {
+        param($value)
+
+        if ($null -eq $value) {
+            return $null
+        }
+
+        if ($value -is [double] -or $value -is [single] -or $value -is [decimal] -or $value -is [int] -or $value -is [long]) {
+            return [double]$value
+        }
+
+        $stringValue = $value.ToString()
+        if ([string]::IsNullOrWhiteSpace($stringValue)) {
+            return $null
+        }
+
+        $parsedValue = 0.0
+        if ([double]::TryParse($stringValue, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$parsedValue)) {
+            return $parsedValue
+        }
+
+        return $null
+    }
+
     $results = @()
     $mismatches = @()
     
@@ -99,17 +123,19 @@ function Compare-TrackDurations {
         $localTrack = $LocalTracks[$i]
         $spotifyTrack = $SpotifyTracks[$i]
         
-        # Get durations in seconds
-        $localDurationSec = if ($localTrack.DurationSeconds) { 
-            [math]::Round($localTrack.DurationSeconds) 
-        } else { 
-            0 
+        # Get durations in seconds - ensure numeric conversion
+        $localDurationValue = & $convertToSeconds $localTrack.DurationSeconds
+        if ($null -eq $localDurationValue) {
+            Write-Verbose "Could not parse local track duration for '$($localTrack.Title)'"
+            $localDurationValue = 0.0
         }
+
+        $localDurationSec = $localDurationValue
         
         $spotifyDurationSec = if ($spotifyTrack.duration_ms) { 
-            [math]::Round($spotifyTrack.duration_ms / 1000) 
+            [double]$spotifyTrack.duration_ms / 1000.0 
         } else { 
-            0 
+            0.0 
         }
         
         $difference = [math]::Abs($localDurationSec - $spotifyDurationSec)
@@ -150,11 +176,13 @@ function Compare-TrackDurations {
             LocalTitle = $localTrack.Title
             SpotifyTitle = $spotifyTrack.name
             LocalPath = $localTrack.FilePath
-            LocalDuration = $localTrack.Duration
-            LocalDurationSeconds = $localDurationSec
+            LocalDuration = if ($localDurationSec -gt 0) { 
+                try { [TimeSpan]::FromSeconds($localDurationSec).ToString("mm\:ss") } catch { "00:00" }
+            } else { "00:00" }
+            LocalDurationSeconds = [math]::Round($localDurationSec, 3)
             SpotifyDuration = [TimeSpan]::FromSeconds($spotifyDurationSec).ToString("mm\:ss")
-            SpotifyDurationSeconds = $spotifyDurationSec
-            DifferenceSeconds = $difference
+            SpotifyDurationSeconds = [math]::Round($spotifyDurationSec, 3)
+            DifferenceSeconds = [math]::Round($difference, 3)
             PercentDifference = $percentDifference
             ToleranceSeconds = [math]::Round($toleranceSeconds)
             TolerancePercent = $TolerancePercent

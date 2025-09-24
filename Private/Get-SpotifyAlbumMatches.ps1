@@ -109,11 +109,11 @@ function Get-SpotifyAlbumMatches {
                     if ($result.PSObject.Properties.Match('Albums').Count -gt 0 -and $result.Albums -and $result.Albums.Items) { $items = $result.Albums.Items }
                     elseif ($result.PSObject.Properties.Match('Items').Count -gt 0 -and $result.Items) { $items = $result.Items }
                 }
-                #filter $items so we only get albums
+                #filter $items so we only get albums and compilations
                 if ($searchType -eq 'All' -or $searchType -eq 'Album') {
                     $items = $items | Where-Object { 
-                        ($_ -and $_.PSObject.Properties.Match('AlbumType').Count -gt 0 -and ($_.AlbumType -eq 'album') -or
-                        ($_ -and $_.PSObject.Properties.Match('album_type').Count -gt 0 -and ($_.album_type -eq 'album')))
+                        ($_ -and $_.PSObject.Properties.Match('AlbumType').Count -gt 0 -and ($_.AlbumType -eq 'album' -or $_.AlbumType -eq 'compilation') -or
+                        ($_ -and $_.PSObject.Properties.Match('album_type').Count -gt 0 -and ($_.album_type -eq 'album' -or $_.album_type -eq 'compilation')))
                     }
                 }
                 # Keep inner-result scanning isolated so we can return immediately on high-confidence match

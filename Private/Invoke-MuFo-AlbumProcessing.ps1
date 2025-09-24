@@ -123,29 +123,41 @@ function Get-SpotifyCompilationsForLocal {
     
     $spotifyAlbums = @()
     
-    # Tier 1: Precise Compilation Search (album, year, compilation)
-    if ($OrigYear) {
-        $q1 = "album:`"$NormalizedLocal`" year:$OrigYear tag:compilation"
-        $spotifyAlbums += Get-SpotifyAlbumMatches -Query $q1 -AlbumName $NormalizedLocal -ArtistName "Various Artists" -Year $OrigYear
-    }
+    # Tier 1: Various Artists Specific Search (user's working query pattern)
+    $q1 = "various artists `"$NormalizedLocal`""
+    Write-Verbose "Trying Various Artists query: '$q1'"
+    $spotifyAlbums += Get-SpotifyAlbumMatches -Query $q1 -AlbumName $NormalizedLocal -ArtistName "Various Artists" -Year $OrigYear
     
-    # Tier 2: Year-Influenced Compilation Search
+    # Tier 2: Various Artists with Year
     if ($spotifyAlbums.Count -eq 0 -and $OrigYear) {
-        $q2 = "album:`"$NormalizedLocal`" $OrigYear tag:compilation"
+        $q2 = "various artists `"$NormalizedLocal`" $OrigYear"
+        Write-Verbose "Trying Various Artists with year query: '$q2'"
         $spotifyAlbums += Get-SpotifyAlbumMatches -Query $q2 -AlbumName $NormalizedLocal -ArtistName "Various Artists" -Year $OrigYear
     }
     
-    # Tier 3: Broad Compilation Fallback Search
-    if ($spotifyAlbums.Count -eq 0) {
-        $q3 = "album:`"$NormalizedLocal`" tag:compilation"
+    # Tier 3: Precise Compilation Search (album, year, compilation)
+    if ($spotifyAlbums.Count -eq 0 -and $OrigYear) {
+        $q3 = "album:`"$NormalizedLocal`" year:$OrigYear tag:compilation"
         $spotifyAlbums += Get-SpotifyAlbumMatches -Query $q3 -AlbumName $NormalizedLocal -ArtistName "Various Artists" -Year $OrigYear
+    }
+    
+    # Tier 4: Year-Influenced Compilation Search
+    if ($spotifyAlbums.Count -eq 0 -and $OrigYear) {
+        $q4 = "album:`"$NormalizedLocal`" $OrigYear tag:compilation"
+        $spotifyAlbums += Get-SpotifyAlbumMatches -Query $q4 -AlbumName $NormalizedLocal -ArtistName "Various Artists" -Year $OrigYear
+    }
+    
+    # Tier 5: Broad Compilation Fallback Search
+    if ($spotifyAlbums.Count -eq 0) {
+        $q5 = "album:`"$NormalizedLocal`" tag:compilation"
+        $spotifyAlbums += Get-SpotifyAlbumMatches -Query $q5 -AlbumName $NormalizedLocal -ArtistName "Various Artists" -Year $OrigYear
     }
     
     # If no compilation-specific results, try general album search
     if ($spotifyAlbums.Count -eq 0) {
         Write-Verbose "No compilation-specific results, trying general album search..."
-        $q4 = "album:`"$NormalizedLocal`""
-        $spotifyAlbums += Get-SpotifyAlbumMatches -Query $q4 -AlbumName $NormalizedLocal -ArtistName "Various Artists" -Year $OrigYear
+        $q6 = "album:`"$NormalizedLocal`""
+        $spotifyAlbums += Get-SpotifyAlbumMatches -Query $q6 -AlbumName $NormalizedLocal -ArtistName "Various Artists" -Year $OrigYear
     }
     
     return $spotifyAlbums

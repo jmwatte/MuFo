@@ -864,7 +864,8 @@ function Invoke-MuFo {
                                 if ($c.ProposedName -and -not [string]::Equals($c.LocalAlbum, $c.ProposedName, [StringComparison]::InvariantCultureIgnoreCase)) {
                                     # Only include confident suggestions (at/above threshold)
                                     if ($c.MatchScore -ge $goodThreshold) {
-                                        $renameMap[[string]$c.LocalPath] = (Join-Path -Path $currentPath -ChildPath ([string]$c.ProposedName))
+                                        $parentPath = Split-Path -Path $c.LocalPath -Parent
+                                        $renameMap[[string]$c.LocalPath] = Join-Path -Path $parentPath -ChildPath ([string]$c.ProposedName)
                                     }
                                 }
                             }
@@ -910,7 +911,8 @@ function Invoke-MuFo {
                                         Write-Verbose ("Nothing to Rename: LocalFolder '{0}' equals NewFolderName '{1}'" -f $c.LocalAlbum, $c.ProposedName); $message = 'already-matching'; $outcomes += [PSCustomObject]@{ LocalFolder = $c.LocalAlbum; LocalPath = $c.LocalPath; NewFolderName = $c.ProposedName; Action = $action; Reason = $message; Score = $c.MatchScore; SpotifyAlbum = $c.MatchName }; continue 
                                     }
                                     $currentPath = [string]$c.LocalPath
-                                    $targetPath = Join-Path -Path $currentPath -ChildPath $c.ProposedName
+                                    $parentPath = Split-Path -Path $currentPath -Parent
+                                    $targetPath = Join-Path -Path $parentPath -ChildPath $c.ProposedName
                                     if (Test-Path -LiteralPath $targetPath) { Write-Warning ("Skip rename: Target already exists: {0}" -f $targetPath); $message = 'target-exists'; $outcomes += [PSCustomObject]@{ LocalFolder = $c.LocalAlbum; LocalPath = $c.LocalPath; NewFolderName = $c.ProposedName; Action = $action; Reason = $message; Score = $c.MatchScore; SpotifyAlbum = $c.MatchName }; continue }
 
                                     $shouldRename = $false
@@ -960,7 +962,10 @@ function Invoke-MuFo {
                             $performed = $outcomes | Where-Object { $_.Action -eq 'rename' }
                             if ($performed) {
                                 $renameMap = [ordered]@{}
-                                foreach ($r in $performed) { $renameMap[[string]$r.LocalPath] = (Join-Path -Path $currentPath -ChildPath ([string]$r.NewFolderName)) }
+                                foreach ($r in $performed) { 
+                                    $parentPath = Split-Path -Path $r.LocalPath -Parent
+                                    $renameMap[[string]$r.LocalPath] = Join-Path -Path $parentPath -ChildPath ([string]$r.NewFolderName)
+                                }
                                 Write-RenameOperation -RenameMap $renameMap -Mode 'Performed'
                             }
                             if ($artistRenamePerformed) {

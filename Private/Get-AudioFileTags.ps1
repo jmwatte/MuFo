@@ -300,7 +300,7 @@ function Get-AudioFileTags {
                     Genre           = if ($genres.Count -gt 0) { $genres[0] } else { $null }
                     Genres          = $genres
                     Duration        = if ($properties -and $properties.Duration) { $properties.Duration } else { [TimeSpan]::Zero }
-                    DurationSeconds = if ($properties -and $properties.Duration) { $properties.Duration.TotalSeconds } else { 0 }
+                    DurationSeconds = if ($properties -and $properties.Duration) { [double]$properties.Duration.TotalSeconds } else { 0.0 }
                     Bitrate         = if ($properties -and $properties.AudioBitrate) { $properties.AudioBitrate } else { 0 }
                     SampleRate      = if ($properties -and $properties.AudioSampleRate) { $properties.AudioSampleRate } else { 0 }
                     Format          = [System.IO.Path]::GetExtension($file).TrimStart('.')
