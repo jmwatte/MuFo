@@ -1,0 +1,72 @@
+{
+  "testCases": [
+    {
+      "name": "Exact Match - Miles Davis Kind of Blue",
+      "path": "exact-match/Miles Davis/1959 - Kind of Blue",
+      "expectedArtist": "Miles Davis",
+      "expectedAlbum": "Kind of Blue",
+      "expectedYear": "1959",
+      "expectedScore": 2.0,
+      "expectedArtistScore": 1.0,
+      "description": "Perfect match - should get high score with year bonus"
+    },
+    {
+      "name": "Exact Match - The Beatles Abbey Road",
+      "path": "exact-match/The Beatles/1969 - Abbey Road",
+      "expectedArtist": "The Beatles",
+      "expectedAlbum": "Abbey Road",
+      "expectedYear": "1969",
+      "expectedScore": 2.0,
+      "expectedArtistScore": 1.0,
+      "description": "Perfect match - should get high score with year bonus"
+    },
+    {
+      "name": "Year Mismatch - Miles Davis Kind of Blue (wrong year)",
+      "path": "year-mismatch/Miles Davis/1960 - Kind of Blue",
+      "expectedArtist": "Miles Davis",
+      "expectedAlbum": "Kind of Blue",
+      "expectedYear": "1959",
+      "expectedScore": 1.0,
+      "expectedArtistScore": 1.0,
+      "description": "Album exists but year is wrong - should still match well but without year bonus"
+    },
+    {
+      "name": "Similar Names - Bob Dylan Like a Rolling Stone",
+      "path": "similar-names/Bob Dylan/1965 - Like a Rolling Stone",
+      "expectedArtist": "Bob Dylan",
+      "expectedAlbum": "Like a Rolling Stone",
+      "expectedYear": "1965",
+      "expectedScore": 0.3,
+      "expectedArtistScore": 1.0,
+      "description": "Album name matches song title - should match reasonably well"
+    },
+    {
+      "name": "Wrong Artist Same Album - Water From an Ancient Well",
+      "path": "wrong-artist-same-album/Unknown Artist/1986 - Water From an Ancient Well",
+      "expectedArtist": "Abdullah Ibrahim",
+      "expectedAlbum": "Water from an Ancient Well",
+      "expectedScore": 0.2,
+      "expectedArtistScore": 0.0,
+      "description": "Should NOT match wrong artist - score should be low due to artist penalty"
+    },
+    {
+      "name": "Classical - Beethoven Symphony No. 5",
+      "path": "classical/Beethoven/1808 - Symphony No. 5",
+      "expectedArtist": "Ludwig van Beethoven",
+      "expectedAlbum": "Symphony No. 5",
+      "expectedScore": 0.25,
+      "expectedArtistScore": 0.0,
+      "description": "Classical music - artist name 'Beethoven' doesn't match 'Ludwig van Beethoven' perfectly"
+    },
+    {
+      "name": "Box Set - The Beatles Stereo Box Set",
+      "path": "box-set/The Beatles/2009 - The Beatles Stereo Box Set",
+      "expectedArtist": "The Beatles",
+      "expectedAlbum": "The Beatles Stereo Box Set",
+      "expectedYear": "2009",
+      "expectedScore": 0.9,
+      "expectedArtistScore": 1.0,
+      "description": "Box set - should match compilation/box set albums"
+    }
+  ]
+}

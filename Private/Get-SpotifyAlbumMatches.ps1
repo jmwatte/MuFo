@@ -278,10 +278,24 @@ function Get-SpotifyAlbumMatches {
                         if ($hasArtistInQuery -and $hasAlbumInQuery -and $artistScore -lt 0.5) {
                             $combinedScore -= 0.2
                         }
-                        # Penalize weak album matches for specific queries
-                        if ($hasArtistInQuery -and $hasAlbumInQuery -and $albumScore -lt 0.7) {
+                        # Penalize weak album matches for specific queries, but only when artist match is also weak
+                        if ($hasArtistInQuery -and $hasAlbumInQuery -and $artistScore -lt 0.5 -and $albumScore -lt 0.7) {
                             $combinedScore -= 0.3
                         }
+                        # Penalize weak artist matches for specific queries
+                        if ($hasArtistInQuery -and $hasAlbumInQuery -and $artistScore -lt 0.5) {
+                            $combinedScore -= 0.2
+                        }
+
+                        # CRITICAL FIX: Heavily penalize wrong-artist matches when artist was expected
+                        # This prevents fallback searches (without artist) from returning high scores for wrong artists
+                        if ($ArtistName -and $artistScore -lt 0.3) {
+                            # If we expected an artist match but got none, heavily penalize this result
+                            # This ensures artist-specific searches don't get beaten by wrong-artist album title matches
+                            $combinedScore -= 0.5
+                            Write-Verbose "Penalizing wrong-artist match: album='$normalizedSpotifyName', expected artist='$ArtistName', artist score=$artistScore"
+                        }
+
                         # Clamp
                         if ($combinedScore -gt 1.0) { $combinedScore = 1.0 }
                         if ($combinedScore -lt 0) { $combinedScore = 0 }

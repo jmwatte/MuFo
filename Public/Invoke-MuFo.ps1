@@ -485,6 +485,17 @@ function Invoke-MuFo {
             return
         }
 
+        # Detect if original path points to a specific album folder (when ArtistAt is not 'Here')
+        # This allows processing only the specified album instead of all albums in the artist folder
+        $specificAlbumPath = $null
+        if ($ArtistAt -ne 'Here' -and (Test-Path -LiteralPath $Path -PathType Container)) {
+            $parentPath = Split-Path $Path -Parent
+            if ($parentPath -and $artistPaths -contains $parentPath) {
+                $specificAlbumPath = $Path
+                Write-Verbose "Detected specific album path: $specificAlbumPath"
+            }
+        }
+
         # Process each artist path
         foreach ($artistPath in $artistPaths) {
             $currentPath = $artistPath
@@ -581,7 +592,15 @@ function Invoke-MuFo {
                     # Proceed with album verification: compare local folder names to Spotify artist albums
                     try {
                         # Use refactored album processing logic
-                        $albumComparisons = Get-AlbumComparisons -CurrentPath $currentPath -SelectedArtist $selectedArtist -EffectiveExclusions $effectiveExclusions
+                        # If a specific album path was detected, only process that album
+                        if ($specificAlbumPath) {
+                            Write-Verbose "Processing specific album: $(Split-Path $specificAlbumPath -Leaf)"
+                            $albumComparisons = Get-SingleAlbumComparison -Directory (Get-Item -LiteralPath $specificAlbumPath) -SelectedArtist $selectedArtist
+                            $albumComparisons = @($albumComparisons)  # Convert to array for consistency
+                        }
+                        else {
+                            $albumComparisons = Get-AlbumComparisons -CurrentPath $currentPath -SelectedArtist $selectedArtist -EffectiveExclusions $effectiveExclusions
+                        }
                         
                         # Memory optimization for large collections
                         $null = Add-MemoryOptimization -AlbumCount $albumComparisons.Count -Phase 'Start'

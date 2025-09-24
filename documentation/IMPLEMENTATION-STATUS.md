@@ -41,27 +41,26 @@ This document consolidates the implementation tracking for major MuFo features, 
   - Multiple audio format support
 - **Status**: Fully implemented with comprehensive capabilities
 
-### **5. Artist/Album Artist Parameter Split** ✅ **COMPLETE** ⭐ **NEW**
-- **Critical Fix**: Split ambiguous 'Artists' parameter into clear distinctions
-- **Parameters**: `'AlbumArtists'`, `'TrackArtists'` (replaced old `'Artists'`)
+### **7. ArtistAt Album Scoping Fix** ✅ **COMPLETE** ⭐ **NEW**
+- **Issue**: When using `-ArtistAt 1U` (or 2U) pointing to a specific album path, MuFo would process ALL albums in the artist folder instead of just the specified album
+- **Fix**: Added logic to detect when the original path points to a specific album folder and limit processing to that album only
 - **Features**:
-  - Default behavior: Fix AlbumArtists only (80% use case)
-  - Smart compilation album detection with warnings
-  - Preserve individual track performers when appropriate
-  - Classical music optimization (composer vs performer)
-  - WhatIf preview shows exact artist changes
-- **Status**: ✅ **Production-ready** - Addresses critical user confusion issue
+  - Smart path detection: Distinguishes between artist folder paths vs. specific album paths
+  - Scoped processing: Only processes the specified album when pointing to album folder with ArtistAt navigation
+  - Backward compatibility: Existing behavior preserved for artist folder paths
+  - Test coverage: Comprehensive test fixture validates the fix
+- **Status**: ✅ **Production-ready** - Resolves critical user experience issue with Various Artists collections
 
 ## 🔄 **ONGOING DEVELOPMENT**
 
-### **5. Performance Optimization** 🔄 **CONTINUOUS**
+### **7. Performance Optimization** 🔄 **CONTINUOUS**
 - **Features**:
   - Spotify API call optimization (10-100x improvement achieved)
   - Memory management for large collections
   - Progress reporting and user feedback
 - **Status**: Major optimizations complete, ongoing refinements
 
-### **6. Documentation & User Experience** 🔄 **IN PROGRESS**
+### **8. Documentation & User Experience** 🔄 **IN PROGRESS**
 - **Remaining**:
   - README.md with comprehensive examples
   - PowerShell Gallery packaging
