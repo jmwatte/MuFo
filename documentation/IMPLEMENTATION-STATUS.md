@@ -41,26 +41,27 @@ This document consolidates the implementation tracking for major MuFo features, 
   - Multiple audio format support
 - **Status**: Fully implemented with comprehensive capabilities
 
-### **7. ArtistAt Album Scoping Fix** ✅ **COMPLETE** ⭐ **NEW**
-- **Issue**: When using `-ArtistAt 1U` (or 2U) pointing to a specific album path, MuFo would process ALL albums in the artist folder instead of just the specified album
-- **Fix**: Added logic to detect when the original path points to a specific album folder and limit processing to that album only
+### **8. Various Artists Compilation Handling** ✅ **COMPLETE** ⭐ **NEW**
+- **Issue**: "Various Artists" folders were incorrectly matched to individual artists like "Van Morrison"
+- **Fix**: Added special handling for compilation albums with synthetic Various Artists artist object
 - **Features**:
-  - Smart path detection: Distinguishes between artist folder paths vs. specific album paths
-  - Scoped processing: Only processes the specified album when pointing to album folder with ArtistAt navigation
-  - Backward compatibility: Existing behavior preserved for artist folder paths
-  - Test coverage: Comprehensive test fixture validates the fix
-- **Status**: ✅ **Production-ready** - Resolves critical user experience issue with Various Artists collections
+  - Detects "Various Artists" as compilation scenario, not individual artist
+  - Creates synthetic artist object to maintain compatibility with existing code
+  - Searches for compilation albums using `tag:compilation` queries
+  - Tiered search strategy: compilation-specific → general album search
+  - Prevents wrong-artist matches for compilation collections
+- **Status**: ✅ **Production-ready** - Resolves critical issue with compilation album matching
 
 ## 🔄 **ONGOING DEVELOPMENT**
 
-### **7. Performance Optimization** 🔄 **CONTINUOUS**
+### **8. Performance Optimization** 🔄 **CONTINUOUS**
 - **Features**:
   - Spotify API call optimization (10-100x improvement achieved)
   - Memory management for large collections
   - Progress reporting and user feedback
 - **Status**: Major optimizations complete, ongoing refinements
 
-### **8. Documentation & User Experience** 🔄 **IN PROGRESS**
+### **9. Documentation & User Experience** 🔄 **IN PROGRESS**
 - **Remaining**:
   - README.md with comprehensive examples
   - PowerShell Gallery packaging
