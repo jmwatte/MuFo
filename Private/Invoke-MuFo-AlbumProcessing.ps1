@@ -87,7 +87,12 @@ function Get-SingleAlbumComparison {
     if ($m.Success) { $origYear = $m.Groups['year'].Value }
 
     # Use tiered search strategy
-    $spotifyAlbums = Get-SpotifyAlbumsForLocal -NormalizedLocal $normalizedLocal -OrigYear $origYear -SelectedArtist $SelectedArtist
+    # Special handling for Various Artists compilations
+    if ($SelectedArtist.Name -eq 'Various Artists') {
+        $spotifyAlbums = Get-SpotifyCompilationsForLocal -NormalizedLocal $normalizedLocal -OrigYear $origYear
+    } else {
+        $spotifyAlbums = Get-SpotifyAlbumsForLocal -NormalizedLocal $normalizedLocal -OrigYear $origYear -SelectedArtist $SelectedArtist
+    }
     
     # Find best match from search results
     $best, $bestScore = Get-BestAlbumMatch -SpotifyAlbums $spotifyAlbums -NormalizedLocal $normalizedLocal -OrigYear $origYear
@@ -96,6 +101,54 @@ function Get-SingleAlbumComparison {
     $albumInfo = Build-AlbumComparisonObject -Directory $Directory -Best $best -BestScore $bestScore -NormalizedLocal $normalizedLocal -OrigYear $origYear
     
     return $albumInfo
+}
+
+function Get-SpotifyCompilationsForLocal {
+    <#
+    .SYNOPSIS
+    Searches Spotify for compilation albums using tiered search strategy.
+    
+    .DESCRIPTION
+    Searches for compilation albums (Various Artists) using multiple tiers:
+    1. Precise compilation search (album, year)
+    2. Year-influenced compilation search
+    3. Broad compilation fallback search
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$NormalizedLocal,
+        
+        [string]$OrigYear
+    )
+    
+    $spotifyAlbums = @()
+    
+    # Tier 1: Precise Compilation Search (album, year, compilation)
+    if ($OrigYear) {
+        $q1 = "album:`"$NormalizedLocal`" year:$OrigYear tag:compilation"
+        $spotifyAlbums += Get-SpotifyAlbumMatches -Query $q1 -AlbumName $NormalizedLocal -ArtistName "Various Artists" -Year $OrigYear
+    }
+    
+    # Tier 2: Year-Influenced Compilation Search
+    if ($spotifyAlbums.Count -eq 0 -and $OrigYear) {
+        $q2 = "album:`"$NormalizedLocal`" $OrigYear tag:compilation"
+        $spotifyAlbums += Get-SpotifyAlbumMatches -Query $q2 -AlbumName $NormalizedLocal -ArtistName "Various Artists" -Year $OrigYear
+    }
+    
+    # Tier 3: Broad Compilation Fallback Search
+    if ($spotifyAlbums.Count -eq 0) {
+        $q3 = "album:`"$NormalizedLocal`" tag:compilation"
+        $spotifyAlbums += Get-SpotifyAlbumMatches -Query $q3 -AlbumName $NormalizedLocal -ArtistName "Various Artists" -Year $OrigYear
+    }
+    
+    # If no compilation-specific results, try general album search
+    if ($spotifyAlbums.Count -eq 0) {
+        Write-Verbose "No compilation-specific results, trying general album search..."
+        $q4 = "album:`"$NormalizedLocal`""
+        $spotifyAlbums += Get-SpotifyAlbumMatches -Query $q4 -AlbumName $NormalizedLocal -ArtistName "Various Artists" -Year $OrigYear
+    }
+    
+    return $spotifyAlbums
 }
 
 function Get-SpotifyAlbumsForLocal {
