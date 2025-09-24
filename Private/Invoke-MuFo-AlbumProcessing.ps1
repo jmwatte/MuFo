@@ -45,6 +45,28 @@ function Get-AlbumComparisons {
     Write-Verbose "Found album directories before exclusion filtering: $($localAlbumDirs.Name -join ', ')"
     $localAlbumDirs = $localAlbumDirs | Where-Object { -not (Test-ExclusionMatch -FolderName $_.Name -Exclusions $EffectiveExclusions) }
     Write-Verbose "Album directories after exclusion filtering: $($localAlbumDirs.Name -join ', ')"
+    
+    # Check if any of the remaining directories contain format-separated subfolders
+    # If so, treat the parent directory as an album instead of the format subfolders
+    $processedAlbumDirs = @()
+    foreach ($dir in $localAlbumDirs) {
+        $subDirs = Get-ChildItem -LiteralPath $dir.FullName -Directory -ErrorAction SilentlyContinue
+        $formatDirs = $subDirs | Where-Object {
+            $_.Name -in @('FLAC', 'APE', 'MP3', 'M4A', 'OGG', 'WAV', 'WMA') -or
+            $_.Name -match '^(FLAC|APE|MP3|M4A|OGG|WAV|WMA)$'
+        }
+        
+        if ($formatDirs) {
+            # This directory contains format subfolders - treat it as an album
+            Write-Verbose "Directory '$($dir.Name)' contains format-separated subfolders: $($formatDirs.Name -join ', ')"
+            $processedAlbumDirs += $dir
+        } else {
+            # Normal album directory
+            $processedAlbumDirs += $dir
+        }
+    }
+    
+    $localAlbumDirs = $processedAlbumDirs
     Write-Verbose ("Local album folders found: {0}" -f (($localAlbumDirs | Measure-Object).Count))
 
     $albumComparisons = @()

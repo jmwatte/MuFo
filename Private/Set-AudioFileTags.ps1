@@ -89,7 +89,7 @@ function Set-AudioFileTags {
     )
     
     # Supported audio file extensions
-    $supportedExtensions = @('.mp3', '.flac', '.m4a', '.ogg', '.wav', '.wma')
+    $supportedExtensions = @('.mp3', '.flac', '.m4a', '.ogg', '.wav', '.wma', '.ape')
     
     # Check if TagLib-Sharp is available (reuse detection from Get-AudioFileTags)
     $tagLibLoaded = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -like '*TagLib*' }

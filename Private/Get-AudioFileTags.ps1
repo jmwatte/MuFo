@@ -33,7 +33,7 @@ function Get-AudioFileTags {
 
 .NOTES
     Requires TagLib-Sharp assembly to be loaded.
-    Supported formats: .mp3, .flac, .m4a, .ogg, .wav (where supported by TagLib)
+    Supported formats: .mp3, .flac, .m4a, .ogg, .wav, .wma, .ape (where supported by TagLib)
     Author: jmw
 #>
     [CmdletBinding()]
@@ -52,7 +52,7 @@ function Get-AudioFileTags {
 
     begin {
         # Supported audio file extensions
-        $supportedExtensions = @('.mp3', '.flac', '.m4a', '.ogg', '.wav', '.wma')
+        $supportedExtensions = @('.mp3', '.flac', '.m4a', '.ogg', '.wav', '.wma', '.ape')
         
         # Extensions that should be skipped without warning
         $excludedExtensions = @('.dll', '.exe', '.pdb', '.xml', '.config', '.json', '.txt', '.md', '.ps1', '.psm1')

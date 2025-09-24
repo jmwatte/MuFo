@@ -24,6 +24,7 @@ $tags = Get-AudioFileTags -Path "C:\Music\Classical" -IncludeComposer
 - OGG Vorbis (.ogg)
 - WAV (.wav)
 - WMA (.wma)
+- APE (.ape)
 
 ## Classical Music Support
 

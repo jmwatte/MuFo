@@ -652,7 +652,21 @@ function Invoke-MuFo {
                                         Get-ChildItem -LiteralPath $c.LocalPath -Directory | Select-Object -ExpandProperty FullName
                                     }
                                     else {
-                                        @($c.LocalPath)
+                                        # Auto-detect format-separated folders (FLAC/, APE/, MP3/, etc.)
+                                        $subDirs = Get-ChildItem -LiteralPath $c.LocalPath -Directory -ErrorAction SilentlyContinue
+                                        $formatDirs = $subDirs | Where-Object {
+                                            $_.Name -in @('FLAC', 'APE', 'MP3', 'M4A', 'OGG', 'WAV', 'WMA') -or
+                                            $_.Name -match '^(FLAC|APE|MP3|M4A|OGG|WAV|WMA)$'
+                                        }
+                                        
+                                        if ($formatDirs) {
+                                            # Use format-separated subfolders
+                                            $formatDirs | Select-Object -ExpandProperty FullName
+                                        }
+                                        else {
+                                            # Use the album folder directly (normal case)
+                                            @($c.LocalPath)
+                                        }
                                     }
                                     $tracks = @()
                                     foreach ($p in $scanPaths) {
@@ -717,8 +731,30 @@ function Invoke-MuFo {
                                         $c | Add-Member -NotePropertyName CompletenessAnalysis -NotePropertyValue $completenessResult
                                     }
 
-                                    # Tag enhancement if requested
+                                    # Safety check: Warn about mixed audio formats that could cause track numbering issues
+                                    $skipTagEnhancement = $false
                                     if ($FixTags -and $tracks.Count -gt 0) {
+                                        $audioFiles = $tracks | Where-Object { $_.Format -and $_.Format -ne '' }
+                                        $formats = $audioFiles | Group-Object Format | Select-Object -ExpandProperty Name
+
+                                        if ($formats.Count -gt 1) {
+                                            Write-Warning "⚠️ Mixed audio formats detected in '$($c.LocalAlbum)': $($formats -join ', ')"
+                                            Write-Host "   This can cause track numbering issues. Consider separating formats into different folders." -ForegroundColor Yellow
+                                            Write-Host "   Use .\Reorganize-MusicFormats.ps1 to automatically separate formats." -ForegroundColor Cyan
+
+                                            # Ask user if they want to skip tag enhancement for this album
+                                            if (-not $Force) {
+                                                $response = Read-Host "Continue with tag enhancement anyway? (y/N)"
+                                                if ($response -notmatch '^[Yy]') {
+                                                    Write-Host "Skipping tag enhancement for '$($c.LocalAlbum)'" -ForegroundColor Gray
+                                                    $skipTagEnhancement = $true
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    # Tag enhancement if requested
+                                    if ($FixTags -and $tracks.Count -gt 0 -and -not $skipTagEnhancement) {
                                         Write-Verbose "Enhancing tags for: $($c.LocalPath)"
                                         
                                         $tagParams = @{
