@@ -214,7 +214,8 @@ function Invoke-MuFo {
 
     [CmdletBinding(SupportsShouldProcess = $true)]
     param (
-    [Parameter(Mandatory = $false, ValueFromPipelineByPropertyName = $true)]
+    [Parameter(Mandatory = $false, ValueFromPipeline = $true)]
+    [Alias("FullName")]
     [string]$Path = ".",        [Parameter(Mandatory = $false)]
         [ValidateSet("Automatic", "Manual", "Smart")]
         [string]$DoIt = "Manual",
