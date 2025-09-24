@@ -71,11 +71,13 @@ function Get-MuFoStats {
             }
 
             # Collect all unique tag names dynamically
-            foreach ($tagName in $tags.Keys) {
+            $tagProperties = $tags | Get-Member -MemberType Properties | Select-Object -ExpandProperty Name
+            foreach ($tagName in $tagProperties) {
+                $tagValue = $tags.$tagName
                 if (-not $localTags.ContainsKey($tagName)) {
                     $localTags[$tagName] = @()
                 }
-                $localTags[$tagName] += $tags[$tagName]
+                $localTags[$tagName] += $tagValue
             }
         }
     }
@@ -95,10 +97,11 @@ function Get-MuFoStats {
     # Build Spotify tracks object
     $spotifyTrackList = @()
     foreach ($track in $spotifyTracks) {
+        $trackArtists = $track.artists -join ', '
         $spotifyTrackList += [PSCustomObject]@{
             TrackNumber = $track.track_number
             Title = $track.name
-            Artist = ($track.artists | ForEach-Object { $_.name }) -join ', '
+            Artist = $trackArtists
             AlbumArtist = $spotifyAlbum.artists[0].name
             Album = $spotifyAlbum.name
             Year = [int]($spotifyAlbum.release_date -split '-')[0]
@@ -107,12 +110,14 @@ function Get-MuFoStats {
         }
     }
 
-    # Collect Spotify tags (limited to available data)
-    $spotifyTags = @{
-        AlbumArtist = @($spotifyAlbum.artists[0].name)
-        Album = @($spotifyAlbum.name)
-        Year = @([int]($spotifyAlbum.release_date -split '-')[0])
+    # Collect Spotify tags (including genres if available)
+    $spotifyTags = @{}
+    if ($spotifyAlbum.genres) {
+        $spotifyTags['Genres'] = $spotifyAlbum.genres
     }
+    $spotifyTags['AlbumArtist'] = @($spotifyAlbum.artists[0].name)
+    $spotifyTags['Album'] = @($spotifyAlbum.name)
+    $spotifyTags['Year'] = @([int]($spotifyAlbum.release_date -split '-')[0])
 
     # Comparisons
     $localTrackCount = $localTracks.Count
@@ -126,7 +131,7 @@ function Get-MuFoStats {
     # Track matching (basic count of matching titles)
     $matchingTracks = 0
     foreach ($localTrack in $localTracks) {
-        $bestMatch = $spotifyTrackList | Where-Object { Get-StringSimilarity -String1 $localTrack.Title -String2 $_.Title -gt 0.8 } | Select-Object -First 1
+        $bestMatch = $spotifyTrackList | Where-Object { (Get-StringSimilarity -String1 $localTrack.Title -String2 $_.Title) -gt 0.8 } | Select-Object -First 1
         if ($bestMatch) { $matchingTracks++ }
     }
 

@@ -102,6 +102,10 @@ function Invoke-MuFo {
     Display detailed information about duration mismatches when validation is enabled.
     Shows which tracks have significant duration differences and provides recommendations.
 
+.PARAMETER IncludeSpotifyObjects
+    Include full Spotify album objects in the output records when available. This enables integration
+    with other functions like Get-MuFoStats that can accept pre-fetched album data to avoid additional API calls.
+
 .PARAMETER BoxMode
     Treat subfolders as discs of a box set, aggregating all tracks into one album for validation.
     Useful for multi-disc releases stored in separate folders.
@@ -295,7 +299,10 @@ function Invoke-MuFo {
         [string]$DurationValidationLevel = 'Normal',
 
         [Parameter(Mandatory = $false)]
-        [switch]$ShowDurationMismatches
+        [switch]$ShowDurationMismatches,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$IncludeSpotifyObjects
 
     )
 
@@ -741,6 +748,7 @@ function Invoke-MuFo {
                                 Artist        = $selectedArtist.Name
                                 ArtistId      = $selectedArtist.Id
                                 ArtistSource  = $artistSelectionSource
+                                LocalArtist   = $localArtist
                                 LocalFolder   = $c.LocalAlbum
                                 LocalAlbum    = $c.LocalNorm
                                 SpotifyAlbum  = $c.MatchName
@@ -750,6 +758,7 @@ function Invoke-MuFo {
                                 NewFolderName = $c.ProposedName
                                 Decision      = $decision
                                 Reason        = $reason
+                                SpotifyAlbumObject = if ($IncludeSpotifyObjects -and $c.MatchedItem -and $c.MatchedItem.Item) { $c.MatchedItem.Item } else { $null }
                             }
                             if ($IncludeTracks) {
                                 $rec['TrackCountLocal'] = $c.TrackCountLocal

@@ -1,7 +1,7 @@
 function Get-AudioFileTags {
 <#
-.SYNOPSIS        $supportedExtensions = @('.mp3', '.flac', '.m4a', '.ogg', '.wav', '.wma')
-        Write-Host "DEBUG: Get-AudioFileTags function entry - Path: $Path" -ForegroundColor Red    Reads audio file tags using TagLib-Sharp with enhanced classical music support.
+.SYNOPSIS
+    Reads audio file tags using TagLib-Sharp with enhanced classical music support.
 
 .DESCRIPTION
     This function scans a folder or processes individual audio files to extract metadata
