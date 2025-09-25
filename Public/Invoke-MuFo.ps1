@@ -331,17 +331,17 @@ function Invoke-MuFo {
 
         # EARLY PRE-SCAN (begin): detect .cue files under the provided Path immediately to avoid expensive work
         if ($FixTags) {
-            try {
-                $beginCueFiles = Get-ChildItem -LiteralPath $Path -Filter '*.cue' -File -Recurse -ErrorAction SilentlyContinue
+            $albumFoldersWithCue = Get-ChildItem -LiteralPath $Path -Directory | Where-Object {
+                Get-ChildItem -LiteralPath $_.FullName -Filter '*.cue' -File -Recurse -ErrorAction SilentlyContinue
             }
-            catch {
-                $beginCueFiles = $null
-            }
-            if ($beginCueFiles -and $beginCueFiles.Count -gt 0) {
-                $locations = $beginCueFiles | Select-Object -ExpandProperty DirectoryName -Unique
-                Write-Warning ("(begin) Found {0} .cue file(s) under '{1}' (locations: {2}). If you intended to run -FixTags, consider passing -AllowCueProcessing to override; otherwise tag-enhancement will be skipped for cue-based albums." -f $beginCueFiles.Count, $Path, ($locations -join ', '))
+            if ($albumFoldersWithCue) {
+                Write-Host "FixTags will be disabled later for the following folders with .cue files unless -AllowCueProcessing is passed." -ForegroundColor Yellow
+                foreach ($folder in $albumFoldersWithCue) {
+                    Write-Host $folder.Name
+                }
                 if (-not $AllowCueProcessing) {
-                    Write-Host "-FixTags will be disabled later for albums with .cue files unless -AllowCueProcessing is passed." -ForegroundColor Yellow
+                    $FixTags = $false
+                    Write-Host "-FixTags disabled for this run due to cue-based albums (pass -AllowCueProcessing to force)." -ForegroundColor Yellow
                 }
             }
         }
@@ -352,29 +352,6 @@ function Invoke-MuFo {
     }
 
     process {
-        # EARLY PRE-SCAN: run immediately to detect .cue files and avoid expensive work if -FixTags requested
-        if ($FixTags) {
-            try {
-                $globalCueFiles = Get-ChildItem -LiteralPath $Path -Filter '*.cue' -File -Recurse -ErrorAction SilentlyContinue
-            }
-            catch {
-                $globalCueFiles = $null
-            }
-
-            if ($globalCueFiles -and $globalCueFiles.Count -gt 0) {
-                $locations = $globalCueFiles | Select-Object -ExpandProperty DirectoryName -Unique
-                Write-Warning ("Found {0} .cue file(s) under '{1}' (locations: {2}). Because -FixTags was requested and cue-based albums are present, tag-enhancement will be disabled by default to avoid expensive processing. Use -AllowCueProcessing to override." -f $globalCueFiles.Count, $Path, ($locations -join ', '))
-                if (-not $AllowCueProcessing) {
-                    # Disable FixTags for this run to avoid expensive operations
-                    $FixTags = $false
-                    Write-Host "-FixTags temporarily disabled for this run due to cue-based albums (pass -AllowCueProcessing to force)." -ForegroundColor Yellow
-                }
-                else {
-                    Write-Host "-AllowCueProcessing detected: proceeding with tag-enhancement despite .cue files." -ForegroundColor Cyan
-                }
-            }
-        }
-        # (moved) early pre-scan will be inserted at top of process block below
         # Parameter validation for tag enhancement
         if ($OptimizeClassicalTags -and -not $FixTags) {
             Write-Error "Tag enhancement switch (-OptimizeClassicalTags) requires -FixTags to be enabled."
@@ -709,14 +686,6 @@ function Invoke-MuFo {
                                 }
                             }
 
-                            # Warn up-front about any cue-based albums so the user sees it before renames/WhatIf messages
-                            $cueAlbums = $albumComparisons | Where-Object { $_.IsCueBased }
-                            if ($cueAlbums -and $cueAlbums.Count -gt 0) {
-                                foreach ($ca in $cueAlbums) {
-                                    Write-Warning ("Cue-based album detected: '{0}' (cue locations: {1}). Tag-enhancement will be skipped for these albums by default. Use -AllowCueProcessing to override." -f $ca.LocalAlbum, ($ca.CueLocations -join ', '))
-                                }
-                            }
-                            
                             # Enhanced track processing for classical music, completeness validation, and tag enhancement
                             foreach ($c in $albumComparisons) {
                                 try {
@@ -840,28 +809,6 @@ function Invoke-MuFo {
                                     
                                     Write-Verbose "Processing tag enhancement for: $($c.LocalAlbum)"
 
-                                    # --- CUE handling: skip tag-enhancement if .cue files present unless explicitly allowed ---
-                                    try {
-                                        # Search recursively so .cue files located in disc subfolders are detected as well
-                                        $cueFiles = Get-ChildItem -LiteralPath $c.LocalPath -Filter '*.cue' -File -Recurse -ErrorAction SilentlyContinue
-                                    }
-                                    catch {
-                                        $cueFiles = $null
-                                    }
-
-                                    if ($cueFiles -and $cueFiles.Count -gt 0) {
-                                        # warn immediately and skip writing tags to avoid breaking cue references
-                                        $locations = $cueFiles | Select-Object -ExpandProperty DirectoryName -Unique
-                                        Write-Warning ("Found {0} .cue file(s) under '{1}' (locations: {2}). To avoid breaking cue-based track references, tag-enhancement will be skipped for this folder unless -AllowCueProcessing is passed." -f $cueFiles.Count, $c.LocalPath, ($locations -join ', '))
-                                        if (-not $AllowCueProcessing) {
-                                            Write-Host "Skipping tag-enhancement for cue-based album: '$($c.LocalAlbum)'" -ForegroundColor Gray
-                                            continue
-                                        }
-                                        else {
-                                            Write-Verbose ("AllowCueProcessing override: will attempt tag-enhancement even though {0} .cue file(s) exist under {1}" -f $cueFiles.Count, $c.LocalPath)
-                                        }
-                                    }
-                                    
                                     # Safety check: Warn about mixed audio formats that could cause track numbering issues
                                     $skipTagEnhancement = $false
                                     $audioFiles = $tracks | Where-Object { $_.Format -and $_.Format -ne '' }
