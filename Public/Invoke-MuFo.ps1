@@ -329,6 +329,23 @@ function Invoke-MuFo {
             Write-Warning "Spotishell module not found. Install-Module Spotishell to enable Spotify integration."
         }
 
+        # EARLY PRE-SCAN (begin): detect .cue files under the provided Path immediately to avoid expensive work
+        if ($FixTags) {
+            try {
+                $beginCueFiles = Get-ChildItem -LiteralPath $Path -Filter '*.cue' -File -Recurse -ErrorAction SilentlyContinue
+            }
+            catch {
+                $beginCueFiles = $null
+            }
+            if ($beginCueFiles -and $beginCueFiles.Count -gt 0) {
+                $locations = $beginCueFiles | Select-Object -ExpandProperty DirectoryName -Unique
+                Write-Warning ("(begin) Found {0} .cue file(s) under '{1}' (locations: {2}). If you intended to run -FixTags, consider passing -AllowCueProcessing to override; otherwise tag-enhancement will be skipped for cue-based albums." -f $beginCueFiles.Count, $Path, ($locations -join ', '))
+                if (-not $AllowCueProcessing) {
+                    Write-Host "-FixTags will be disabled later for albums with .cue files unless -AllowCueProcessing is passed." -ForegroundColor Yellow
+                }
+            }
+        }
+
         # Helper functions are now in Private modules
         # ConvertTo-SafeFileName and ConvertTo-ComparableName moved to Invoke-MuFo-OutputFormatting.ps1
         # Exclusions functions moved to Invoke-MuFo-Exclusions.ps1
