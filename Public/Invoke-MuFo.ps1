@@ -1111,13 +1111,14 @@ function Invoke-MuFo {
                     $stackText = if ($stack) { " | Stack: $stack" } else { '' }
                     Write-Warning ("Album processing failed for SpotifyAlbumId: {0}{1}{2}" -f $msg, $innerText, $stackText)
                 }
+            }
 
             }
             catch {
                 Write-Error "Failed to fetch Spotify album '$SpotifyAlbumId': $($_.Exception.Message)"
                 return
             }
-        }
+        
         else {
             # Normal processing - compute artist paths
             $artistPaths = switch ($ArtistAt) {
