@@ -635,6 +635,20 @@ function Invoke-MuFo {
                     $initialObj.SpotifyArtist = $selectedArtist.Name
                     Write-Output $initialObj
 
+                    # NEW: List local albums before Spotify searches begin
+                    Write-Host "`nWe have these albums (local folders on disk, no Spotify results yet):" -ForegroundColor Cyan
+                    $localAlbumDirs = Get-ChildItem -LiteralPath $currentPath -Directory -ErrorAction SilentlyContinue | 
+                        Where-Object { -not (Test-ExclusionMatch $_.Name $effectiveExclusions) } | 
+                        Select-Object -ExpandProperty Name
+                    if ($localAlbumDirs.Count -gt 0) {
+                        foreach ($albumName in $localAlbumDirs) {
+                            Write-Host "  - $albumName" -ForegroundColor White
+                        }
+                    } else {
+                        Write-Host "  (No album folders found)" -ForegroundColor Gray
+                    }
+                    Write-Host ""  # Add spacing
+
                     # Proceed with album verification: compare local folder names to Spotify artist albums
                     try {
                         # Use refactored album processing logic
