@@ -775,7 +775,8 @@ function Invoke-MuFo {
 
                                     # --- CUE handling: skip tag-enhancement if .cue files present unless explicitly allowed ---
                                     try {
-                                        $cueFiles = Get-ChildItem -LiteralPath $c.LocalPath -Filter '*.cue' -File -ErrorAction SilentlyContinue
+                                        # Search recursively so .cue files located in disc subfolders are detected as well
+                                        $cueFiles = Get-ChildItem -LiteralPath $c.LocalPath -Filter '*.cue' -File -Recurse -ErrorAction SilentlyContinue
                                     }
                                     catch {
                                         $cueFiles = $null
@@ -783,13 +784,14 @@ function Invoke-MuFo {
 
                                     if ($cueFiles -and $cueFiles.Count -gt 0) {
                                         # warn immediately and skip writing tags to avoid breaking cue references
-                                        Write-Warning ("Found {0} .cue file(s) in '{1}'. To avoid breaking cue-based track references, tag-enhancement will be skipped for this folder unless -AllowCueProcessing is passed." -f $cueFiles.Count, $c.LocalPath)
+                                        $locations = $cueFiles | Select-Object -ExpandProperty DirectoryName -Unique
+                                        Write-Warning ("Found {0} .cue file(s) under '{1}' (locations: {2}). To avoid breaking cue-based track references, tag-enhancement will be skipped for this folder unless -AllowCueProcessing is passed." -f $cueFiles.Count, $c.LocalPath, ($locations -join ', '))
                                         if (-not $AllowCueProcessing) {
                                             Write-Host "Skipping tag-enhancement for cue-based album: '$($c.LocalAlbum)'" -ForegroundColor Gray
                                             continue
                                         }
                                         else {
-                                            Write-Verbose ("AllowCueProcessing override: will attempt tag-enhancement even though {0} .cue file(s) exist in {1}" -f $cueFiles.Count, $c.LocalPath)
+                                            Write-Verbose ("AllowCueProcessing override: will attempt tag-enhancement even though {0} .cue file(s) exist under {1}" -f $cueFiles.Count, $c.LocalPath)
                                         }
                                     }
                                     
