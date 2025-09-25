@@ -1027,8 +1027,6 @@ function Invoke-MuFo {
                             $objFull = [PSCustomObject]$rec
                             $records += $objFull
                             
-                            Write-Host "We have SpotifyAlbum"
-                            
                             # Default to concise view unless -ShowEverything/-Detailed is set
                             $wantFull = ($ShowEverything -or $Detailed)
                                 if (-not $wantFull) {
