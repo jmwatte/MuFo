@@ -649,6 +649,33 @@ function Invoke-MuFo {
                         # Add track information if requested
                         if ($IncludeTracks) {
                             Add-TrackInformationToComparisons -AlbumComparisons $albumComparisons -BoxMode $BoxMode
+
+                            # Early pass: detect .cue files under album folders and flag comparisons so we can warn early
+                            foreach ($c in $albumComparisons) {
+                                try {
+                                    $cueFilesLocal = Get-ChildItem -LiteralPath $c.LocalPath -Filter '*.cue' -File -Recurse -ErrorAction SilentlyContinue
+                                }
+                                catch {
+                                    $cueFilesLocal = $null
+                                }
+                                if ($cueFilesLocal -and $cueFilesLocal.Count -gt 0) {
+                                    $locations = $cueFilesLocal | Select-Object -ExpandProperty DirectoryName -Unique
+                                    $c | Add-Member -NotePropertyName IsCueBased -NotePropertyValue $true -Force
+                                    $c | Add-Member -NotePropertyName CueLocations -NotePropertyValue $locations -Force
+                                }
+                                else {
+                                    $c | Add-Member -NotePropertyName IsCueBased -NotePropertyValue $false -Force
+                                    $c | Add-Member -NotePropertyName CueLocations -NotePropertyValue @() -Force
+                                }
+                            }
+
+                            # Warn up-front about any cue-based albums so the user sees it before renames/WhatIf messages
+                            $cueAlbums = $albumComparisons | Where-Object { $_.IsCueBased }
+                            if ($cueAlbums -and $cueAlbums.Count -gt 0) {
+                                foreach ($ca in $cueAlbums) {
+                                    Write-Warning ("Cue-based album detected: '{0}' (cue locations: {1}). Tag-enhancement will be skipped for these albums by default. Use -AllowCueProcessing to override." -f $ca.LocalAlbum, ($ca.CueLocations -join ', '))
+                                }
+                            }
                             
                             # Enhanced track processing for classical music, completeness validation, and tag enhancement
                             foreach ($c in $albumComparisons) {
