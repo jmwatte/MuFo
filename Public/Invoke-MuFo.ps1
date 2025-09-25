@@ -310,6 +310,12 @@ function Invoke-MuFo {
         [Parameter(Mandatory = $false)]
         [switch]$IncludeSpotifyObjects
 
+    ,
+    # When set, allow attempting tag-enhancement on folders that contain .cue files.
+    # Default: do NOT attempt tag enhancement on cue-based albums (safer).
+    [Parameter(Mandatory = $false)]
+    [switch]$AllowCueProcessing
+
     )
 
     begin {
@@ -766,6 +772,26 @@ function Invoke-MuFo {
                                     }
                                     
                                     Write-Verbose "Processing tag enhancement for: $($c.LocalAlbum)"
+
+                                    # --- CUE handling: skip tag-enhancement if .cue files present unless explicitly allowed ---
+                                    try {
+                                        $cueFiles = Get-ChildItem -LiteralPath $c.LocalPath -Filter '*.cue' -File -ErrorAction SilentlyContinue
+                                    }
+                                    catch {
+                                        $cueFiles = $null
+                                    }
+
+                                    if ($cueFiles -and $cueFiles.Count -gt 0) {
+                                        # warn immediately and skip writing tags to avoid breaking cue references
+                                        Write-Warning ("Found {0} .cue file(s) in '{1}'. To avoid breaking cue-based track references, tag-enhancement will be skipped for this folder unless -AllowCueProcessing is passed." -f $cueFiles.Count, $c.LocalPath)
+                                        if (-not $AllowCueProcessing) {
+                                            Write-Host "Skipping tag-enhancement for cue-based album: '$($c.LocalAlbum)'" -ForegroundColor Gray
+                                            continue
+                                        }
+                                        else {
+                                            Write-Verbose ("AllowCueProcessing override: will attempt tag-enhancement even though {0} .cue file(s) exist in {1}" -f $cueFiles.Count, $c.LocalPath)
+                                        }
+                                    }
                                     
                                     # Safety check: Warn about mixed audio formats that could cause track numbering issues
                                     $skipTagEnhancement = $false
