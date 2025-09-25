@@ -731,68 +731,97 @@ function Invoke-MuFo {
                                         $c | Add-Member -NotePropertyName CompletenessAnalysis -NotePropertyValue $completenessResult
                                     }
 
+                                    if ($ShowEverything) {
+                                        $c | Add-Member -NotePropertyName Tracks -NotePropertyValue $tracks
+                                    }
+                                }
+                                catch {
+                                    Write-Warning "Failed to read tracks for '$($c.LocalPath)': $($_.Exception.Message)"
+                                    $c | Add-Member -NotePropertyName TrackCountLocal -NotePropertyValue 0 -Force
+                                    $c | Add-Member -NotePropertyName TracksWithMissingTitle -NotePropertyValue 0
+                                    $c | Add-Member -NotePropertyName TracksMismatchedToSpotify -NotePropertyValue 0
+                                    if ($ShowEverything) {
+                                        $c | Add-Member -NotePropertyName Tracks -NotePropertyValue @()
+                                    }
+                                }
+                            }
+                            
+                            # OPTIMIZATION: Batch process Spotify track validation for all albums at once
+                            # This replaces individual API calls with efficient batching, caching, and rate limiting
+                            Write-Verbose "Starting optimized Spotify track validation for $($albumComparisons.Count) albums"
+                            $albumComparisons = Optimize-SpotifyTrackValidation -Comparisons $albumComparisons -ShowProgress:$($albumComparisons.Count -gt 20)
+                        }
+
+                        # Tag enhancement for all albums if requested (moved outside album processing loop)
+                        if ($FixTags -and $albumComparisons.Count -gt 0) {
+                            Write-Host "Processing tag enhancement for $($albumComparisons.Count) albums..." -ForegroundColor Cyan
+                            
+                            foreach ($c in $albumComparisons) {
+                                # Get fresh track data for this album
+                                try {
+                                    $tracks = Get-AudioFileTags -Path $c.LocalPath -IncludeComposer -ShowProgress
+                                    if ($tracks.Count -eq 0) {
+                                        Write-Verbose "No tracks found for album: $($c.LocalAlbum)"
+                                        continue
+                                    }
+                                    
+                                    Write-Verbose "Processing tag enhancement for: $($c.LocalAlbum)"
+                                    
                                     # Safety check: Warn about mixed audio formats that could cause track numbering issues
                                     $skipTagEnhancement = $false
-                                    if ($FixTags -and $tracks.Count -gt 0) {
-                                        $audioFiles = $tracks | Where-Object { $_.Format -and $_.Format -ne '' }
-                                        $formats = $audioFiles | Group-Object Format | Select-Object -ExpandProperty Name
+                                    $audioFiles = $tracks | Where-Object { $_.Format -and $_.Format -ne '' }
+                                    $formats = $audioFiles | Group-Object Format | Select-Object -ExpandProperty Name
 
-                                        if ($formats.Count -gt 1) {
-                                            # Check if formats are already properly separated into subfolders
-                                            $formatSubfolders = Get-ChildItem -LiteralPath $c.LocalPath -Directory -ErrorAction SilentlyContinue | 
-                                                               Where-Object { $_.Name -in @('FLAC', 'APE', 'MP3', 'M4A', 'OGG', 'WAV', 'WMA') -or
-                                                                            $_.Name -match '^(FLAC|APE|MP3|M4A|OGG|WAV|WMA)$' }
-                                            
-                                            # If we have format subfolders and multiple formats, check if they're properly separated
-                                            $formatsAreSeparated = $false
-                                            if ($formatSubfolders) {
-                                                # Count files per format per subfolder
-                                                $formatSeparationCheck = @{}
-                                                foreach ($subfolder in $formatSubfolders) {
-                                                    $subfolderPath = $subfolder.FullName
-                                                    $subfolderTracks = $tracks | Where-Object { $_.Path.StartsWith($subfolderPath) }
-                                                    $subfolderFormats = $subfolderTracks | Group-Object Format | Select-Object -ExpandProperty Name
-                                                    
-                                                    if ($subfolderFormats.Count -eq 1) {
-                                                        # This subfolder contains only one format - good separation
-                                                        $format = $subfolderFormats[0]
-                                                        if (-not $formatSeparationCheck.ContainsKey($format)) {
-                                                            $formatSeparationCheck[$format] = 0
-                                                        }
-                                                        $formatSeparationCheck[$format]++
-                                                    }
-                                                }
+                                    if ($formats.Count -gt 1) {
+                                        # Check if formats are already properly separated into subfolders
+                                        $formatSubfolders = Get-ChildItem -LiteralPath $c.LocalPath -Directory -ErrorAction SilentlyContinue | 
+                                                           Where-Object { $_.Name -in @('FLAC', 'APE', 'MP3', 'M4A', 'OGG', 'WAV', 'WMA') -or
+                                                                        $_.Name -match '^(FLAC|APE|MP3|M4A|OGG|WAV|WMA)$' }
+                                        
+                                        # If we have format subfolders and multiple formats, check if they're properly separated
+                                        $formatsAreSeparated = $false
+                                        if ($formatSubfolders) {
+                                            # Count files per format per subfolder
+                                            $formatSeparationCheck = @{}
+                                            foreach ($subfolder in $formatSubfolders) {
+                                                $subfolderPath = $subfolder.FullName
+                                                $subfolderTracks = $tracks | Where-Object { $_.Path.StartsWith($subfolderPath) }
+                                                $subfolderFormats = $subfolderTracks | Group-Object Format | Select-Object -ExpandProperty Name
                                                 
-                                                # If each format appears in exactly one subfolder, they're properly separated
-                                                $formatsAreSeparated = ($formatSeparationCheck.Count -eq $formats.Count) -and 
-                                                                     ($formatSeparationCheck.Values | Where-Object { $_ -gt 1 }).Count -eq 0
+                                                if ($subfolderFormats.Count -eq 1) {
+                                                    # This subfolder contains only one format - good separation
+                                                    $format = $subfolderFormats[0]
+                                                    if (-not $formatSeparationCheck.ContainsKey($format)) {
+                                                        $formatSeparationCheck[$format] = 0
+                                                    }
+                                                    $formatSeparationCheck[$format]++
+                                                }
                                             }
                                             
-                                            if (-not $formatsAreSeparated) {
-                                                Write-Warning "⚠️ Mixed audio formats detected in '$($c.LocalAlbum)': $($formats -join ', ')"
-                                                Write-Host "   This can cause track numbering issues. Consider separating formats into different folders." -ForegroundColor Yellow
-                                                Write-Host "   Use .\Reorganize-MusicFormats.ps1 to automatically separate formats." -ForegroundColor Cyan
+                                            # If each format appears in exactly one subfolder, they're properly separated
+                                            $formatsAreSeparated = ($formatSeparationCheck.Count -eq $formats.Count) -and 
+                                                                 ($formatSeparationCheck.Values | Where-Object { $_ -gt 1 }).Count -eq 0
+                                        }
+                                        
+                                        if (-not $formatsAreSeparated) {
+                                            Write-Warning "⚠️ Mixed audio formats detected in '$($c.LocalAlbum)': $($formats -join ', ')"
+                                            Write-Host "   This can cause track numbering issues. Consider separating formats into different folders." -ForegroundColor Yellow
+                                            Write-Host "   Use .\Reorganize-MusicFormats.ps1 to automatically separate formats." -ForegroundColor Cyan
 
-                                                # Ask user if they want to skip tag enhancement for this album
-                                                if (-not $Force) {
-                                                    $response = Read-Host "Continue with tag enhancement anyway? (y/N)"
-                                                    if ($response -notmatch '^[Yy]') {
-                                                        Write-Host "Skipping tag enhancement for '$($c.LocalAlbum)'" -ForegroundColor Gray
-                                                        $skipTagEnhancement = $true
-                                                    }
+                                            # Ask user if they want to skip tag enhancement for this album
+                                            if (-not $Force) {
+                                                $response = Read-Host "Continue with tag enhancement anyway? (y/N)"
+                                                if ($response -notmatch '^[Yy]') {
+                                                    Write-Host "Skipping tag enhancement for '$($c.LocalAlbum)'" -ForegroundColor Gray
+                                                    $skipTagEnhancement = $true
                                                 }
-                                            } else {
-                                                Write-Verbose "Formats are properly separated into subfolders: $($formats -join ', ')"
                                             }
+                                        } else {
+                                            Write-Verbose "Formats are properly separated into subfolders: $($formats -join ', ')"
                                         }
                                     }
-
-                                    # Tag enhancement if requested
-                                    Write-Host "DEBUG: FixTags=$FixTags, tracks.Count=$($tracks.Count), skipTagEnhancement=$skipTagEnhancement" -ForegroundColor Cyan
-                                    Write-Host "DEBUG: About to call Get-AudioFileTags with path: $($c.LocalPath)" -ForegroundColor Cyan
-                                    if ($FixTags -and $tracks.Count -gt 0 -and -not $skipTagEnhancement) {
-                                        Write-Verbose "Enhancing tags for: $($c.LocalPath)"
-                                        
+                                    
+                                    if (-not $skipTagEnhancement) {
                                         # Determine paths to process for tag enhancement (same logic as track scanning)
                                         $tagScanPaths = if ($BoxMode -and (Get-ChildItem -LiteralPath $c.LocalPath -Directory -ErrorAction SilentlyContinue)) {
                                             Get-ChildItem -LiteralPath $c.LocalPath -Directory | Select-Object -ExpandProperty FullName
@@ -867,26 +896,11 @@ function Invoke-MuFo {
                                         $updatedMissingTitles = ($enhancedTracks | Where-Object { -not $_.Title }).Count
                                         $c | Add-Member -NotePropertyName TracksWithMissingTitleAfterFix -NotePropertyValue $updatedMissingTitles -Force
                                     }
-
-                                    if ($ShowEverything) {
-                                        $c | Add-Member -NotePropertyName Tracks -NotePropertyValue $tracks
-                                    }
                                 }
                                 catch {
-                                    Write-Warning "Failed to read tracks for '$($c.LocalPath)': $($_.Exception.Message)"
-                                    $c | Add-Member -NotePropertyName TrackCountLocal -NotePropertyValue 0 -Force
-                                    $c | Add-Member -NotePropertyName TracksWithMissingTitle -NotePropertyValue 0
-                                    $c | Add-Member -NotePropertyName TracksMismatchedToSpotify -NotePropertyValue 0
-                                    if ($ShowEverything) {
-                                        $c | Add-Member -NotePropertyName Tracks -NotePropertyValue @()
-                                    }
+                                    Write-Warning "Failed to process tag enhancement for '$($c.LocalPath)': $($_.Exception.Message)"
                                 }
                             }
-                            
-                            # OPTIMIZATION: Batch process Spotify track validation for all albums at once
-                            # This replaces individual API calls with efficient batching, caching, and rate limiting
-                            Write-Verbose "Starting optimized Spotify track validation for $($albumComparisons.Count) albums"
-                            $albumComparisons = Optimize-SpotifyTrackValidation -Comparisons $albumComparisons -ShowProgress:$($albumComparisons.Count -gt 20)
                         }
 
                         # Display summary; later we'll wire -DoIt rename/apply
