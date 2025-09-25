@@ -738,17 +738,51 @@ function Invoke-MuFo {
                                         $formats = $audioFiles | Group-Object Format | Select-Object -ExpandProperty Name
 
                                         if ($formats.Count -gt 1) {
-                                            Write-Warning "⚠️ Mixed audio formats detected in '$($c.LocalAlbum)': $($formats -join ', ')"
-                                            Write-Host "   This can cause track numbering issues. Consider separating formats into different folders." -ForegroundColor Yellow
-                                            Write-Host "   Use .\Reorganize-MusicFormats.ps1 to automatically separate formats." -ForegroundColor Cyan
-
-                                            # Ask user if they want to skip tag enhancement for this album
-                                            if (-not $Force) {
-                                                $response = Read-Host "Continue with tag enhancement anyway? (y/N)"
-                                                if ($response -notmatch '^[Yy]') {
-                                                    Write-Host "Skipping tag enhancement for '$($c.LocalAlbum)'" -ForegroundColor Gray
-                                                    $skipTagEnhancement = $true
+                                            # Check if formats are already properly separated into subfolders
+                                            $formatSubfolders = Get-ChildItem -LiteralPath $c.LocalPath -Directory -ErrorAction SilentlyContinue | 
+                                                               Where-Object { $_.Name -in @('FLAC', 'APE', 'MP3', 'M4A', 'OGG', 'WAV', 'WMA') -or
+                                                                            $_.Name -match '^(FLAC|APE|MP3|M4A|OGG|WAV|WMA)$' }
+                                            
+                                            # If we have format subfolders and multiple formats, check if they're properly separated
+                                            $formatsAreSeparated = $false
+                                            if ($formatSubfolders) {
+                                                # Count files per format per subfolder
+                                                $formatSeparationCheck = @{}
+                                                foreach ($subfolder in $formatSubfolders) {
+                                                    $subfolderPath = $subfolder.FullName
+                                                    $subfolderTracks = $tracks | Where-Object { $_.Path.StartsWith($subfolderPath) }
+                                                    $subfolderFormats = $subfolderTracks | Group-Object Format | Select-Object -ExpandProperty Name
+                                                    
+                                                    if ($subfolderFormats.Count -eq 1) {
+                                                        # This subfolder contains only one format - good separation
+                                                        $format = $subfolderFormats[0]
+                                                        if (-not $formatSeparationCheck.ContainsKey($format)) {
+                                                            $formatSeparationCheck[$format] = 0
+                                                        }
+                                                        $formatSeparationCheck[$format]++
+                                                    }
                                                 }
+                                                
+                                                # If each format appears in exactly one subfolder, they're properly separated
+                                                $formatsAreSeparated = ($formatSeparationCheck.Count -eq $formats.Count) -and 
+                                                                     ($formatSeparationCheck.Values | Where-Object { $_ -gt 1 }).Count -eq 0
+                                            }
+                                            
+                                            if (-not $formatsAreSeparated) {
+                                                Write-Warning "⚠️ Mixed audio formats detected in '$($c.LocalAlbum)': $($formats -join ', ')"
+                                                Write-Host "   This can cause track numbering issues. Consider separating formats into different folders." -ForegroundColor Yellow
+                                                Write-Host "   Use .\Reorganize-MusicFormats.ps1 to automatically separate formats." -ForegroundColor Cyan
+
+                                                # Ask user if they want to skip tag enhancement for this album
+                                                if (-not $Force) {
+                                                    $response = Read-Host "Continue with tag enhancement anyway? (y/N)"
+                                                    if ($response -notmatch '^[Yy]') {
+                                                        Write-Host "Skipping tag enhancement for '$($c.LocalAlbum)'" -ForegroundColor Gray
+                                                        $skipTagEnhancement = $true
+                                                    }
+                                                }
+                                            } else {
+                                                Write-Verbose "Formats are properly separated into subfolders: $($formats -join ', ')"
                                             }
                                         }
                                     }
