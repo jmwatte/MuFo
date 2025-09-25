@@ -329,19 +329,6 @@ function Invoke-MuFo {
             Write-Warning "Spotishell module not found. Install-Module Spotishell to enable Spotify integration."
         }
 
-        # EARLY PRE-SCAN (begin): detect .cue files under the provided Path immediately to warn about cue-based albums
-        if ($FixTags) {
-            $albumFoldersWithCue = Get-ChildItem -LiteralPath $Path -Directory | Where-Object {
-                Get-ChildItem -LiteralPath $_.FullName -Filter '*.cue' -File -Recurse -ErrorAction SilentlyContinue
-            }
-            if ($albumFoldersWithCue) {
-                Write-Host "FixTags will be disabled for the following folders with .cue files unless -AllowCueProcessing is passed." -ForegroundColor Yellow
-                foreach ($folder in $albumFoldersWithCue) {
-                    Write-Host $folder.Name
-                }
-            }
-        }
-
         # Helper functions are now in Private modules
         # ConvertTo-SafeFileName and ConvertTo-ComparableName moved to Invoke-MuFo-OutputFormatting.ps1
         # Exclusions functions moved to Invoke-MuFo-Exclusions.ps1
@@ -631,6 +618,24 @@ function Invoke-MuFo {
                     $artistRenameName = $artistRename.ProposedName
                     $artistRenameTargetPath = $artistRename.TargetPath
 
+                    # Output initial object with empty fields
+                    $initialObj = [PSCustomObject][ordered]@{
+                        LocalArtist   = $localArtist
+                        SpotifyArtist = ""
+                        LocalFolder   = ""
+                        LocalAlbum    = ""
+                        SpotifyAlbum  = ""
+                        NewFolderName = ""
+                        Decision      = ""
+                        ArtistSource  = $artistSelectionSource
+                    }
+                    Write-Host "We have:"
+                    Write-Output $initialObj
+                    Write-Host "Searching SpotifyArtist"
+                    Write-Host "Have SpotifyArtist"
+                    $initialObj.SpotifyArtist = $selectedArtist.Name
+                    Write-Output $initialObj
+
                     # Proceed with album verification: compare local folder names to Spotify artist albums
                     try {
                         # Use refactored album processing logic
@@ -642,6 +647,19 @@ function Invoke-MuFo {
                         }
                         else {
                             $albumComparisons = Get-AlbumComparisons -CurrentPath $currentPath -SelectedArtist $selectedArtist -EffectiveExclusions $effectiveExclusions
+                        }
+                        
+                        # EARLY PRE-SCAN: detect .cue files under the provided Path immediately to warn about cue-based albums
+                        if ($FixTags) {
+                            $albumFoldersWithCue = Get-ChildItem -LiteralPath $currentPath -Directory | Where-Object {
+                                Get-ChildItem -LiteralPath $_.FullName -Filter '*.cue' -File -Recurse -ErrorAction SilentlyContinue
+                            }
+                            if ($albumFoldersWithCue) {
+                                Write-Host "FixTags will be disabled for the following folders with .cue files unless -AllowCueProcessing is passed." -ForegroundColor Yellow
+                                foreach ($folder in $albumFoldersWithCue) {
+                                    Write-Host $folder.Name
+                                }
+                            }
                         }
                         
                         # Memory optimization for large collections
@@ -792,7 +810,6 @@ function Invoke-MuFo {
 
                         # Tag enhancement for all albums if requested (moved outside album processing loop)
                         if ($FixTags -and $albumComparisons.Count -gt 0) {
-                            Write-Host "Processing tag enhancement for $($albumComparisons.Count) albums..." -ForegroundColor Cyan
                             
                             foreach ($c in $albumComparisons) {
                                 # Get fresh track data for this album
@@ -969,6 +986,8 @@ function Invoke-MuFo {
                         foreach ($c in ($albumComparisons | Sort-Object -Property MatchScore -Descending)) {
                             $processedCount++
                             
+                            Write-Host "Searching SpotifyAlbum..."
+                            
                             # Periodic memory monitoring for large collections
                             if ($albumComparisons.Count -gt 500 -and ($processedCount % 100) -eq 0) {
                                 $null = Add-MemoryOptimization -Phase 'Progress'
@@ -1007,6 +1026,9 @@ function Invoke-MuFo {
                             }
                             $objFull = [PSCustomObject]$rec
                             $records += $objFull
+                            
+                            Write-Host "We have SpotifyAlbum"
+                            
                             # Default to concise view unless -ShowEverything/-Detailed is set
                             $wantFull = ($ShowEverything -or $Detailed)
                                 if (-not $wantFull) {
@@ -1034,6 +1056,10 @@ function Invoke-MuFo {
                                     Write-NothingToRenameMessage
                                 }
                                 # Intentionally suppress verbose per-album UI line to avoid redundancy when objects are emitted.
+                        }
+
+                        if ($FixTags) {
+                            Write-Host "Processing tag enhancement for $($albumComparisons.Count) albums..."
                         }
 
                         # If running in WhatIf or -Preview, always print a concise rename map by default
