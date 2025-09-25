@@ -1,7 +1,21 @@
 function Set-AudioFileTags {
 <#
 .SYNOPSIS
-    Writes and updates audio file tags with intelligent metadata enhancement.
+    Writes and updates audio file tags with intelligent met    # Get current tags to work with (exclude lib folders)
+    $existingTags = Get-AudioFileTags -Path $Path -IncludeComposer
+    if ($existingTags.Count -eq 0) {
+        Write-Warning "No audio files found or could not read existing tags"
+        return @()
+    }
+    
+    Write-Verbose "Processing $($existingTags.Count) audio files for tag enhancement"
+    
+    # Use complete track list for album analysis if provided (for format-separated folders)
+    $albumAnalysisTracks = if ($CompleteTrackList -and $CompleteTrackList.Count -gt 0) {
+        $CompleteTrackList
+    } else {
+        $existingTags
+    }hancement.
 
 .DESCRIPTION
     This function writes metadata to audio files with special enhancements for classical music.
@@ -85,7 +99,9 @@ function Set-AudioFileTags {
         
         [switch]$CreateMissingFilesLog,
         
-        [string]$LogTo
+        [string]$LogTo,
+        
+        [object[]]$CompleteTrackList
     )
     
     # Supported audio file extensions
@@ -130,11 +146,11 @@ function Set-AudioFileTags {
     
     # Analyze album for consistency and gaps
     $albumAnalysis = @{
-        AlbumName = ($existingTags | Where-Object { $_.Album } | Group-Object Album | Sort-Object Count -Descending | Select-Object -First 1 -ExpandProperty Name)
-        ArtistName = ($existingTags | Where-Object { $_.Artist } | Group-Object Artist | Sort-Object Count -Descending | Select-Object -First 1 -ExpandProperty Name)
-        IsClassical = ($existingTags | Where-Object { $_.IsClassical -eq $true }).Count -gt ($existingTags.Count / 2)
-        TrackNumbers = $existingTags | Where-Object { $_.Track -gt 0 } | ForEach-Object { $_.Track } | Sort-Object
-        ExpectedTracks = if ($SpotifyAlbum -and $SpotifyAlbum.total_tracks) { $SpotifyAlbum.total_tracks } else { $existingTags.Count }
+        AlbumName = ($albumAnalysisTracks | Where-Object { $_.Album } | Group-Object Album | Sort-Object Count -Descending | Select-Object -First 1 -ExpandProperty Name)
+        ArtistName = ($albumAnalysisTracks | Where-Object { $_.Artist } | Group-Object Artist | Sort-Object Count -Descending | Select-Object -First 1 -ExpandProperty Name)
+        IsClassical = ($albumAnalysisTracks | Where-Object { $_.IsClassical -eq $true }).Count -gt ($albumAnalysisTracks.Count / 2)
+        TrackNumbers = $albumAnalysisTracks | Where-Object { $_.Track -gt 0 } | ForEach-Object { $_.Track } | Sort-Object
+        ExpectedTracks = if ($SpotifyAlbum -and $SpotifyAlbum.total_tracks) { $SpotifyAlbum.total_tracks } else { $albumAnalysisTracks.Count }
     }
     
     # Fetch album tracks early so we can check for actual track artist changes
@@ -149,14 +165,14 @@ function Set-AudioFileTags {
     }
     
     # Detect if this might be a compilation album (Various Artists scenario)
-    $artistVariations = $existingTags | Where-Object { $_.Artist -and $_.Artist -ne '' } | Group-Object Artist
-    $isLikelyCompilation = $artistVariations.Count -gt ($existingTags.Count * 0.5) -or 
+    $artistVariations = $albumAnalysisTracks | Where-Object { $_.Artist -and $_.Artist -ne '' } | Group-Object Artist
+    $isLikelyCompilation = $artistVariations.Count -gt ($albumAnalysisTracks.Count * 0.5) -or 
                           ($albumAnalysis.ArtistName -match "(?i)(various|compilation|mixed|soundtrack)")
     
     # Check if any track artists will actually be changed
     $tracksWithArtistChanges = 0
     if ('TrackArtists' -in $tagsToFix) {
-        foreach ($track in $existingTags) {
+        foreach ($track in $albumAnalysisTracks) {
             $suggestedArtist = $null
             # Get track-specific artist from Spotify track data first
             if ($SpotifyAlbum -and $SpotifyAlbum.tracks -and $SpotifyAlbum.tracks.items -and $track.Track -gt 0) {

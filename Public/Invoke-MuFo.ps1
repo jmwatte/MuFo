@@ -791,33 +791,72 @@ function Invoke-MuFo {
                                     if ($FixTags -and $tracks.Count -gt 0 -and -not $skipTagEnhancement) {
                                         Write-Verbose "Enhancing tags for: $($c.LocalPath)"
                                         
-                                        $tagParams = @{
-                                            Path   = $c.LocalPath
-                                            WhatIf = $WhatIfPreference
+                                        # Determine paths to process for tag enhancement (same logic as track scanning)
+                                        $tagScanPaths = if ($BoxMode -and (Get-ChildItem -LiteralPath $c.LocalPath -Directory -ErrorAction SilentlyContinue)) {
+                                            Get-ChildItem -LiteralPath $c.LocalPath -Directory | Select-Object -ExpandProperty FullName
+                                        }
+                                        else {
+                                            # Auto-detect format-separated folders (FLAC/, APE/, MP3/, etc.)
+                                            $subDirs = Get-ChildItem -LiteralPath $c.LocalPath -Directory -ErrorAction SilentlyContinue
+                                            $formatDirs = $subDirs | Where-Object {
+                                                $_.Name -in @('FLAC', 'APE', 'MP3', 'M4A', 'OGG', 'WAV', 'WMA') -or
+                                                $_.Name -match '^(FLAC|APE|MP3|M4A|OGG|WAV|WMA)$'
+                                            }
+                                            
+                                            if ($formatDirs) {
+                                                # Use format-separated subfolders
+                                                $formatDirs | Select-Object -ExpandProperty FullName
+                                            }
+                                            else {
+                                                # Use the album folder directly (normal case)
+                                                @($c.LocalPath)
+                                            }
                                         }
                                         
-                                        # Pass tag fixing parameters to Set-AudioFileTags
-                                        if ($FixOnly.Count -gt 0) { $tagParams.FixOnly = $FixOnly }
-                                        if ($DontFix.Count -gt 0) { $tagParams.DontFix = $DontFix }
-                                        if ($OptimizeClassicalTags) { $tagParams.OptimizeClassicalTags = $true }
-                                        if ($ValidateCompleteness) { $tagParams.ValidateCompleteness = $true }
-                                        if ($CreateMissingFilesLog) { $tagParams.CreateMissingFilesLog = $true }
-                                        
-                                        # Add Spotify album data if available
-                                        if ($c.MatchedItem -and $c.MatchedItem.Item) {
-                                            $tagParams.SpotifyAlbum = $c.MatchedItem.Item
+                                        # Process each scan path for tag enhancement
+                                        $allTagResults = @()
+                                        foreach ($tagPath in $tagScanPaths) {
+                                            Write-Verbose "Processing tag enhancement for path: $tagPath"
+                                            
+                                            $tagParams = @{
+                                                Path   = $tagPath
+                                                WhatIf = $WhatIfPreference
+                                            }
+                                            
+                                            # For format-separated folders, pass the complete track list for proper album analysis
+                                            # but only write tags to files in the current path
+                                            if ($tagScanPaths.Count -gt 1) {
+                                                $tagParams.CompleteTrackList = $tracks
+                                            }
+                                            
+                                            # Pass tag fixing parameters to Set-AudioFileTags
+                                            if ($FixOnly.Count -gt 0) { $tagParams.FixOnly = $FixOnly }
+                                            if ($DontFix.Count -gt 0) { $tagParams.DontFix = $DontFix }
+                                            if ($OptimizeClassicalTags) { $tagParams.OptimizeClassicalTags = $true }
+                                            if ($ValidateCompleteness) { $tagParams.ValidateCompleteness = $true }
+                                            if ($CreateMissingFilesLog) { $tagParams.CreateMissingFilesLog = $true }
+                                            
+                                            # Add Spotify album data if available
+                                            if ($c.MatchedItem -and $c.MatchedItem.Item) {
+                                                $tagParams.SpotifyAlbum = $c.MatchedItem.Item
+                                            }
+                                            
+                                            if ($LogTo) {
+                                                $tagLogPath = $LogTo -replace '\.(json|log)$', '-tags.$1'
+                                                $tagParams.LogTo = $tagLogPath
+                                            }
+                                            
+                                            $pathTagResults = Set-AudioFileTags @tagParams
+                                            $allTagResults += $pathTagResults
                                         }
                                         
-                                        if ($LogTo) {
-                                            $tagLogPath = $LogTo -replace '\.(json|log)$', '-tags.$1'
-                                            $tagParams.LogTo = $tagLogPath
+                                        $c | Add-Member -NotePropertyName TagEnhancementResults -NotePropertyValue $allTagResults
+                                        
+                                        # Update track count after enhancements (use same scan paths)
+                                        $enhancedTracks = @()
+                                        foreach ($tagPath in $tagScanPaths) {
+                                            $enhancedTracks += Get-AudioFileTags -Path $tagPath -IncludeComposer -ShowProgress
                                         }
-                                        
-                                        $tagResults = Set-AudioFileTags @tagParams
-                                        $c | Add-Member -NotePropertyName TagEnhancementResults -NotePropertyValue $tagResults
-                                        
-                                        # Update track count after enhancements
-                                        $enhancedTracks = Get-AudioFileTags -Path $c.LocalPath -IncludeComposer -ShowProgress
                                         $updatedMissingTitles = ($enhancedTracks | Where-Object { -not $_.Title }).Count
                                         $c | Add-Member -NotePropertyName TracksWithMissingTitleAfterFix -NotePropertyValue $updatedMissingTitles -Force
                                     }
