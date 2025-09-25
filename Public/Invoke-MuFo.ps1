@@ -329,19 +329,15 @@ function Invoke-MuFo {
             Write-Warning "Spotishell module not found. Install-Module Spotishell to enable Spotify integration."
         }
 
-        # EARLY PRE-SCAN (begin): detect .cue files under the provided Path immediately to avoid expensive work
+        # EARLY PRE-SCAN (begin): detect .cue files under the provided Path immediately to warn about cue-based albums
         if ($FixTags) {
             $albumFoldersWithCue = Get-ChildItem -LiteralPath $Path -Directory | Where-Object {
                 Get-ChildItem -LiteralPath $_.FullName -Filter '*.cue' -File -Recurse -ErrorAction SilentlyContinue
             }
             if ($albumFoldersWithCue) {
-                Write-Host "FixTags will be disabled later for the following folders with .cue files unless -AllowCueProcessing is passed." -ForegroundColor Yellow
+                Write-Host "FixTags will be disabled for the following folders with .cue files unless -AllowCueProcessing is passed." -ForegroundColor Yellow
                 foreach ($folder in $albumFoldersWithCue) {
                     Write-Host $folder.Name
-                }
-                if (-not $AllowCueProcessing) {
-                    $FixTags = $false
-                    Write-Host "-FixTags disabled for this run due to cue-based albums (pass -AllowCueProcessing to force)." -ForegroundColor Yellow
                 }
             }
         }
@@ -808,6 +804,24 @@ function Invoke-MuFo {
                                     }
                                     
                                     Write-Verbose "Processing tag enhancement for: $($c.LocalAlbum)"
+
+                                    # Check for .cue files and skip unless -AllowCueProcessing
+                                    try {
+                                        $cueFiles = Get-ChildItem -LiteralPath $c.LocalPath -Filter '*.cue' -File -Recurse -ErrorAction SilentlyContinue
+                                    }
+                                    catch {
+                                        $cueFiles = $null
+                                    }
+
+                                    if ($cueFiles -and $cueFiles.Count -gt 0) {
+                                        if (-not $AllowCueProcessing) {
+                                            Write-Host "Skipping tag-enhancement for cue-based album: '$($c.LocalAlbum)'" -ForegroundColor Gray
+                                            continue
+                                        }
+                                        else {
+                                            Write-Verbose ("AllowCueProcessing override: processing cue-based album '{0}'" -f $c.LocalAlbum)
+                                        }
+                                    }
 
                                     # Safety check: Warn about mixed audio formats that could cause track numbering issues
                                     $skipTagEnhancement = $false
