@@ -788,6 +788,8 @@ function Invoke-MuFo {
                                     }
 
                                     # Tag enhancement if requested
+                                    Write-Host "DEBUG: FixTags=$FixTags, tracks.Count=$($tracks.Count), skipTagEnhancement=$skipTagEnhancement" -ForegroundColor Cyan
+                                    Write-Host "DEBUG: About to call Get-AudioFileTags with path: $($c.LocalPath)" -ForegroundColor Cyan
                                     if ($FixTags -and $tracks.Count -gt 0 -and -not $skipTagEnhancement) {
                                         Write-Verbose "Enhancing tags for: $($c.LocalPath)"
                                         
@@ -847,7 +849,12 @@ function Invoke-MuFo {
                                             }
                                             
                                             $pathTagResults = Set-AudioFileTags @tagParams
-                                            $allTagResults += $pathTagResults
+                                            $allTagResults += $pathTagResults.Results
+                                            
+                                            # Store album analysis for display purposes
+                                            if ($pathTagResults.AlbumAnalysis) {
+                                                $c | Add-Member -NotePropertyName AlbumAnalysis -NotePropertyValue $pathTagResults.AlbumAnalysis -Force
+                                            }
                                         }
                                         
                                         $c | Add-Member -NotePropertyName TagEnhancementResults -NotePropertyValue $allTagResults
@@ -910,7 +917,7 @@ function Invoke-MuFo {
                                 LocalArtist   = $localArtist
                                 LocalFolder   = $c.LocalAlbum
                                 LocalAlbum    = $c.LocalNorm
-                                SpotifyAlbum  = $c.MatchName
+                                SpotifyAlbum  = if ($c.AlbumAnalysis -and $c.AlbumAnalysis.AlbumName) { $c.AlbumAnalysis.AlbumName } else { $c.MatchName }
                                 AlbumType     = $c.MatchType
                                 Score         = $c.MatchScore
                                 LocalPath     = $c.LocalPath

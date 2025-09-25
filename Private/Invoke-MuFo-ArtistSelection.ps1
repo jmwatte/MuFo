@@ -91,6 +91,7 @@ function Get-ArtistSelection {
                 Write-Verbose "High-confidence artist match found (score: $([math]::Round($TopMatches[0].Score, 2))), using directly: $($selectedArtist.Name)"
             } elseif (-not $IsPreview) {
                 # Prompt user to choose (skip prompts in Preview/WhatIf)
+                Write-Host "`nArtist selection for folder: '$LocalArtist'" -ForegroundColor Cyan
                 for ($i = 0; $i -lt $TopMatches.Count; $i++) {
                     Write-Host "$($i + 1). $($TopMatches[$i].Artist.Name) (Score: $([math]::Round($TopMatches[$i].Score, 2)))"
                 }
@@ -133,6 +134,7 @@ function Get-ArtistSelection {
     # If still not selected and Smart mode, offer manual selection only when not in Preview/WhatIf
     if (-not $selectedArtist -and $DoIt -eq 'Smart' -and -not $IsPreview) {
         Write-Verbose "No artist after inference. Switching to manual selection."
+        Write-Host "`nArtist selection for folder: '$LocalArtist'" -ForegroundColor Cyan
         for ($i = 0; $i -lt $TopMatches.Count; $i++) {
             Write-Host "$($i + 1). $($TopMatches[$i].Artist.Name) (Score: $([math]::Round($TopMatches[$i].Score, 2)))"
         }
