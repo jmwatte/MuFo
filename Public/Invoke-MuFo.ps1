@@ -335,8 +335,7 @@ function Invoke-MuFo {
     }
 
     process {
-        # Early pre-scan: if user requested -FixTags but the target Path contains .cue files,
-        # warn immediately and disable FixTags by default to avoid wasting time and API calls.
+        # EARLY PRE-SCAN: run immediately to detect .cue files and avoid expensive work if -FixTags requested
         if ($FixTags) {
             try {
                 $globalCueFiles = Get-ChildItem -LiteralPath $Path -Filter '*.cue' -File -Recurse -ErrorAction SilentlyContinue
@@ -358,6 +357,7 @@ function Invoke-MuFo {
                 }
             }
         }
+        # (moved) early pre-scan will be inserted at top of process block below
         # Parameter validation for tag enhancement
         if ($OptimizeClassicalTags -and -not $FixTags) {
             Write-Error "Tag enhancement switch (-OptimizeClassicalTags) requires -FixTags to be enabled."
