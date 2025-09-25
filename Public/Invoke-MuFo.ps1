@@ -632,7 +632,6 @@ function Invoke-MuFo {
                     Write-Host "We have:"
                     Write-Output $initialObj
                     Write-Host "Searching SpotifyArtist"
-                    Write-Host "Have SpotifyArtist"
                     $initialObj.SpotifyArtist = $selectedArtist.Name
                     Write-Output $initialObj
 
@@ -985,6 +984,20 @@ function Invoke-MuFo {
                         $processedCount = 0
                         foreach ($c in ($albumComparisons | Sort-Object -Property MatchScore -Descending)) {
                             $processedCount++
+                            
+                            # Show album before searching
+                            Write-Host "We have this album:"
+                            $albumObj = [PSCustomObject]([ordered]@{
+                                LocalArtist   = $localArtist
+                                SpotifyArtist = $selectedArtist.Name
+                                LocalFolder   = $c.LocalAlbum
+                                LocalAlbum    = $c.LocalNorm
+                                SpotifyAlbum  = ""  # Empty before search
+                                NewFolderName = ""
+                                Decision      = ""
+                                ArtistSource  = $artistSelectionSource
+                            })
+                            Write-Output $albumObj
                             
                             Write-Host "Searching SpotifyAlbum..."
                             
