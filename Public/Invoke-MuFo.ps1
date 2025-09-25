@@ -335,6 +335,29 @@ function Invoke-MuFo {
     }
 
     process {
+        # Early pre-scan: if user requested -FixTags but the target Path contains .cue files,
+        # warn immediately and disable FixTags by default to avoid wasting time and API calls.
+        if ($FixTags) {
+            try {
+                $globalCueFiles = Get-ChildItem -LiteralPath $Path -Filter '*.cue' -File -Recurse -ErrorAction SilentlyContinue
+            }
+            catch {
+                $globalCueFiles = $null
+            }
+
+            if ($globalCueFiles -and $globalCueFiles.Count -gt 0) {
+                $locations = $globalCueFiles | Select-Object -ExpandProperty DirectoryName -Unique
+                Write-Warning ("Found {0} .cue file(s) under '{1}' (locations: {2}). Because -FixTags was requested and cue-based albums are present, tag-enhancement will be disabled by default to avoid expensive processing. Use -AllowCueProcessing to override." -f $globalCueFiles.Count, $Path, ($locations -join ', '))
+                if (-not $AllowCueProcessing) {
+                    # Disable FixTags for this run to avoid expensive operations
+                    $FixTags = $false
+                    Write-Host "-FixTags temporarily disabled for this run due to cue-based albums (pass -AllowCueProcessing to force)." -ForegroundColor Yellow
+                }
+                else {
+                    Write-Host "-AllowCueProcessing detected: proceeding with tag-enhancement despite .cue files." -ForegroundColor Cyan
+                }
+            }
+        }
         # Parameter validation for tag enhancement
         if ($OptimizeClassicalTags -and -not $FixTags) {
             Write-Error "Tag enhancement switch (-OptimizeClassicalTags) requires -FixTags to be enabled."
