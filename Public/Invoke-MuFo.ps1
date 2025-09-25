@@ -1074,8 +1074,25 @@ function Invoke-MuFo {
                                     $shouldRename = $false
                                     switch ($DoIt) {
                                         'Automatic' { $shouldRename = ($c.MatchScore -ge $goodThreshold) }
-                                        'Smart' { if ($c.MatchScore -ge $goodThreshold) { $shouldRename = $true } else { $resp = Read-Host ("Rename '{0}' -> '{1}'? [y/N]" -f $c.LocalAlbum, $c.ProposedName); if ($resp -match '^(?i)y(es)?$') { $shouldRename = $true } } }
-                                        'Manual' { $resp = Read-Host ("Rename '{0}' -> '{1}'? [y/N]" -f $c.LocalAlbum, $c.ProposedName); if ($resp -match '^(?i)y(es)?$') { $shouldRename = $true } }
+                                        'Smart' { 
+                                            if ($c.MatchScore -ge $goodThreshold) { 
+                                                $shouldRename = $true 
+                                            } 
+                                            else { 
+                                                Write-Host "Renamng" -ForegroundColor Cyan
+                                                Write-Host ("LocalFolder: {0}" -f $c.LocalAlbum) -ForegroundColor Gray
+                                                Write-Host ("to\nNewFolderName: {0}" -f $c.ProposedName) -ForegroundColor Gray
+                                                $resp = Read-Host "[y/N]?"
+                                                if ($resp -match '^(?i)y(es)?$') { $shouldRename = $true } 
+                                            } 
+                                        }
+                                        'Manual' { 
+                                            Write-Host "Renamng" -ForegroundColor Cyan
+                                            Write-Host ("LocalFolder: {0}" -f $c.LocalAlbum) -ForegroundColor Gray
+                                            Write-Host ("to\nNewFolderName: {0}" -f $c.ProposedName) -ForegroundColor Gray
+                                            $resp = Read-Host "[y/N]?"
+                                            if ($resp -match '^(?i)y(es)?$') { $shouldRename = $true } 
+                                        }
                                     }
                                     if ($shouldRename) {
                                         if ($PSCmdlet.ShouldProcess($currentPath, ("Rename to '{0}'" -f $c.ProposedName))) {
