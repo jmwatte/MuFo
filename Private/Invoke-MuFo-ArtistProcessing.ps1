@@ -251,14 +251,6 @@ function Invoke-MuFoArtistProcessing {
             $artistRenameName = $artistRename.ProposedName
             $artistRenameTargetPath = $artistRename.TargetPath
 
-            # Manual mode: List album candidates for user selection
-            if ($DoIt -eq 'Manual' -and -not $SpotifyAlbumId) {
-                $SpotifyAlbumId = Get-ManualAlbumSelection -ArtistPath $artistPath -SelectedArtist $selectedArtist -EffectiveExclusions @($effectiveExclusions) -IncludeSingles:$IncludeSingles -IncludeCompilations:$IncludeCompilations
-                if (-not $SpotifyAlbumId) {
-                    return  # User skipped
-                }
-            }
-
             $forcedAlbumWrapper = $null
             if ($SpotifyAlbumId) {
                 try {
