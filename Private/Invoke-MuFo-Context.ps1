@@ -39,6 +39,11 @@ function Get-MuFoProcessingContext {
     $isPreview = $Preview -or $WhatIfPreference
 
     $effectiveExclusions = Get-EffectiveExclusions -ExcludeFolders $ExcludeFolders -ExcludedFoldersLoad $ExcludedFoldersLoad -ExcludedFoldersReplace:$ExcludedFoldersReplace
+    if ($null -eq $effectiveExclusions) {
+        $effectiveExclusions = @()
+    } else {
+        $effectiveExclusions = @($effectiveExclusions)
+    }
     Write-Verbose "Final effective exclusions: $($effectiveExclusions -join ', ')"
 
     if ($ExcludedFoldersShow) {

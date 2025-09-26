@@ -356,7 +356,8 @@ function Invoke-MuFo {
             return
         }
 
-        if (-not $PSCmdlet.ShouldProcess($Path, 'Invoke MuFo processing')) {
+        $shouldProcess = $PSCmdlet.ShouldProcess($Path, 'Invoke MuFo processing')
+        if (-not $shouldProcess -and -not $WhatIfPreference) {
             return
         }
 
