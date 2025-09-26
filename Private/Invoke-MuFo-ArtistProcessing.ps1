@@ -251,6 +251,56 @@ function Invoke-MuFoArtistProcessing {
             $artistRenameName = $artistRename.ProposedName
             $artistRenameTargetPath = $artistRename.TargetPath
 
+            # Manual mode: List album candidates for user selection
+            if ($DoIt -eq 'Manual' -and -not $SpotifyAlbumId) {
+                Write-Host "Fetching album candidates for '$($selectedArtist.Name)'..." -ForegroundColor Cyan
+                $albumComparisonsForSelection = Get-AlbumComparisons -CurrentPath $artistPath -SelectedArtist $selectedArtist -EffectiveExclusions $effectiveExclusions -ForcedAlbum $null
+
+                if ($albumComparisonsForSelection.Count -eq 0) {
+                    Write-Warning "No album candidates found for '$($selectedArtist.Name)'"
+                    return
+                }
+
+                Write-Host "`nAlbum candidates for $localArtist ($($selectedArtist.Name)):" -ForegroundColor Yellow
+                for ($i = 0; $i -lt $albumComparisonsForSelection.Count; $i++) {
+                    $c = $albumComparisonsForSelection[$i]
+                    $albumType = if ($c.MatchType) { " ($($c.MatchType))" } else { "" }
+                    Write-Host "$($i+1). $($c.MatchName)$albumType - Score: $([math]::Round($c.MatchScore, 2))"
+                }
+
+                $validChoice = $false
+                $chosenIndex = -1
+                while (-not $validChoice) {
+                    $choice = Read-Host "`nChoose album (1-$($albumComparisonsForSelection.Count)) or 0 to skip this artist"
+                    if ($choice -match '^\d+$') {
+                        $choiceNum = [int]$choice
+                        if ($choiceNum -eq 0) {
+                            Write-Host "Skipping album selection for this artist"
+                            return
+                        }
+                        elseif ($choiceNum -ge 1 -and $choiceNum -le $albumComparisonsForSelection.Count) {
+                            $chosenIndex = $choiceNum - 1
+                            $validChoice = $true
+                        }
+                        else {
+                            Write-Host "Invalid choice. Please enter a number between 0 and $($albumComparisonsForSelection.Count)" -ForegroundColor Red
+                        }
+                    }
+                    else {
+                        Write-Host "Invalid input. Please enter a number." -ForegroundColor Red
+                    }
+                }
+
+                $chosen = $albumComparisonsForSelection[$chosenIndex]
+                if ($chosen.MatchedItem -and $chosen.MatchedItem.Item -and $chosen.MatchedItem.Item.Id) {
+                    $SpotifyAlbumId = $chosen.MatchedItem.Item.Id
+                    Write-Host "Selected album: $($chosen.MatchName) (ID: $SpotifyAlbumId)" -ForegroundColor Green
+                }
+                else {
+                    Write-Warning "Could not retrieve album ID for selected album. Proceeding without forced selection."
+                }
+            }
+
             $forcedAlbumWrapper = $null
             if ($SpotifyAlbumId) {
                 try {
