@@ -37,7 +37,10 @@ function Get-AlbumComparisons {
         $SelectedArtist,
         
         [Parameter(Mandatory)]
-        [array]$EffectiveExclusions
+        [array]$EffectiveExclusions,
+
+        [Parameter(Mandatory = $false)]
+        $ForcedAlbum
     )
     
     # Get local album directories
@@ -71,7 +74,7 @@ function Get-AlbumComparisons {
 
     $albumComparisons = @()
     foreach ($dir in $localAlbumDirs) {
-        $comparison = Get-SingleAlbumComparison -Directory $dir -SelectedArtist $SelectedArtist
+    $comparison = Get-SingleAlbumComparison -Directory $dir -SelectedArtist $SelectedArtist -ForcedAlbum $ForcedAlbum
         $albumComparisons += $comparison
     }
     
@@ -92,7 +95,10 @@ function Get-SingleAlbumComparison {
         $Directory,
         
         [Parameter(Mandatory)]
-        $SelectedArtist
+        $SelectedArtist,
+
+        [Parameter(Mandatory = $false)]
+        $ForcedAlbum
     )
     
     $best = $null
@@ -108,16 +114,26 @@ function Get-SingleAlbumComparison {
     $m = [regex]::Match($dirName, '^[\(\[]?(?<year>\d{4})[\)\]]?')
     if ($m.Success) { $origYear = $m.Groups['year'].Value }
 
-    # Use tiered search strategy
-    # Special handling for Various Artists compilations
-    if ($SelectedArtist.Name -eq 'Various Artists') {
-        $spotifyAlbums = Get-SpotifyCompilationsForLocal -NormalizedLocal $normalizedLocal -OrigYear $origYear
+    if ($ForcedAlbum) {
+        $best = $ForcedAlbum
+        $forcedScoreResult = Get-AlbumScore -SpotifyAlbum $ForcedAlbum -NormalizedLocal $normalizedLocal -OrigYear $origYear
+        if ($forcedScoreResult -is [array] -and $forcedScoreResult.Count -gt 0) {
+            $bestScore = [double]$forcedScoreResult[0]
+        } elseif ($null -ne $forcedScoreResult) {
+            $bestScore = [double]$forcedScoreResult
+        }
     } else {
-        $spotifyAlbums = Get-SpotifyAlbumsForLocal -NormalizedLocal $normalizedLocal -OrigYear $origYear -SelectedArtist $SelectedArtist
+        # Use tiered search strategy
+        # Special handling for Various Artists compilations
+        if ($SelectedArtist.Name -eq 'Various Artists') {
+            $spotifyAlbums = Get-SpotifyCompilationsForLocal -NormalizedLocal $normalizedLocal -OrigYear $origYear
+        } else {
+            $spotifyAlbums = Get-SpotifyAlbumsForLocal -NormalizedLocal $normalizedLocal -OrigYear $origYear -SelectedArtist $SelectedArtist
+        }
+        
+        # Find best match from search results
+        $best, $bestScore = Get-BestAlbumMatch -SpotifyAlbums $spotifyAlbums -NormalizedLocal $normalizedLocal -OrigYear $origYear
     }
-    
-    # Find best match from search results
-    $best, $bestScore = Get-BestAlbumMatch -SpotifyAlbums $spotifyAlbums -NormalizedLocal $normalizedLocal -OrigYear $origYear
     
     # Build album comparison object
     $albumInfo = Build-AlbumComparisonObject -Directory $Directory -Best $best -BestScore $bestScore -NormalizedLocal $normalizedLocal -OrigYear $origYear

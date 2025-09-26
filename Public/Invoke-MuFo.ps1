@@ -128,6 +128,11 @@ function Invoke-MuFo {
     Filter results to show only items with confidence score >= specified value (0.0-1.0).
     Used with -ShowResults to focus on high-confidence matches.
 
+.PARAMETER SpotifyAlbumId
+    Force processing to prefer a specific Spotify album when analyzing the selected artist.
+    When supplied, MuFo retrieves that album directly instead of relying solely on search
+    heuristics, helping manual corrections or regression scenarios.
+
 .EXAMPLE
     Invoke-MuFo -Path "C:\Music" -DoIt Smart
     
@@ -287,6 +292,9 @@ function Invoke-MuFo {
         [Parameter(Mandatory = $false)]
         [double]$MinScore = 0.0,
 
+    [Parameter(Mandatory = $false)]
+    [string]$SpotifyAlbumId,
+
         [Parameter(Mandatory = $false)]
         [switch]$ValidateDurations,
 
@@ -333,593 +341,62 @@ function Invoke-MuFo {
         
         # Handle -ShowResults mode
         if ($ShowResults) {
-            if (-not $LogTo) {
-                Write-Warning "-LogTo is required when using -ShowResults"
-                return
+            $showResultsParams = @{
+                LogTo          = $LogTo
+                MinScore       = $MinScore
+                ShowEverything = $ShowEverything
+                Detailed       = $Detailed
             }
-            if (-not (Test-Path $LogTo)) {
-                Write-Warning "Log file '$LogTo' not found"
-                return
+
+            if ($PSBoundParameters.ContainsKey('Action') -and $Action) {
+                $showResultsParams.Action = $Action
             }
-            try {
-                $data = Get-Content -LiteralPath $LogTo -Encoding UTF8 | ConvertFrom-Json
-                $allItems = $data.Items
-                $originalCount = $allItems.Count
-                
-                # Apply filters
-                $items = $allItems
-                if ($Action) {
-                    $items = $items | Where-Object { $_.Action -eq $Action }
-                }
-                if ($MinScore -gt 0) {
-                    $items = $items | Where-Object { $_.Score -ge $MinScore }
-                }
-                
-                # Display summary header
-                Write-Host "`n=== MuFo Results Summary ===" -ForegroundColor Cyan
-                Write-Host "Log file: $LogTo" -ForegroundColor Gray
-                Write-Host "Generated: $($data.Timestamp)" -ForegroundColor Gray
-                Write-Host "Original path: $($data.Path)" -ForegroundColor Gray
-                Write-Host "Mode: $($data.Mode), Threshold: $($data.ConfidenceThreshold)" -ForegroundColor Gray
-                
-                # Summary statistics
-                if ($originalCount -gt 0) {
-                    $stats = $allItems | Group-Object -Property Action | Sort-Object Name
-                    Write-Host "`nSummary Statistics:" -ForegroundColor Yellow
-                    foreach ($stat in $stats) {
-                        $color = switch ($stat.Name) {
-                            'rename' { 'Green' }
-                            'skip' { 'Yellow' }
-                            'error' { 'Red' }
-                            default { 'White' }
-                        }
-                        Write-Host "  $($stat.Name): $($stat.Count)" -ForegroundColor $color
-                    }
-                    
-                    if ($Action -or $MinScore -gt 0) {
-                        Write-Host "`nFiltered Results: $($items.Count) of $originalCount items" -ForegroundColor Cyan
-                        if ($Action) { Write-Host "  Action filter: $Action" -ForegroundColor Gray }
-                        if ($MinScore -gt 0) { Write-Host "  MinScore filter: $MinScore" -ForegroundColor Gray }
-                    }
-                } else {
-                    Write-Host "No items found in log file." -ForegroundColor Yellow
-                }
-                
-                if ($items.Count -gt 0) {
-                    Write-Host "`n--- Results ---" -ForegroundColor Cyan
-                }
-                
-                foreach ($item in $items) {
-                    $wantFull = ($ShowEverything -or $Detailed)
-                    if (-not $wantFull) {
-                        $objDisplay = [PSCustomObject]([ordered]@{
-                            LocalArtist   = $item.LocalArtist
-                            SpotifyArtist = $item.Artist
-                            LocalFolder   = $item.LocalFolder
-                            LocalAlbum    = $item.LocalAlbum
-                            SpotifyAlbum  = $item.SpotifyAlbum
-                            NewFolderName = $item.NewFolderName
-                            Decision      = $item.Decision
-                            ArtistSource  = $item.ArtistSource
-                        })
-                        Write-Output $objDisplay
-                    } else {
-                        Write-Output $item
-                    }
-                }
-            } catch {
-                Write-Warning "Failed to read or parse log file '$LogTo': $($_.Exception.Message)"
-            }
+
+            Show-MuFoLogResults @showResultsParams
+            return
+        }
+
+        if (-not $PSCmdlet.ShouldProcess($Path, 'Invoke MuFo processing')) {
             return
         }
 
         # Main analysis logic always runs; actual changes are guarded by ShouldProcess
-    $isPreview = $Preview -or $WhatIfPreference
+        $processingContext = Get-MuFoProcessingContext -Path $Path -ArtistAt $ArtistAt -ExcludeFolders $ExcludeFolders -ExcludedFoldersLoad $ExcludedFoldersLoad -ExcludedFoldersReplace:$ExcludedFoldersReplace -ExcludedFoldersShow:$ExcludedFoldersShow -Preview:$Preview -WhatIfPreference:$WhatIfPreference
 
-            # Compute effective exclusions using refactored functions
-            $effectiveExclusions = Get-EffectiveExclusions -ExcludeFolders $ExcludeFolders -ExcludedFoldersLoad $ExcludedFoldersLoad -ExcludedFoldersReplace:$ExcludedFoldersReplace
-            Write-Verbose "Final effective exclusions: $($effectiveExclusions -join ', ')"
+        $effectiveExclusions = $processingContext.EffectiveExclusions
+        $artistPaths = $processingContext.ArtistPaths
 
-            # Show exclusions if requested
-            if ($ExcludedFoldersShow) {
-                Show-Exclusions -EffectiveExclusions $effectiveExclusions -ExcludedFoldersLoad $ExcludedFoldersLoad
-            }
+        if (-not $artistPaths -or $artistPaths.Count -eq 0) {
+            Write-Warning "No artist paths found for ArtistAt '$ArtistAt' at '$Path'"
+            return
+        }
 
-            # Compute artist paths based on -ArtistAt
-            $artistPaths = switch ($ArtistAt) {
-                'Here' { @($Path) }
-                '1U' {
-                    $p = Split-Path $Path -Parent
-                    if (-not $p) { Write-Warning "Cannot go up from '$Path'"; @() } else { @($p) }
-                }
-                '2U' {
-                    $p = $Path
-                    for ($i = 0; $i -lt 2; $i++) {
-                        $p = Split-Path $p -Parent
-                        if (-not $p) { Write-Warning "Cannot go up $($i+1) levels from '$Path'"; @(); break }
-                    }
-                    if ($p) { @($p) } else { @() }
-                }
-                '1D' {
-                    Get-ChildItem -Directory $Path | Where-Object { -not (Test-ExclusionMatch $_.Name $effectiveExclusions) } | Select-Object -ExpandProperty FullName
-                }
-                '2D' {
-                    Get-ChildItem -Directory $Path | Where-Object { -not (Test-ExclusionMatch $_.Name $effectiveExclusions) } | ForEach-Object {
-                        Get-ChildItem -Directory $_.FullName | Where-Object { -not (Test-ExclusionMatch $_.Name $effectiveExclusions) } | Select-Object -ExpandProperty FullName
-                    }
-                }
-            }
-            if ($artistPaths.Count -eq 0) {
-                Write-Warning "No artist paths found for ArtistAt '$ArtistAt' at '$Path'"
-                return
-            }
-
-            # Process each artist path
-            foreach ($artistPath in $artistPaths) {
-                $currentPath = $artistPath
-                $localArtist = Split-Path $currentPath -Leaf
-                Write-Verbose "Processing artist: $localArtist at $currentPath"
-
-
-
-            # Enhanced artist search with variations (similar to Get-MuFoArtistReport)
-            Write-Verbose "Searching Spotify for artist: $localArtist"
-            $topMatches = Get-SpotifyArtist -ArtistName $localArtist
-            
-            # If first search yields poor results, try variations (before "and", "&", etc.)
-            if (-not $topMatches -or ($topMatches.Count -gt 0 -and $topMatches[0].Score -lt 70)) {
-                $searchVariations = @()
-                
-                # Try part before common separators
-                $separators = @(' and ', ' & ', ' featuring ', ' feat ', ' feat. ', ' ft ', ' ft. ', ' with ')
-                foreach ($sep in $separators) {
-                    if ($localArtist -match [regex]::Escape($sep)) {
-                        $beforeSep = ($localArtist -split [regex]::Escape($sep), 2)[0].Trim()
-                        if ($beforeSep -and $beforeSep.Length -gt 2) {
-                            $searchVariations += $beforeSep
-                        }
-                        
-                        # Special case: if separator is " and ", also try without "and" (e.g., "Afrika Bambaataa the Soul Sonic Force")
-                        if ($sep -eq ' and ') {
-                            $withoutAnd = $localArtist -replace ' and ', ' '
-                            if ($withoutAnd -ne $localArtist) {
-                                $searchVariations += $withoutAnd.Trim()
-                            }
-                        }
-                        break # Only try the first separator found
-                    }
-                }
-                
-                # Try each variation and pick the best overall result
-                foreach ($variation in $searchVariations) {
-                    Write-Verbose "  Trying variation: $variation"
-                    $variationMatches = Get-SpotifyArtist -ArtistName $variation
-                    
-                    if ($variationMatches -and $variationMatches.Count -gt 0) {
-                        # Recalculate score against original artist name
-                        foreach ($match in $variationMatches) {
-                            $spotifyName = if ($match.Artist -and $match.Artist.Name) { $match.Artist.Name } else { "Unknown" }
-                            $variationScore = Get-StringSimilarity -String1 $variation -String2 $spotifyName
-                            $originalScore = Get-StringSimilarity -String1 $localArtist -String2 $spotifyName
-                            
-                            # If we have a very good match to the variation (main artist), boost the score
-                            if ($variationScore -ge 0.9) {
-                                # Use the higher of: original score or boosted variation score
-                                $boostedScore = [Math]::Max($originalScore, ($variationScore * 0.8)) # 80% of perfect variation match
-                                $match.Score = $boostedScore
-                                Write-Verbose "    Boosted score for '$spotifyName': variation=$([math]::Round($variationScore,2)) -> final=$([math]::Round($boostedScore,2))"
-                            } else {
-                                $match.Score = $originalScore
-                            }
-                        }
-                        
-                        # If this variation gives better results, use them
-                        if (-not $topMatches -or ($variationMatches[0].Score -gt $topMatches[0].Score)) {
-                            $topMatches = $variationMatches
-                            Write-Verbose "  Using variation '$variation' - improved score to $($topMatches[0].Score)"
-                        }
-                    }
-                }
-            }
-            if ($topMatches) {
-                Write-Verbose "Found $($topMatches.Count) potential matches on Spotify"
-
-                # Use refactored artist selection logic  
-                if (-not $effectiveExclusions) { $effectiveExclusions = @() }
-                if ($effectiveExclusions.Count -eq 0) { $effectiveExclusions = @('') }  # Non-empty array with empty string
-                $artistSelection = Get-ArtistSelection -LocalArtist $localArtist -TopMatches $topMatches -DoIt $DoIt -ConfidenceThreshold $ConfidenceThreshold -IsPreview $isPreview -CurrentPath $currentPath -EffectiveExclusions $effectiveExclusions -IncludeSingles $IncludeSingles -IncludeCompilations $IncludeCompilations
-                $selectedArtist = $artistSelection.SelectedArtist
-                $artistSelectionSource = $artistSelection.SelectionSource
-
-                if ($selectedArtist) {
-                    Write-Verbose "Selected artist: $($selectedArtist.Name)"
-                    # If inferred and differs from folder artist name, hint possible typo
-                    if ($artistSelectionSource -eq 'inferred') {
-                        $folderArtist = $localArtist
-                        if (-not [string]::Equals($folderArtist, $selectedArtist.Name, [StringComparison]::InvariantCultureIgnoreCase)) {
-                            Write-ArtistTypoWarning -FolderArtist $folderArtist -SpotifyArtist $selectedArtist.Name
-                        }
-                    }
-                    
-                    # Determine if artist folder should be renamed
-                    $artistRename = Get-ArtistRenameProposal -CurrentPath $currentPath -SelectedArtist $selectedArtist -SelectionSource $artistSelectionSource
-                    $artistRenameName = $artistRename.ProposedName
-                    $artistRenameTargetPath = $artistRename.TargetPath
-
-                    # Proceed with album verification: compare local folder names to Spotify artist albums
-                    try {
-                        # Use refactored album processing logic
-                        $albumComparisons = Get-AlbumComparisons -CurrentPath $currentPath -SelectedArtist $selectedArtist -EffectiveExclusions $effectiveExclusions
-                        
-                        # Memory optimization for large collections
-                        $null = Add-MemoryOptimization -AlbumCount $albumComparisons.Count -Phase 'Start'
-                        $sizeRecommendations = Get-CollectionSizeRecommendations -AlbumCount $albumComparisons.Count -IncludeTracks:$IncludeTracks
-                        
-                        # Display warnings and recommendations for large collections
-                        foreach ($warning in $sizeRecommendations.Warnings) {
-                            Write-Warning $warning
-                        }
-                        foreach ($recommendation in $sizeRecommendations.Recommendations) {
-                            Write-Host "💡 $recommendation" -ForegroundColor Cyan
-                        }
-                        if ($sizeRecommendations.EstimatedProcessingMinutes -gt 5) {
-                            Write-Host "⏱️ Estimated processing time: ~$($sizeRecommendations.EstimatedProcessingMinutes) minutes" -ForegroundColor Yellow
-                        }
-                        
-                        # Add track information if requested
-                        if ($IncludeTracks) {
-                            Add-TrackInformationToComparisons -AlbumComparisons $albumComparisons -BoxMode $BoxMode
-                            
-                            # Enhanced track processing for classical music, completeness validation, and tag enhancement
-                            foreach ($c in $albumComparisons) {
-                                try {
-                                    # Get track information that was added by Add-TrackInformationToComparisons
-                                    $scanPaths = if ($BoxMode -and (Get-ChildItem -LiteralPath $c.LocalPath -Directory -ErrorAction SilentlyContinue)) {
-                                        Get-ChildItem -LiteralPath $c.LocalPath -Directory | Select-Object -ExpandProperty FullName
-                                    } else {
-                                        @($c.LocalPath)
-                                    }
-                                    $tracks = @()
-                                    foreach ($p in $scanPaths) {
-                                        $tracks += Get-AudioFileTags -Path $p -IncludeComposer -ShowProgress
-                                    }
-                                    
-                                    $missingTitle = ($tracks | Where-Object { -not $_.Title }).Count
-                                    $c | Add-Member -NotePropertyName TracksWithMissingTitle -NotePropertyValue $missingTitle
-
-                                    # Duration validation if enabled
-                                    if ($ValidateDurations -and $c.SpotifyAlbum -and $tracks.Count -gt 0) {
-                                        try {
-                                            Write-Verbose "Performing duration validation for album: $($c.LocalAlbumName)"
-                                            $durationValidation = Test-AlbumDurationConsistency -AlbumPath $c.LocalPath -SpotifyAlbumData $c.SpotifyAlbum -ShowWarnings $ShowDurationMismatches -ValidationLevel $DurationValidationLevel
-                                            
-                                            if ($durationValidation) {
-                                                # Enhance album confidence based on duration validation
-                                                $originalConfidence = if ($c.ConfidenceScore) { $c.ConfidenceScore } else { 0.5 }
-                                                $durationConfidence = $durationValidation.Summary.AverageConfidence / 100
-                                                
-                                                # Weighted combination: 70% original matching, 30% duration validation
-                                                $enhancedConfidence = [math]::Round(($originalConfidence * 0.7) + ($durationConfidence * 0.3), 3)
-                                                
-                                                $c | Add-Member -NotePropertyName DurationValidation -NotePropertyValue $durationValidation -Force
-                                                $c | Add-Member -NotePropertyName OriginalConfidence -NotePropertyValue $originalConfidence -Force
-                                                $c | Add-Member -NotePropertyName DurationConfidence -NotePropertyValue $durationConfidence -Force
-                                                $c | Add-Member -NotePropertyName EnhancedConfidence -NotePropertyValue $enhancedConfidence -Force
-                                                
-                                                # Update the main confidence score with enhanced value
-                                                $c.ConfidenceScore = $enhancedConfidence
-                                                
-                                                Write-Verbose "Duration validation complete. Original: $($originalConfidence), Duration: $($durationConfidence), Enhanced: $($enhancedConfidence)"
-                                            }
-                                        } catch {
-                                            Write-Warning "Duration validation failed for album $($c.LocalAlbumName): $($_.Exception.Message)"
-                                        }
-                                    }
-
-                                    # Classical music analysis
-                                    $classicalTracks = $tracks | Where-Object { $_.IsClassical -eq $true }
-                                    $c | Add-Member -NotePropertyName ClassicalTracks -NotePropertyValue $classicalTracks.Count
-                                    
-                                    if ($classicalTracks.Count -gt 0) {
-                                        $composers = $classicalTracks | Where-Object { $_.Composer } | Group-Object Composer | Sort-Object Count -Descending
-                                        $primaryComposer = if ($composers.Count -gt 0) { $composers[0].Name } else { $null }
-                                        $c | Add-Member -NotePropertyName PrimaryComposer -NotePropertyValue $primaryComposer -Force
-                                        $c | Add-Member -NotePropertyName SuggestedClassicalArtist -NotePropertyValue $classicalTracks[0].SuggestedAlbumArtist
-                                        
-                                        # Conductor analysis
-                                        $conductors = $classicalTracks | Where-Object { $_.Conductor } | Group-Object Conductor | Sort-Object Count -Descending
-                                        if ($conductors.Count -gt 0) {
-                                            $c | Add-Member -NotePropertyName PrimaryConductor -NotePropertyValue $conductors[0].Name
-                                        }
-                                    }
-
-                                    # Completeness validation if requested
-                                    if ($ValidateCompleteness) {
-                                        Write-Verbose "Validating album completeness for: $($c.LocalPath)"
-                                        $spotifyAlbum = if ($c.MatchedItem -and $c.MatchedItem.Item) { $c.MatchedItem.Item } else { $null }
-                                        $completenessResult = Test-AudioFileCompleteness -Path $c.LocalPath -SpotifyAlbum $spotifyAlbum -CheckAudioQuality -CheckFileNaming -SuggestFixes
-                                        $c | Add-Member -NotePropertyName CompletenessAnalysis -NotePropertyValue $completenessResult
-                                    }
-
-                                    # Tag enhancement if requested
-                                    if ($FixTags -and $tracks.Count -gt 0) {
-                                        Write-Verbose "Enhancing tags for: $($c.LocalPath)"
-                                        
-                                        $tagParams = @{
-                                            Path = $c.LocalPath
-                                            WhatIf = $WhatIfPreference
-                                        }
-                                        
-                                        # Pass tag fixing parameters to Set-AudioFileTags
-                                        if ($FixOnly.Count -gt 0) { $tagParams.FixOnly = $FixOnly }
-                                        if ($DontFix.Count -gt 0) { $tagParams.DontFix = $DontFix }
-                                        if ($OptimizeClassicalTags) { $tagParams.OptimizeClassicalTags = $true }
-                                        if ($ValidateCompleteness) { $tagParams.ValidateCompleteness = $true }
-                                        
-                                        # Add Spotify album data if available
-                                        if ($c.MatchedItem -and $c.MatchedItem.Item) {
-                                            $tagParams.SpotifyAlbum = $c.MatchedItem.Item
-                                        }
-                                        
-                                        if ($LogTo) {
-                                            $tagLogPath = $LogTo -replace '\.(json|log)$', '-tags.$1'
-                                            $tagParams.LogTo = $tagLogPath
-                                        }
-                                        
-                                        $tagResults = Set-AudioFileTags @tagParams
-                                        $c | Add-Member -NotePropertyName TagEnhancementResults -NotePropertyValue $tagResults
-                                        
-                                        # Update track count after enhancements
-                                        $enhancedTracks = Get-AudioFileTags -Path $c.LocalPath -IncludeComposer -ShowProgress
-                                        $updatedMissingTitles = ($enhancedTracks | Where-Object { -not $_.Title }).Count
-                                        $c | Add-Member -NotePropertyName TracksWithMissingTitleAfterFix -NotePropertyValue $updatedMissingTitles -Force
-                                    }
-
-                                    if ($ShowEverything) {
-                                        $c | Add-Member -NotePropertyName Tracks -NotePropertyValue $tracks
-                                    }
-                                } catch {
-                                    Write-Warning "Failed to read tracks for '$($c.LocalPath)': $($_.Exception.Message)"
-                                    $c | Add-Member -NotePropertyName TrackCountLocal -NotePropertyValue 0 -Force
-                                    $c | Add-Member -NotePropertyName TracksWithMissingTitle -NotePropertyValue 0
-                                    $c | Add-Member -NotePropertyName TracksMismatchedToSpotify -NotePropertyValue 0
-                                    if ($ShowEverything) {
-                                        $c | Add-Member -NotePropertyName Tracks -NotePropertyValue @()
-                                    }
-                                }
-                            }
-                            
-                            # OPTIMIZATION: Batch process Spotify track validation for all albums at once
-                            # This replaces individual API calls with efficient batching, caching, and rate limiting
-                            Write-Verbose "Starting optimized Spotify track validation for $($albumComparisons.Count) albums"
-                            $albumComparisons = Optimize-SpotifyTrackValidation -Comparisons $albumComparisons -ShowProgress:$($albumComparisons.Count -gt 20)
-                        }
-
-                        # Display summary; later we'll wire -DoIt rename/apply
-                        # Threshold used for decisions and rename map
-                        $goodThreshold = [double]$ConfidenceThreshold
-
-                        # Prepare decisions and emit structured objects
-                        $records = @()
-                        $processedCount = 0
-                        foreach ($c in ($albumComparisons | Sort-Object -Property MatchScore -Descending)) {
-                            $processedCount++
-                            
-                            # Periodic memory monitoring for large collections
-                            if ($albumComparisons.Count -gt 500 -and ($processedCount % 100) -eq 0) {
-                                $null = Add-MemoryOptimization -Phase 'Progress'
-                            }
-                            $decision = 'skip'
-                            $reason = ''
-                            switch ($DoIt) {
-                                'Automatic' { if ($c.MatchScore -ge $goodThreshold -and $c.ProposedName) { $decision = 'rename' } else { $reason = 'below-threshold-or-no-proposal' } }
-                                'Smart'     { if ($c.MatchScore -ge $goodThreshold -and $c.ProposedName) { $decision = 'rename' } else { $decision = 'prompt'; $reason = if ($c.ProposedName) { 'manual-confirmation' } else { 'no-proposal' } } }
-                                'Manual'    { $decision = if ($c.ProposedName) { 'prompt' } else { 'skip' }; if (-not $c.ProposedName) { $reason = 'no-proposal' } }
-                            }
-                            $rec = [ordered]@{
-                                Artist        = $selectedArtist.Name
-                                ArtistId      = $selectedArtist.Id
-                                ArtistSource  = $artistSelectionSource
-                                LocalFolder   = $c.LocalAlbum
-                                LocalAlbum    = $c.LocalNorm
-                                SpotifyAlbum  = $c.MatchName
-                                AlbumType     = $c.MatchType
-                                Score         = $c.MatchScore
-                                LocalPath     = $c.LocalPath
-                                NewFolderName = $c.ProposedName
-                                Decision      = $decision
-                                Reason        = $reason
-                            }
-                            if ($IncludeTracks) {
-                                $rec['TrackCountLocal'] = $c.TrackCountLocal
-                                $rec['TracksWithMissingTitle'] = $c.TracksWithMissingTitle
-                                $rec['TracksMismatchedToSpotify'] = $c.TracksMismatchedToSpotify
-                                if ($ShowEverything) {
-                                    $rec['Tracks'] = $c.Tracks
-                                }
-                            }
-                            $objFull = [PSCustomObject]$rec
-                            $records += $objFull
-                            # Default to concise view unless -ShowEverything/-Detailed is set
-                            $wantFull = ($ShowEverything -or $Detailed)
-                            if (-not $wantFull) {
-                                $objDisplay = [PSCustomObject]([ordered]@{
-                                    LocalArtist   = $localArtist
-                                    SpotifyArtist = $objFull.Artist
-                                    LocalFolder   = $objFull.LocalFolder
-                                    LocalAlbum    = $objFull.LocalAlbum
-                                    SpotifyAlbum  = $objFull.SpotifyAlbum
-                                    NewFolderName = $objFull.NewFolderName
-                                    Decision      = $objFull.Decision
-                                    ArtistSource  = $objFull.ArtistSource
-                                })
-                                Write-Output $objDisplay
-                            } else {
-                                Write-Output $objFull
-                            }
-                            # Intentionally suppress verbose per-album UI line to avoid redundancy when objects are emitted.
-                        }
-
-                        # If running in WhatIf or -Preview, always print a concise rename map by default
-                        $isPreview = $Preview -or $WhatIfPreference
-                        if ($isPreview) {
-                            $renameMap = [ordered]@{}
-                            # Include artist folder rename if applicable
-                            if ($artistRenameName) {
-                                $currentArtistPath = [string]$currentPath
-                                $targetArtistPath = if ($artistRenameTargetPath) { $artistRenameTargetPath } else { Join-Path -Path (Split-Path -Parent -Path $currentArtistPath) -ChildPath $artistRenameName }
-                                $renameMap[$currentArtistPath] = $targetArtistPath
-                            }
-                            foreach ($c in ($albumComparisons | Sort-Object -Property MatchScore -Descending)) {
-                                if ($c.ProposedName -and -not [string]::Equals($c.LocalAlbum, $c.ProposedName, [StringComparison]::InvariantCultureIgnoreCase)) {
-                                    # Only include confident suggestions (at/above threshold)
-                                    if ($c.MatchScore -ge $goodThreshold) {
-                                        $renameMap[[string]$c.LocalPath] = (Join-Path -Path $currentPath -ChildPath ([string]$c.ProposedName))
-                                    }
-                                }
-                            }
-                            if ($renameMap.Count -gt 0) {
-                                Write-RenameOperation -RenameMap $renameMap -Mode 'WhatIf'
-                            } else {
-                                # Check if artist rename is suggested but albums don't need renaming
-                                if ($localArtist -ne $selectedArtist.Name) {
-                                    Write-ArtistRenameMessage -LocalArtist $localArtist -SpotifyArtist $selectedArtist.Name
-                                } else {
-                                    # If nothing to rename, check for equal-name cases and surface that clearly
-                                    $equalCases = $albumComparisons | Where-Object { $_.ProposedName -and [string]::Equals($_.LocalAlbum, $_.ProposedName, [StringComparison]::InvariantCultureIgnoreCase) }
-                                    if ($equalCases) {
-                                        foreach ($e in $equalCases) {
-                                            # Check if artist rename is suggested but this album doesn't need renaming
-                                            if ($localArtist -cne $selectedArtist.Name) {
-                                                Write-AlbumNoRenameNeeded -LocalAlbum $e.LocalAlbum -LocalArtist $localArtist -SpotifyArtist $selectedArtist.Name
-                                            } else {
-                                                Write-NothingToRenameMessage
-                                            }
-                                            Write-Verbose ("Nothing to Rename: LocalFolder '{0}' equals NewFolderName '{1}'" -f $e.LocalAlbum, $e.ProposedName)
-                                        }
-                                    } else {
-                                        Write-WhatIfMessage -Message "No rename candidates at the current threshold."
-                                    }
-                                }
-                            }
-                        }
-
-                        # If Preview or WhatIf, skip renames entirely (clean output, no WhatIf chatter)
-                        if (-not $Preview -and -not $WhatIfPreference) {
-                            $outcomes = @()
-                            foreach ($c in $albumComparisons) {
-                                try {
-                                    $action = 'skip'; $message = ''
-                                    if (-not $c.ProposedName) { $message = 'no-proposal'; $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
-                                    if ([string]::Equals($c.LocalAlbum, $c.ProposedName, [StringComparison]::InvariantCultureIgnoreCase)) { 
-                                        # Check if artist rename is suggested but this album doesn't need renaming
-                                        if ($localArtist -cne $selectedArtist.Name) {
-                                            Write-AlbumNoRenameNeeded -LocalAlbum $c.LocalAlbum -LocalArtist $localArtist -SpotifyArtist $selectedArtist.Name
-                                        } else {
-                                            Write-NothingToRenameMessage
-                                        }
-                                        Write-Verbose ("Nothing to Rename: LocalFolder '{0}' equals NewFolderName '{1}'" -f $c.LocalAlbum, $c.ProposedName); $message = 'already-matching'; $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
-                                    $currentPath = [string]$c.LocalPath
-                                    $targetPath  = Join-Path -Path $currentPath -ChildPath $c.ProposedName
-                                    if (Test-Path -LiteralPath $targetPath) { Write-Warning ("Skip rename: Target already exists: {0}" -f $targetPath); $message = 'target-exists'; $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }; continue }
-
-                                    $shouldRename = $false
-                                    switch ($DoIt) {
-                                        'Automatic' { $shouldRename = ($c.MatchScore -ge $goodThreshold) }
-                                        'Smart'     { if ($c.MatchScore -ge $goodThreshold) { $shouldRename = $true } else { $resp = Read-Host ("Rename '{0}' -> '{1}'? [y/N]" -f $c.LocalAlbum, $c.ProposedName); if ($resp -match '^(?i)y(es)?$') { $shouldRename = $true } } }
-                                        'Manual'    { $resp = Read-Host ("Rename '{0}' -> '{1}'? [y/N]" -f $c.LocalAlbum, $c.ProposedName); if ($resp -match '^(?i)y(es)?$') { $shouldRename = $true } }
-                                    }
-                                    if ($shouldRename) {
-                                        if ($PSCmdlet.ShouldProcess($currentPath, ("Rename to '{0}'" -f $c.ProposedName))) {
-                                            Rename-Item -LiteralPath $currentPath -NewName $c.ProposedName -ErrorAction Stop
-                                            Write-Verbose ("Renamed: '{0}' -> '{1}'" -f $c.LocalAlbum, $c.ProposedName)
-                                            $action = 'rename'; $message = 'renamed'
-                                        }
-                                    } else {
-                                        Write-Verbose ("Skipped rename for '{0}' (score {1})" -f $c.LocalAlbum, $c.MatchScore)
-                                        $action = 'skip'; $message = if ($c.MatchScore -ge $goodThreshold) { 'user-declined' } else { 'below-threshold' }
-                                    }
-                                    $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action=$action; Reason=$message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName }
-                                } catch { Write-Warning ("Rename failed for '{0}': {1}" -f $c.LocalAlbum, $_.Exception.Message); $outcomes += [PSCustomObject]@{ LocalFolder=$c.LocalAlbum; LocalPath=$c.LocalPath; NewFolderName=$c.ProposedName; Action='error'; Reason=$_.Exception.Message; Score=$c.MatchScore; SpotifyAlbum=$c.MatchName } }
-                            }
-                            # After album renames, perform artist folder rename if proposed
-                            if ($artistRenameName) {
-                                try {
-                                    $currentArtistPath = [string]$currentPath
-                                    $targetArtistPath  = Join-Path -Path (Split-Path -Parent -Path $currentArtistPath) -ChildPath $artistRenameName
-                                    if (Test-Path -LiteralPath $targetArtistPath) {
-                                        Write-Warning ("Skip artist rename: Target already exists: {0}" -f $targetArtistPath)
-                                    } else {
-                                        if ($PSCmdlet.ShouldProcess($currentArtistPath, ("Rename artist folder to '{0}'" -f $artistRenameName))) {
-                                            Rename-Item -LiteralPath $currentArtistPath -NewName $artistRenameName -ErrorAction Stop
-                                            Write-Verbose ("Renamed artist folder: '{0}' -> '{1}'" -f (Split-Path -Leaf $currentArtistPath), $artistRenameName)
-                                            $artistRenamePerformed = $true
-                                            $artistRenameFrom = $currentArtistPath
-                                            $artistRenameTo = $targetArtistPath
-                                        }
-                                    }
-                                } catch {
-                                    Write-Warning ("Artist folder rename failed: {0}" -f $_.Exception.Message)
-                                }
-                            }
-                            # Print a concise map of performed renames
-                            $performed = $outcomes | Where-Object { $_.Action -eq 'rename' }
-                            if ($performed) {
-                                $renameMap = [ordered]@{}
-                                foreach ($r in $performed) { $renameMap[[string]$r.LocalPath] = (Join-Path -Path $currentPath -ChildPath ([string]$r.NewFolderName)) }
-                                Write-RenameOperation -RenameMap $renameMap -Mode 'Performed'
-                            }
-                            if ($artistRenamePerformed) {
-                                $artistMap = [ordered]@{ $artistRenameFrom = $artistRenameTo }
-                                Write-RenameOperation -RenameMap $artistMap -Mode 'Performed'
-                            }
-                            if ($LogTo) {
-                                try {
-                                    $dir = Split-Path -Parent -Path $LogTo
-                                    if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-                                    $payload = [PSCustomObject]@{ Timestamp = (Get-Date).ToString('o'); Path = $currentPath; Mode = $DoIt; ConfidenceThreshold = $ConfidenceThreshold; ExcludedFolders = @($effectiveExclusions); Items = $outcomes }
-                                    ($payload | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $LogTo -Encoding utf8
-                                    Write-Verbose ("Wrote JSON log: {0}" -f $LogTo)
-                                } catch { Write-Warning ("Failed to write log '{0}': {1}" -f $LogTo, $_.Exception.Message) }
-                            }
-                        } else {
-                            # Preview-only logging
-                            if ($LogTo) {
-                                try {
-                                    $dir = Split-Path -Parent -Path $LogTo
-                                    if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-                                    $payload = [PSCustomObject]@{ Timestamp = (Get-Date).ToString('o'); Path = $currentPath; Mode = 'Preview'; ConfidenceThreshold = $ConfidenceThreshold; ExcludedFolders = @($effectiveExclusions); Items = $records }
-                                    ($payload | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $LogTo -Encoding utf8
-                                    Write-Verbose ("Wrote JSON log: {0}" -f $LogTo)
-                                } catch { Write-Warning ("Failed to write log '{0}': {1}" -f $LogTo, $_.Exception.Message) }
-                            }
-                        }
-                    } catch {
-                        $msg = $_.Exception.Message
-                        $stack = $_.ScriptStackTrace
-                        $inner = if ($_.Exception.InnerException) { $_.Exception.InnerException.Message } else { $null }
-                        $innerText = if ($inner) { " | Inner: $inner" } else { '' }
-                        $stackText = if ($stack) { " | Stack: $stack" } else { '' }
-                        Write-Warning ("Album verification failed: {0}{1}{2}" -f $msg, $innerText, $stackText)
-                    }
-                } else {
-                    Write-Warning "No artist selected"
-                }
-
-                # Save exclusions to disk if requested and processing was successful
-                if ($ExcludedFoldersSave -and $selectedArtist) {
-                    try {
-                        $saveFile = if ($ExcludedFoldersSave) { Join-Path $storePath.Dir $ExcludedFoldersSave } else { $storePath.File }
-                        Write-ExcludedFoldersToDisk -FilePath $saveFile -ExcludedFolders $effectiveExclusions
-                        Write-Verbose ("Saved exclusions to disk: {0} folders excluded" -f $effectiveExclusions.Count)
-                    } catch {
-                        Write-Warning ("Failed to save exclusions: {0}" -f $_.Exception.Message)
-                    }
-                }
-            } else {
-                Write-Warning "No matches found on Spotify for '$localArtist'"
-            }
-        } # End foreach artistPath
+        foreach ($artistPath in $artistPaths) {
+            Invoke-MuFoArtistProcessing -ArtistPath $artistPath `
+                -EffectiveExclusions $effectiveExclusions `
+                -DoIt $DoIt `
+                -ConfidenceThreshold $ConfidenceThreshold `
+                -SpotifyAlbumId $SpotifyAlbumId `
+                -IncludeSingles:$IncludeSingles.IsPresent `
+                -IncludeCompilations:$IncludeCompilations.IsPresent `
+                -IncludeTracks:$IncludeTracks.IsPresent `
+                -FixTags:$FixTags.IsPresent `
+                -FixOnly $FixOnly `
+                -DontFix $DontFix `
+                -OptimizeClassicalTags:$OptimizeClassicalTags.IsPresent `
+                -ValidateCompleteness:$ValidateCompleteness.IsPresent `
+                -BoxMode:$BoxMode.IsPresent `
+                -Preview:$processingContext.IsPreview `
+                -Detailed:$Detailed.IsPresent `
+                -ShowEverything:$ShowEverything.IsPresent `
+                -ValidateDurations:$ValidateDurations.IsPresent `
+                -DurationValidationLevel $DurationValidationLevel `
+                -ShowDurationMismatches:$ShowDurationMismatches.IsPresent `
+                -LogTo $LogTo `
+                -ExcludedFoldersSave $ExcludedFoldersSave `
+                -WhatIfPreference:$WhatIfPreference `
+                -CallerCmdlet $PSCmdlet
+        }
     }
 
     end {
