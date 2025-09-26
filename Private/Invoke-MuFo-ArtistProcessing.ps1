@@ -253,7 +253,7 @@ function Invoke-MuFoArtistProcessing {
 
             # Manual mode: List album candidates for user selection
             if ($DoIt -eq 'Manual' -and -not $SpotifyAlbumId) {
-                $SpotifyAlbumId = Get-ManualAlbumSelection -ArtistPath $artistPath -SelectedArtist $selectedArtist -EffectiveExclusions $effectiveExclusions -IncludeSingles:$IncludeSingles -IncludeCompilations:$IncludeCompilations
+                $SpotifyAlbumId = Get-ManualAlbumSelection -ArtistPath $artistPath -SelectedArtist $selectedArtist -EffectiveExclusions @($effectiveExclusions) -IncludeSingles:$IncludeSingles -IncludeCompilations:$IncludeCompilations
                 if (-not $SpotifyAlbumId) {
                     return  # User skipped
                 }
