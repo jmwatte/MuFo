@@ -83,8 +83,9 @@ function Invoke-MuFoArtistProcessing {
         [Parameter(Mandatory)]
         [string]$ArtistPath,
 
-        [Parameter(Mandatory)]
-        [string[]]$EffectiveExclusions,
+    [Parameter(Mandatory)]
+    [AllowEmptyCollection()]
+    [string[]]$EffectiveExclusions,
 
         [Parameter(Mandatory)]
         [ValidateSet('Automatic', 'Manual', 'Smart')]
