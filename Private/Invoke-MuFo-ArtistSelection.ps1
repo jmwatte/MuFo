@@ -83,20 +83,17 @@ function Get-ArtistSelection {
             Write-Verbose "Automatically selected: $($selectedArtist.Name)"
         }
         "Manual" {
-            # Don't override high-confidence artist matches with inference
-            # Use a higher threshold (0.8) to ensure we only skip inference for very confident matches
-            if ($TopMatches[0].Score -ge 0.8) {
-                $selectedArtist = $TopMatches[0].Artist
-                $artistSelectionSource = 'search'
-                Write-Verbose "High-confidence artist match found (score: $([math]::Round($TopMatches[0].Score, 2))), using directly: $($selectedArtist.Name)"
-            } elseif (-not $IsPreview) {
-                # Prompt user to choose (skip prompts in Preview/WhatIf)
+            if (-not $IsPreview) {
+                # Always prompt in Manual mode - no auto-selection
                 Write-Host "`nArtist selection for folder: '$LocalArtist'" -ForegroundColor Cyan
                 for ($i = 0; $i -lt $TopMatches.Count; $i++) {
                     Write-Host "$($i + 1). $($TopMatches[$i].Artist.Name) (Score: $([math]::Round($TopMatches[$i].Score, 2)))"
                 }
-                $choice = Read-Host "Select artist (1-$($TopMatches.Count)) [Enter=1, S=skip]"
-                if (-not $choice) {
+                $choice = Read-Host "Select artist (1-$($TopMatches.Count)) [Enter=1, S=skip, B=back]"
+                if ($choice -ieq 'b' -or $choice -eq 'back') {
+                    # Return to search/retry logic - set flag to restart artist selection
+                    return [PSCustomObject]@{ SelectedArtist = $null; SelectionSource = 'back' }
+                } elseif (-not $choice) {
                     $selectedArtist = $TopMatches[0].Artist
                     $artistSelectionSource = 'search'
                 } elseif ($choice -match '^(?i)s(kip)?$' -or $choice -match '^0$') {

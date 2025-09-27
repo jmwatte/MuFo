@@ -236,6 +236,14 @@ function Invoke-MuFoArtistProcessing {
         $selectedArtist = $artistSelection.SelectedArtist
         $artistSelectionSource = $artistSelection.SelectionSource
 
+        # Handle back navigation from artist selection
+        if ($artistSelectionSource -eq 'back') {
+            Write-Host "Going back to artist search..." -ForegroundColor Yellow
+            # Reset and restart artist search
+            $topMatches = $null
+            continue
+        }
+
         if ($selectedArtist) {
             Write-Verbose "Selected artist: $($selectedArtist.Name)"
             # If inferred and differs from folder artist name, hint possible typo

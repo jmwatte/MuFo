@@ -542,6 +542,9 @@ function Add-TrackInformationToComparisons {
                 $tracks += Get-AudioFileTags -Path $p -IncludeComposer
             }
             
+            # Sort tracks by disc number and track number for consistent processing
+            $tracks = $tracks | Sort-Object { [int]$_.DiscNumber }, { [int]$_.TrackNumber }
+            
             $c | Add-Member -NotePropertyName TrackCountLocal -NotePropertyValue $tracks.Count
             
             # Add composer information if available
