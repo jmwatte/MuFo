@@ -83,29 +83,22 @@ function Get-ArtistSelection {
             Write-Verbose "Automatically selected: $($selectedArtist.Name)"
         }
         "Manual" {
-            if (-not $IsPreview) {
-                # Always prompt in Manual mode - no auto-selection
-                Write-Host "`nArtist selection for folder: '$LocalArtist'" -ForegroundColor Cyan
-                for ($i = 0; $i -lt $TopMatches.Count; $i++) {
-                    Write-Host "$($i + 1). $($TopMatches[$i].Artist.Name) (Score: $([math]::Round($TopMatches[$i].Score, 2)))"
-                }
-                $choice = Read-Host "Select artist (1-$($TopMatches.Count)) [Enter=1, S=skip, B=back]"
-                if ($choice -ieq 'b' -or $choice -eq 'back') {
-                    # Return to search/retry logic - set flag to restart artist selection
-                    return [PSCustomObject]@{ SelectedArtist = $null; SelectionSource = 'back' }
-                } elseif (-not $choice) {
-                    $selectedArtist = $TopMatches[0].Artist
-                    $artistSelectionSource = 'search'
-                } elseif ($choice -match '^(?i)s(kip)?$' -or $choice -match '^0$') {
-                    # skip
-                } elseif ($choice -match '^\d+$' -and [int]$choice -ge 1 -and [int]$choice -le $TopMatches.Count) {
-                    $selectedArtist = $TopMatches[[int]$choice - 1].Artist
-                }
-            } else {
-                # In WhatIf/Preview, pick the top match for analysis so we still produce results
+            # Always prompt in Manual mode - no auto-selection
+            Write-Host "`nArtist selection for folder: '$LocalArtist'" -ForegroundColor Cyan
+            for ($i = 0; $i -lt $TopMatches.Count; $i++) {
+                Write-Host "$($i + 1). $($TopMatches[$i].Artist.Name) (Score: $([math]::Round($TopMatches[$i].Score, 2)))"
+            }
+            $choice = Read-Host "Select artist (1-$($TopMatches.Count)) [Enter=1, S=skip, B=back]"
+            if ($choice -ieq 'b' -or $choice -eq 'back') {
+                # Return to search/retry logic - set flag to restart artist selection
+                return [PSCustomObject]@{ SelectedArtist = $null; SelectionSource = 'back' }
+            } elseif (-not $choice) {
                 $selectedArtist = $TopMatches[0].Artist
                 $artistSelectionSource = 'search'
-                Write-WhatIfMessage "Preview/WhatIf: assuming top search match '$($selectedArtist.Name)' for analysis."
+            } elseif ($choice -match '^(?i)s(kip)?$' -or $choice -match '^0$') {
+                # skip
+            } elseif ($choice -match '^\d+$' -and [int]$choice -ge 1 -and [int]$choice -le $TopMatches.Count) {
+                $selectedArtist = $TopMatches[[int]$choice - 1].Artist
             }
         }
         "Smart" {
@@ -561,7 +554,7 @@ function Get-AllSearchMatches {
         [string]$AlbumName
     )
     
-    $matches = @()
+    $albumMatches = @()
     
     try {
         $q = "{0} {1}" -f $LocalArtist, $AlbumName
@@ -581,7 +574,7 @@ function Get-AllSearchMatches {
                     if ($an) { $artists += [PSCustomObject]@{ Name=$an; Id=$aid } }
                 }
             }
-            $matches += [PSCustomObject]@{ AlbumName=$name; Score=[double]$score; Artists=$artists }
+            $albumMatches += [PSCustomObject]@{ AlbumName=$name; Score=[double]$score; Artists=$artists }
         }
     } catch {
         $msg = $_.Exception.Message
@@ -592,7 +585,7 @@ function Get-AllSearchMatches {
         Write-Verbose ("Search-Item All failed: {0}{1}{2}" -f $msg, $innerText, $stackText)
     }
     
-    return $matches
+    return $albumMatches
 }
 
 function Get-PhraseSearchMatches {
