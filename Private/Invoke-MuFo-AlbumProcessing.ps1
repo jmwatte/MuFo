@@ -576,3 +576,355 @@ function Add-TrackInformationToComparisons {
         }
     }
 }
+
+function Invoke-MuFoAlbumProcessing {
+    <#
+    .SYNOPSIS
+    Interactive album and track selection for Manual mode.
+    
+    .DESCRIPTION
+    Provides interactive selection of albums and tracks with paging, sorting,
+    and back navigation. Handles the album and track selection stages of
+    the Manual workflow.
+    
+    .PARAMETER AlbumComparisons
+    Array of album comparison objects from Get-AlbumComparisons.
+    
+    .PARAMETER SelectedArtist
+    The selected Spotify artist object.
+    
+    .PARAMETER CurrentPath
+    Current working directory path.
+    
+    .PARAMETER IncludeTracks
+    Whether to include track-level processing.
+    
+    .PARAMETER BoxMode
+    Whether to treat subfolders as discs in box sets.
+    
+    .OUTPUTS
+    PSCustomObject with SelectedAlbum and SelectedTracks properties.
+    
+    .NOTES
+    Implements the interactive album/track selection workflow with:
+    - Album selection with paging and sorting
+    - Track selection with paging and sorting  
+    - Back navigation between stages
+    - Proper error handling and validation
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [array]$AlbumComparisons,
+        
+        [Parameter(Mandatory)]
+        $SelectedArtist,
+        
+        [Parameter(Mandatory)]
+        [string]$CurrentPath,
+        
+        [Parameter(Mandatory)]
+        [bool]$IncludeTracks,
+        
+        [Parameter(Mandatory)]
+        [bool]$BoxMode
+    )
+    
+    $selectedAlbum = $null
+    $selectedTracks = @()
+    
+    # Album Selection Stage
+    while ($true) {
+        Clear-Host
+        Write-Host "=== ALBUM SELECTION ===" -ForegroundColor Cyan
+        Write-Host "Artist: $($SelectedArtist.Name)" -ForegroundColor Yellow
+        Write-Host "Path: $CurrentPath" -ForegroundColor Yellow
+        Write-Host ""
+        
+        if ($AlbumComparisons.Count -eq 0) {
+            Write-Host "No albums found in this directory." -ForegroundColor Red
+            Write-Host ""
+            Write-Host "Press Enter to go back to artist selection..."
+            Read-Host | Out-Null
+            return [PSCustomObject]@{
+                SelectedAlbum = $null
+                SelectedTracks = @()
+                Action = "back"
+            }
+        }
+        
+        # Display albums with paging
+        $pageSize = 25
+        $totalPages = [math]::Ceiling($AlbumComparisons.Count / $pageSize)
+        $currentPage = 1
+        
+        while ($true) {
+            $startIndex = ($currentPage - 1) * $pageSize
+            $endIndex = [math]::Min($startIndex + $pageSize - 1, $AlbumComparisons.Count - 1)
+            $pageAlbums = $AlbumComparisons[$startIndex..$endIndex]
+            
+            Write-Host "Page $currentPage of $totalPages (showing $($pageAlbums.Count) albums)" -ForegroundColor Green
+            Write-Host "Sort: [n]ame (default), [s]core, [y]ear" -ForegroundColor Gray
+            Write-Host ""
+            
+            for ($i = 0; $i -lt $pageAlbums.Count; $i++) {
+                $album = $pageAlbums[$i]
+                $index = $startIndex + $i + 1
+                $scoreColor = if ($album.MatchScore -ge 0.8) { "Green" } elseif ($album.MatchScore -ge 0.6) { "Yellow" } else { "Red" }
+                $matchInfo = if ($album.MatchName) { " -> $($album.MatchName)" } else { " (no match)" }
+                Write-Host ("{0,2}. [{1}] {2}{3}" -f $index, [math]::Round($album.MatchScore, 2), $album.LocalAlbum, $matchInfo) -ForegroundColor $scoreColor
+            }
+            
+            Write-Host ""
+            Write-Host "Navigation: [page number] to jump to page, [b]ack to artist selection" -ForegroundColor Gray
+            Write-Host "Selection: Enter album number, or 'q' to quit" -ForegroundColor Gray
+            
+            $choice = Read-Host "Choose album"
+            
+            if ($choice -eq 'q') {
+                return [PSCustomObject]@{
+                    SelectedAlbum = $null
+                    SelectedTracks = @()
+                    Action = "quit"
+                }
+            }
+            
+            if ($choice -eq 'b') {
+                return [PSCustomObject]@{
+                    SelectedAlbum = $null
+                    SelectedTracks = @()
+                    Action = "back"
+                }
+            }
+            
+            # Handle page navigation
+            if ($choice -match '^\d+$') {
+                $pageNum = [int]$choice
+                if ($pageNum -ge 1 -and $pageNum -le $totalPages) {
+                    $currentPage = $pageNum
+                    continue
+                }
+            }
+            
+            # Handle album selection
+            if ($choice -match '^\d+$') {
+                $albumIndex = [int]$choice - 1
+                if ($albumIndex -ge 0 -and $albumIndex -lt $AlbumComparisons.Count) {
+                    $selectedAlbum = $AlbumComparisons[$albumIndex]
+                    break
+                }
+            }
+            
+            Write-Host "Invalid choice. Please try again." -ForegroundColor Red
+            Start-Sleep -Seconds 1
+        }
+        
+        # If we have a selected album and IncludeTracks is enabled, proceed to track selection
+        if ($selectedAlbum -and $IncludeTracks) {
+            $trackResult = Invoke-MuFoTrackProcessing -SelectedAlbum $selectedAlbum -BoxMode $BoxMode
+            if ($trackResult.Action -eq "back") {
+                # Go back to album selection
+                continue
+            } elseif ($trackResult.Action -eq "quit") {
+                return [PSCustomObject]@{
+                    SelectedAlbum = $null
+                    SelectedTracks = @()
+                    Action = "quit"
+                }
+            } else {
+                $selectedTracks = $trackResult.SelectedTracks
+                break
+            }
+        } else {
+            # No track selection needed, we're done
+            break
+        }
+    }
+    
+    return [PSCustomObject]@{
+        SelectedAlbum = $selectedAlbum
+        SelectedTracks = $selectedTracks
+        Action = "continue"
+    }
+}
+
+function Invoke-MuFoTrackProcessing {
+    <#
+    .SYNOPSIS
+    Interactive track selection for Manual mode.
+    
+    .DESCRIPTION
+    Provides interactive selection of tracks with paging, sorting, and back navigation.
+    Allows users to select which tracks to process.
+    
+    .PARAMETER SelectedAlbum
+    The selected album comparison object.
+    
+    .PARAMETER BoxMode
+    Whether to treat subfolders as discs in box sets.
+    
+    .OUTPUTS
+    PSCustomObject with SelectedTracks and Action properties.
+    
+    .NOTES
+    Implements track selection with:
+    - Track listing with local and Spotify information
+    - Sorting by name, track number, or duration
+    - Back navigation to album selection
+    - All/none selection options
+    #>
+    param(
+        [Parameter(Mandatory)]
+        $SelectedAlbum,
+        
+        [Parameter(Mandatory)]
+        [bool]$BoxMode
+    )
+    
+    while ($true) {
+        Clear-Host
+        Write-Host "=== TRACK SELECTION ===" -ForegroundColor Cyan
+        Write-Host "Album: $($SelectedAlbum.LocalAlbum)" -ForegroundColor Yellow
+        if ($SelectedAlbum.MatchName) {
+            Write-Host "Spotify Match: $($SelectedAlbum.MatchName)" -ForegroundColor Yellow
+        }
+        Write-Host ""
+        
+        # Get local tracks
+        $scanPaths = if ($BoxMode -and (Get-ChildItem -LiteralPath $SelectedAlbum.LocalPath -Directory -ErrorAction SilentlyContinue)) {
+            Get-ChildItem -LiteralPath $SelectedAlbum.LocalPath -Directory | Select-Object -ExpandProperty FullName
+        } else {
+            @($SelectedAlbum.LocalPath)
+        }
+        
+        $localTracks = @()
+        foreach ($p in $scanPaths) {
+            $localTracks += Get-AudioFileTags -Path $p -IncludeComposer
+        }
+        
+        if ($localTracks.Count -eq 0) {
+            Write-Host "No audio files found in this album." -ForegroundColor Red
+            Write-Host ""
+            Write-Host "Press Enter to go back to album selection..."
+            Read-Host | Out-Null
+            return [PSCustomObject]@{
+                SelectedTracks = @()
+                Action = "back"
+            }
+        }
+        
+        # Sort tracks by disc and track number initially
+        $localTracks = $localTracks | Sort-Object { [int]$_.DiscNumber }, { [int]$_.TrackNumber }
+        
+        # Display tracks with paging
+        $pageSize = 25
+        $totalPages = [math]::Ceiling($localTracks.Count / $pageSize)
+        $currentPage = 1
+        $sortMode = "track" # track, name, duration
+        
+        while ($true) {
+            # Apply current sort
+            switch ($sortMode) {
+                "name" { $sortedTracks = $localTracks | Sort-Object Title }
+                "duration" { $sortedTracks = $localTracks | Sort-Object { [TimeSpan]::Parse($_.Duration) } }
+                default { $sortedTracks = $localTracks | Sort-Object { [int]$_.DiscNumber }, { [int]$_.TrackNumber } }
+            }
+            
+            $startIndex = ($currentPage - 1) * $pageSize
+            $endIndex = [math]::Min($startIndex + $pageSize - 1, $sortedTracks.Count - 1)
+            $pageTracks = $sortedTracks[$startIndex..$endIndex]
+            
+            Write-Host "Page $currentPage of $totalPages (showing $($pageTracks.Count) tracks)" -ForegroundColor Green
+            Write-Host "Sort: [t]rack number (current), [n]ame, [d]uration" -ForegroundColor Gray
+            Write-Host ""
+            
+            for ($i = 0; $i -lt $pageTracks.Count; $i++) {
+                $track = $pageTracks[$i]
+                $index = $startIndex + $i + 1
+                $discInfo = if ([int]$track.DiscNumber -gt 1) { "D$($track.DiscNumber)" } else { "" }
+                $trackInfo = "{0,2}. {1,2}. {2} ({3})" -f $index, $track.TrackNumber, $track.Title, $track.Duration
+                if ($discInfo) { $trackInfo += " [$discInfo]" }
+                Write-Host $trackInfo -ForegroundColor White
+            }
+            
+            Write-Host ""
+            Write-Host "Navigation: [page number] to jump to page, [b]ack to album selection" -ForegroundColor Gray
+            Write-Host "Selection: [a]ll tracks, [n]one, or track numbers (comma-separated), 'q' to quit" -ForegroundColor Gray
+            
+            $choice = Read-Host "Choose tracks"
+            
+            if ($choice -eq 'q') {
+                return [PSCustomObject]@{
+                    SelectedTracks = @()
+                    Action = "quit"
+                }
+            }
+            
+            if ($choice -eq 'b') {
+                return [PSCustomObject]@{
+                    SelectedTracks = @()
+                    Action = "back"
+                }
+            }
+            
+            # Handle sort changes
+            if ($choice -eq 't') { $sortMode = "track"; $currentPage = 1; continue }
+            if ($choice -eq 'n') { $sortMode = "name"; $currentPage = 1; continue }
+            if ($choice -eq 'd') { $sortMode = "duration"; $currentPage = 1; continue }
+            
+            # Handle page navigation
+            if ($choice -match '^\d+$') {
+                $pageNum = [int]$choice
+                if ($pageNum -ge 1 -and $pageNum -le $totalPages) {
+                    $currentPage = $pageNum
+                    continue
+                }
+            }
+            
+            # Handle track selection
+            if ($choice -eq 'a') {
+                return [PSCustomObject]@{
+                    SelectedTracks = $localTracks
+                    Action = "continue"
+                }
+            }
+            
+            if ($choice -eq 'n') {
+                return [PSCustomObject]@{
+                    SelectedTracks = @()
+                    Action = "continue"
+                }
+            }
+            
+            # Parse comma-separated track numbers
+            $trackIndices = @()
+            $validSelection = $true
+            
+            foreach ($part in ($choice -split ',')) {
+                $part = $part.Trim()
+                if ($part -match '^\d+$') {
+                    $trackIndex = [int]$part - 1
+                    if ($trackIndex -ge 0 -and $trackIndex -lt $sortedTracks.Count) {
+                        $trackIndices += $trackIndex
+                    } else {
+                        $validSelection = $false
+                        break
+                    }
+                } else {
+                    $validSelection = $false
+                    break
+                }
+            }
+            
+            if ($validSelection -and $trackIndices.Count -gt 0) {
+                $selectedTracks = $trackIndices | ForEach-Object { $sortedTracks[$_] }
+                return [PSCustomObject]@{
+                    SelectedTracks = $selectedTracks
+                    Action = "continue"
+                }
+            }
+            
+            Write-Host "Invalid selection. Please try again." -ForegroundColor Red
+            Start-Sleep -Seconds 1
+        }
+    }
+}

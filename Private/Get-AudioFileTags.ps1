@@ -73,18 +73,18 @@ function Get-AudioFileTags {
             )
             
             $tagLibPath = $null
-            foreach ($path in $tagLibPaths) {
-                if ($path -like "*\*") {
+            foreach ($pathb in $tagLibPaths) {
+                if ($pathb -like "*\*") {
                     # Handle wildcard paths for NuGet packages
-                    $found = Get-ChildItem -Path $path -Recurse -ErrorAction SilentlyContinue | 
+                    $found = Get-ChildItem -Path $pathb -Recurse -ErrorAction SilentlyContinue | 
                              Where-Object { $_.Name -eq 'TagLib.dll' } | 
                              Select-Object -First 1
                     if ($found) {
                         $tagLibPath = $found.FullName
                         break
                     }
-                } elseif (Test-Path $path) {
-                    $tagLibPath = $path
+                } elseif (Test-Path $pathb) {
+                    $tagLibPath = $pathb
                     break
                 }
             }

@@ -34,8 +34,9 @@ function Install-TagLibSharp {
         [ValidateSet('AllUsers', 'CurrentUser')]
         [string]$Scope = 'CurrentUser'
     )
-    
-    Write-Host "=== TagLib-Sharp Installation Helper ===" -ForegroundColor Cyan
+    #make this print only with verbose
+    Write-Verbose "Starting TagLib-Sharp installation process..."
+    #Write-Host "=== TagLib-Sharp Installation Helper ===" -ForegroundColor Cyan
     
     # Check if already installed (unless forcing)
     if (-not $Force) {
