@@ -7,9 +7,10 @@ function Invoke-MuFoManual {
     )
 
     begin {
-
-        Install-TagLibSharp | Out-Null
-
+        $taglibloaded = Test-taglibloaded -ThrowOnError 
+        if (-not $taglibloaded) {
+            Install-TagLibSharp | Out-Null
+        }
         # ensure TagLib is present for this function (Install-TagLibSharp should make TagLib available)
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
@@ -143,6 +144,7 @@ function Invoke-MuFoManual {
                         }
 
                         $sortMethod = 'byName'
+                        $exitdo = $false
                         do {
                             $sorted = Set-Tracks -SortMethod $sortMethod -AudioFiles $audioFiles -SpotifyTracks $tracksForAlbum
                             $audioFiles = $sorted.Audio
@@ -162,11 +164,15 @@ function Invoke-MuFoManual {
                                 '^sf$' {
                                     $year = Get-ReleaseYear -ReleaseDate $spotifyAlbum.release_date
                                     $oldpath = $album.FullName
+                                    $safeAlbumName = Approve-PathSegment -Segment $spotifyAlbum.name -Replacement '_' -CollapseRepeating -Transliterate
+                                    $safeArtistName = Approve-PathSegment -Segment $SpotifyArtist.name -Replacement '_' -CollapseRepeating -Transliterate
+
+
                                     $mvArgs = @{
                                         AlbumPath    = $oldpath
-                                        NewArtist    = $SpotifyArtist.name
+                                        NewArtist    = $safeArtistName
                                         NewYear      = $year
-                                        NewAlbumName = $spotifyAlbum.name
+                                        NewAlbumName = $safeAlbumName
                                     }
                                     # call Move-AlbumFolder and pass -WhatIf from the caller (if requested)
                                     if ($isWhatIf) {
@@ -185,12 +191,14 @@ function Invoke-MuFoManual {
                                             Write-Host $moveResult.NewAlbumPath
                                             Read-Host -Prompt "Press Enter to continue (WhatIf)"
                                             $stage = 'C'
-                                            continue
+                                            $exitDo = $true
+                                            break
                                         }
                                         else {
                                             $album = Get-Item -LiteralPath $moveResult.NewAlbumPath
                                             $stage = "C"
-                                            continue
+                                            $exitDo = $true
+                                            break 
                                         }
                                     }
                                     else {
@@ -203,18 +211,23 @@ function Invoke-MuFoManual {
                                         $audioFile = $audioFiles[$i]
                                         $filePath = $audioFile.FilePath
                                         $tags = @{
-                                            Title      = $spotifyTrack.Title
-                                            Track      = $spotifyTrack.TrackNumber
-                                            Disc       = $spotifyTrack.DiscNumber
-                                            Performers = $spotifyTrack.Artist
-                                            Genres     = $SpotifyArtist.genres
+                                            Title       = $spotifyTrack.Title
+                                            Track       = $spotifyTrack.TrackNumber
+                                            Disc        = $spotifyTrack.DiscNumber
+                                            Performers  = $spotifyTrack.Artist
+                                            Genres      = $SpotifyArtist.genres
+                                            AlbumArtist = $SpotifyArtist.name
+                                            Date        = $year
+                                            Album       = $spotifyAlbum.name
+
                                         }
                                         $res = Save-TagsForFile -FilePath $filePath -TagValues $tags -WhatIf:$isWhatIf
                                         if ($res.Success) { Write-Host ("Saved tags: {0} -> {1:D2}.{2:D2}: {3}" -f (Split-Path -Leaf $filePath), $spotifyTrack.DiscNumber, $spotifyTrack.TrackNumber, $spotifyTrack.Title) -ForegroundColor Green }
                                         else { Write-Warning ("Skipped/Failed: {0} ({1})" -f $filePath, ($res.Reason -or 'unknown')) }
                                     }
                                     $stage = 'C'
-                                    continue
+                                    $exitDo = $true
+                                    break
                                 }
                                 '^sa$' {
                                     for ($i = 0; $i -lt $tracksForAlbum.Count; $i++) {
@@ -222,11 +235,15 @@ function Invoke-MuFoManual {
                                         $audioFile = $audioFiles[$i]
                                         $filePath = $audioFile.FilePath
                                         $tags = @{
-                                            Title      = $spotifyTrack.Title
-                                            Track      = $spotifyTrack.TrackNumber
-                                            Disc       = $spotifyTrack.DiscNumber
-                                            Performers = $spotifyTrack.Artist
-                                            Genres     = $SpotifyArtist.genres
+                                            Title       = $spotifyTrack.Title
+                                            Track       = $spotifyTrack.TrackNumber
+                                            Disc        = $spotifyTrack.DiscNumber
+                                            Performers  = $spotifyTrack.Artist
+                                            Genres      = $SpotifyArtist.genres
+                                            AlbumArtist = $SpotifyArtist.name
+                                            Date        = $year
+                                            Album       = $spotifyAlbum.name
+
                                         }
                                         $res = Save-TagsForFile -FilePath $filePath -TagValues $tags -WhatIf:$isWhatIf
                                         if ($res.Success) { Write-Host ("Saved tags: {0} -> {1:D2}.{2:D2}: {3}" -f (Split-Path -Leaf $filePath), $spotifyTrack.DiscNumber, $spotifyTrack.TrackNumber, $spotifyTrack.Title) -ForegroundColor Green }
@@ -248,11 +265,14 @@ function Invoke-MuFoManual {
                                     }
                                     $year = Get-ReleaseYear -ReleaseDate $spotifyAlbum.release_date
                                     $oldpath = $album.FullName
+                                    $safeAlbumName = Approve-PathSegment -Segment $spotifyAlbum.name -Replacement '_' -CollapseRepeating -Transliterate
+                                    $safeArtistName = Approve-PathSegment -Segment $SpotifyArtist.name -Replacement '_' -CollapseRepeating -Transliterate
+
                                     $mvArgs = @{
                                         AlbumPath    = $oldpath
-                                        NewArtist    = $SpotifyArtist.name
+                                        NewArtist    = $safeArtistName
                                         NewYear      = $year
-                                        NewAlbumName = $spotifyAlbum.name
+                                        NewAlbumName = $safeAlbumName
                                     }
 
                                     if ($isWhatIf) {
@@ -271,20 +291,144 @@ function Invoke-MuFoManual {
                                             Write-Host $moveResult.NewAlbumPath
                                             Read-Host -Prompt "Press Enter to continue (WhatIf)"
                                             $stage = 'C'
-                                            continue
+                                            $exitDo = $true
+                                            break
                                         }
                                         else {
                                             $album = Get-Item -LiteralPath $moveResult.NewAlbumPath
                                             $stage = "C"
-                                            continue
+                                            $exitDo = $true
+                                            break 
                                         }
                                     }
                                     else {
                                         Write-Warning "Move failed or was skipped. Move result: $moveResult"
                                     }
                                 }
+
+                                '^(\d+(?:\.\.\d+|\-\d+)) (\+?\w+) (.+)$' {
+                                    # Parse range, tag, and value from input (e.g., "1..8 +composer J.S. Bach")
+                                    $rangeStr = $matches[1]
+                                    $tagName = $matches[2]
+                                    $tagValue = $matches[3]
+
+                                    # Expand range to array of 1-based indices (e.g., "1..8" -> @(1,2,3,4,5,6,7,8))
+                                    $indices = @()
+                                    if ($rangeStr -match '^(\d+)\.\.(\d+)$') {
+                                        $start = [int]$matches[1]
+                                        $end = [int]$matches[2]
+                                        if ($start -le $end -and $start -ge 1 -and $end -le $tracksForAlbum.Count) {
+                                            $indices = $start..$end
+                                        }
+                                        else {
+                                            Write-Warning "Invalid range: $rangeStr (must be 1 to $($tracksForAlbum.Count))"
+                                            continue
+                                        }
+                                    }
+                                    elseif ($rangeStr -match '^(\d+)\-(\d+)$') {
+                                        $start = [int]$matches[1]
+                                        $end = [int]$matches[2]
+                                        if ($start -le $end -and $start -ge 1 -and $end -le $tracksForAlbum.Count) {
+                                            $indices = $start..$end
+                                        }
+                                        else {
+                                            Write-Warning "Invalid range: $rangeStr (must be 1 to $($tracksForAlbum.Count))"
+                                            continue
+                                        }
+                                    }
+                                    elseif ($rangeStr -match '^\d+$') {
+                                        $idx = [int]$rangeStr
+                                        if ($idx -ge 1 -and $idx -le $tracksForAlbum.Count) {
+                                            $indices = @($idx)
+                                        }
+                                        else {
+                                            Write-Warning "Invalid track number: $idx (must be 1 to $($tracksForAlbum.Count))"
+                                            continue
+                                        }
+                                    }
+                                    else {
+                                        Write-Warning "Unrecognized range format: $rangeStr"
+                                        continue
+                                    }
+
+                                    # Determine if adding (+) or replacing
+                                    $isAdd = $tagName.StartsWith('+')
+                                    $actualTagName = if ($isAdd) { $tagName.Substring(1) } else { $tagName }
+
+                                    # Validate tag name (add more as needed; map to TagLib properties)
+                                    $validTags = @('composer', 'genre', 'artist', 'albumartist', 'title')  # Expand this list
+                                    if ($actualTagName -notin $validTags) {
+                                        Write-Warning "Unsupported tag: $actualTagName (supported: $($validTags -join ', '))"
+                                        continue
+                                    }
+
+                                    # Apply to each track in range
+                                    foreach ($idx in $indices) {
+                                        $trackIdx = $idx - 1  # 0-based for arrays
+                                        $spotifyTrack = $tracksForAlbum[$trackIdx]
+                                        $audioFile = $audioFiles[$trackIdx]
+                                        $filePath = $audioFile.FilePath
+
+                                        # Build tag update (read existing value if adding)
+                                        $existingValue = $null
+                                        if ($isAdd) {
+                                            # Try to read current tag value from the file (if available)
+                                            try {
+                                                $currentTagFile = [TagLib.File]::Create($filePath)
+                                                $existingValue = switch ($actualTagName) {
+                                                    'composer' { $currentTagFile.Tag.Composers -join '; ' }
+                                                    'genre' { $currentTagFile.Tag.Genres -join '; ' }
+                                                    'artist' { $currentTagFile.Tag.Performers -join '; ' }
+                                                    'albumartist' { $currentTagFile.Tag.AlbumArtists -join '; ' }
+                                                    'title' { $currentTagFile.Tag.Title }
+                                                    default { $null }
+                                                }
+                                                $currentTagFile.Dispose()
+                                            }
+                                            catch {
+                                                Write-Verbose "Could not read existing tag for $filePath`: $_"
+                                            }
+                                        }
+
+                                        $newValue = if ($isAdd -and $existingValue) {
+                                            "$existingValue; $tagValue"  # Append with separator
+                                        }
+                                        else {
+                                            $tagValue  # Replace or set new
+                                        }
+
+                                        # Map to TagLib property names
+                                        $tagKey = switch ($actualTagName) {
+                                            'composer' { 'Composers' }
+                                            'genre' { 'Genres' }
+                                            'artist' { 'Performers' }
+                                            'albumartist' { 'AlbumArtists' }
+                                            'title' { 'Title' }
+                                            default { $actualTagName }
+                                        }
+
+                                        $tags = @{
+                                            $tagKey = $newValue
+                                        }
+
+                                        # Save the tag
+                                        $res = Save-TagsForFile -FilePath $filePath -TagValues $tags -WhatIf:$isWhatIf
+                                        if ($res.Success) {
+                                            Write-Host ("Updated tag '$actualTagName' for track $idx ($($spotifyTrack.Title)): '$newValue'") -ForegroundColor Green
+                                        }
+                                        else {
+                                            Write-Warning ("Failed to update tag for track $($idx): $($res.Reason)")
+                                        }
+                                    }
+
+                                     $stage = 'C'
+                                    $exitDo = $true
+                                    break
+                                }
+
                                 default { Write-Warning "Unknown option"; continue }
                             }
+                            if ($exitDo) { break }
                         } while ($true)
                     }
                 }

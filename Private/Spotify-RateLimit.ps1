@@ -145,7 +145,7 @@ function Get-SpotifyArtist-Throttled {
     return $result
 }
 
-function Search-Spotify-Batch {
+function Search-SpotifyBatch {
 <#
 .SYNOPSIS
     Batch Spotify searches with intelligent rate limiting.

@@ -36,11 +36,14 @@ function Save-TagsForFile {
             foreach ($k in $TagValues.Keys) {
                 $v = $TagValues[$k]
                 switch ($k) {
+                    'AlbumArtist'{ $tagFile.Tag.AlbumArtists = @($v) }
                     'Title' { $tagFile.Tag.Title = $v }
                     'Track' { $tagFile.Tag.Track = [uint]$v }
                     'Disc' { $tagFile.Tag.Disc = [uint]$v }
                     'Performers' { $tagFile.Tag.Performers = @($v) }
                     'Genres' { $tagFile.Tag.Genres = ($tagFile.Tag.Genres + @($v)) | Select-Object -Unique }
+                    'Date' { $tagFile.Tag.Year = [uint]$v }
+                    'Album' { $tagFile.Tag.Album = $v }
                     default {
                         if ($tagFile.Tag.PSObject.Properties.Match($k)) {
                             $tagFile.Tag.$k = $v

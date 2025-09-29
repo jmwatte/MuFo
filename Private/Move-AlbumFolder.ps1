@@ -7,7 +7,6 @@ function Move-AlbumFolder {
         [Parameter(Mandatory = $true)][ValidateNotNullOrEmpty()][string]$NewAlbumName,
         [Parameter(Mandatory = $false)][bool]$RemoveEmptyOldArtistFolder = $true,
         [Parameter(Mandatory = $false)][switch]$Force
-       # [Parameter(Mandatory = $false)][switch]$WhatIf
     )
 
     begin {
@@ -45,7 +44,7 @@ function Move-AlbumFolder {
         $createArtist = -not (Test-Path -LiteralPath $targetArtistPath -PathType Container)
         if ($createArtist) {
             if ($PSCmdlet.ShouldProcess($targetArtistPath, "Create artist folder")) {
-                if (-not $WhatIf.IsPresent) { New-Item -LiteralPath $targetArtistPath -ItemType Directory -ErrorAction Stop | Out-Null }
+                New-Item -LiteralPath $targetArtistPath -ItemType Directory -ErrorAction Stop | Out-Null
             }
         }
 
@@ -67,19 +66,17 @@ function Move-AlbumFolder {
             if ($PSCmdlet.ShouldProcess($AlbumPath, $actionDesc)) {
                 if ($renamingOnly) {
                     $newLeaf = Split-Path -Leaf $destAlbumPath
-                    if (-not $WhatIf.IsPresent) { Rename-Item -LiteralPath $AlbumPath -NewName $newLeaf -ErrorAction Stop }
+                    Rename-Item -LiteralPath $AlbumPath -NewName $newLeaf -ErrorAction Stop
                 }
                 else {
                     $destParent = Split-Path -Parent $destAlbumPath
                     if (-not (Test-Path -LiteralPath $destParent -PathType Container)) {
                         if ($PSCmdlet.ShouldProcess($destParent, "Create destination parent folder")) {
-                            if (-not $WhatIf.IsPresent) { New-Item -LiteralPath $destParent -ItemType Directory -ErrorAction Stop | Out-Null }
+                            New-Item -LiteralPath $destParent -ItemType Directory -ErrorAction Stop | Out-Null
                         }
                     }
 
-                    if (-not $WhatIf.IsPresent) {
-                        Move-Item -LiteralPath $AlbumPath -Destination $destAlbumPath -ErrorAction Stop -Force:$Force.IsPresent
-                    }
+                    Move-Item -LiteralPath $AlbumPath -Destination $destAlbumPath -ErrorAction Stop -Force:$Force.IsPresent
                 }
             }
 
@@ -88,7 +85,7 @@ function Move-AlbumFolder {
                 if (-not $children) {
                     $rmDesc = "Remove empty artist folder '$currentArtistPath'"
                     if ($PSCmdlet.ShouldProcess($currentArtistPath, $rmDesc)) {
-                        if (-not $WhatIf.IsPresent) { Remove-Item -LiteralPath $currentArtistPath -Force -Recurse:$false -ErrorAction Stop }
+                        Remove-Item -LiteralPath $currentArtistPath -Force -Recurse:$false -ErrorAction Stop
                     }
                 }
             }
@@ -104,7 +101,7 @@ function Move-AlbumFolder {
             }
         }
         catch {
-            throw "Failed to move/rename album folder: $_"
+            throw "Failed to move/rename album folder: $($_)"
         }
     }
 }

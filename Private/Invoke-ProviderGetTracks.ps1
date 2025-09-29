@@ -1,0 +1,16 @@
+function Invoke-ProviderGetTracks {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateSet('Spotify', 'Qobuz')]
+        [string]$Provider,
+
+        [Parameter(Mandatory)]
+        [string]$AlbumId
+    )
+
+    switch ($Provider) {
+        'Spotify' { Get-AlbumTracks -Id $AlbumId }
+        'Qobuz'   { QGet-AlbumTracks -Id $AlbumId }
+    }
+}

@@ -25,13 +25,14 @@ function Show-Tracks {
         $match = (
             $spotify.DiscNumber -eq $audio.DiscNumber -and
             $spotify.TrackNumber -eq $audio.TrackNumber -and
-            $spotify.Name -eq $audio.Name
+            $spotify.Title -eq $audio.Name
         )
 
         $color = if ($match) { 'Green' } else { 'Yellow' }
 
         Write-Host ("`t{0:D2}.{1:D2}: {2}" -f $audio.DiscNumber, $audio.TrackNumber, $audio.Title) -ForegroundColor $color
-        Write-Host ("`t`tartist: {0}" -f $audio.Artist) -ForegroundColor $color
+        Write-Host ("`t`tartist: {0}" -f ($audio.TagFile.Tag.Performers -join ', ')) -ForegroundColor $color
+        Write-Host ("`t`tcomposer: {0}" -f ($audio.TagFile.Tag.Composers -join ', ')) -ForegroundColor $color
         #write the genres if present
         if ($audio.TagFile.Tag.Genres -and $audio.TagFile.Tag.Genres.Count -gt 0) {
             Write-Host ("`t`tgenres: {0}" -f ($audio.TagFile.Tag.Genres -join ', '))
