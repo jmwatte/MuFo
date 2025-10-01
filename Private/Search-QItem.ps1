@@ -48,22 +48,17 @@ function Search-QItem {
 
             # Parse the href to extract ID (e.g., /be-fr/interpreter/zz-top/56332 -> 56332)
             if ($href -match '/interpreter/[^/]+/(\d+)$') {
-                $id = $matches[1]
+              #  $id = $matches[1]
             } else {
                 continue  # Skip if no ID
             }
  $genres = @()
-    try {
-        $albums = QGet-ArtistAlbums -Id $href
-        $genres = $albums | Where-Object { $_.genre } | Select-Object -ExpandProperty genre -Unique
-    } catch {
-        # Skip if fetch fails
-    }
+ 
 
             # Create the item object (similar to Spotify structure)
             $item = [PSCustomObject]@{
                 name   = $title
-                id     = $id
+                id     = $href
                 genres = $genres
             }
             $items += $item

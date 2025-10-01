@@ -8,15 +8,15 @@ function Set-Tracks {
     switch ($SortMethod) {
         "byName" {
             $AudioFiles = $AudioFiles | Sort-Object Title
-            $SpotifyTracks = $SpotifyTracks | Sort-Object Title
+            $SpotifyTracks = $SpotifyTracks | Sort-Object name
         }
         "byTrackNumber" {
             $AudioFiles = $AudioFiles | Sort-Object DiscNumber, TrackNumber
-            $SpotifyTracks = $SpotifyTracks | Sort-Object DiscNumber, TrackNumber
+            $SpotifyTracks = $SpotifyTracks | Sort-Object disc_number, track_number
         }
         "byDuration" {
             $AudioFiles = $AudioFiles | Sort-Object Duration
-            $SpotifyTracks = $SpotifyTracks | Sort-Object Duration
+            $SpotifyTracks = $SpotifyTracks | Sort-Object duration_ms
         }
         "manual" {
             #this should call a function that accepts $AudioFiles and $SpotifyTracks and lets the user manually match them

@@ -14,6 +14,6 @@ function Invoke-ProviderGetAlbums {
 
     switch ($Provider) {
         'Spotify' { Get-ArtistAlbums -Id $ArtistId -Album }
-        'Qobuz'   { QGet-ArtistAlbums -Id $ArtistId }  # $ArtistId is $href
+        'Qobuz'   { Get-QArtistAlbums -Id $ArtistId }  # $ArtistId is $href
     }
 }

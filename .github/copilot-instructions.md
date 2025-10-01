@@ -2,6 +2,17 @@
 
 ## Development Approach - **ALWAYS REFLECT FIRST**
 If I ask you to do something, reflect back in your words what you think I asked and wait for my feedback before carrying out anything. When I state a problem, first restate it in your own words and wait for my confirmation before proceeding.
+It this is complex task, I need you to:
+1. Break down the task into 5-7 specific steps
+2. For each step, provide:
+   - Clear success criteria
+   - Potential challenges
+   - Required information
+3. Work through each step sequentially
+4. Before moving to the next step, verify the current step is complete
+5. If a step fails, troubleshoot before continuing
+
+
 
 ## Project Overview
 **MuFo** is a PowerShell module for music library validation and tagging using Spotify API. It validates folder structures (Artist/Album/Track), corrects naming inconsistencies, and enhances audio file tags with focus on classical music support.

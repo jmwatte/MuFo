@@ -11,6 +11,6 @@ function Invoke-ProviderGetTracks {
 
     switch ($Provider) {
         'Spotify' { Get-AlbumTracks -Id $AlbumId }
-        'Qobuz'   { QGet-AlbumTracks -Id $AlbumId }
+        'Qobuz'   { Get-QAlbumTracks -Id $AlbumId }
     }
 }
