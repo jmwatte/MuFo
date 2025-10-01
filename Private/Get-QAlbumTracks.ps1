@@ -162,7 +162,7 @@ function Get-QAlbumTracks {
         $children = $doc.SelectNodes("//div[contains(concat(' ', normalize-space(@class), ' '), ' player__item ')]")
         #$trackContainer.ChildNodes
         $tracks = @()
-        $currentWorkTitle = "Unknown Work"
+        $currentWorkTitle = ""
         $currentDisc = "01"
         function ParsePerformer($inputb) {
             if (-not $inputb -or $inputb -eq "Unknown Performer") {
@@ -226,8 +226,8 @@ function Get-QAlbumTracks {
 
                 $out = [PSCustomObject]@{
                     id           = ($dataTrack -replace '^id:', '')
-                    name         = $currentWorkTitle + "," + $title
-                    Title        = $currentWorkTitle + " ," + $title
+                    name         = if ($currentWorkTitle) { $currentWorkTitle + "," + $title } else { $title }
+                    Title        = if ($currentWorkTitle) { $currentWorkTitle + " ," + $title } else { $title }
                     disc_number  = $currentDisc
                     DiscNumber   = $currentDisc
                     track_number = $trackNumber
