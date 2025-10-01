@@ -44,6 +44,7 @@ function Save-TagsForFile {
                     'Genres' { $tagFile.Tag.Genres = ($tagFile.Tag.Genres + @($v)) | Select-Object -Unique }
                     'Date' { $tagFile.Tag.Year = [uint]$v }
                     'Album' { $tagFile.Tag.Album = $v }
+                    'Composer' {$tagFile.Tag.Composers}
                     default {
                         if ($tagFile.Tag.PSObject.Properties.Match($k)) {
                             $tagFile.Tag.$k = $v

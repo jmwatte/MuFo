@@ -73,17 +73,17 @@ function Invoke-MuFoManual {
                         # Normalize to array so .Count is available even for single-item responses
                         $candidates = @($candidates)
     
-                            if (-not $candidates -or $candidates.Count -eq 0) {
-                                Write-Host "No artist candidates found for '$artistQuery'."
-                                if ($NonInteractive) {
-                                    Write-Warning "NonInteractive: skipping album because no artist candidates were found for '$artistQuery'."
-                                    break
-                                }
-                                $inputF = Read-Host "Enter new search, 'skip' to skip album, or 'id:<id>' to select by id"
-                                if ($inputF -eq 'skip') { break }
-                                if ($inputF -like 'id:*') { $id = $inputF.Substring(3); $ProviderArtist = @{ id = $id; name = $id }; $stage = 'B'; continue }
-                                if ($inputF) { $artistQuery = $inputF; continue } else { continue }
+                        if (-not $candidates -or $candidates.Count -eq 0) {
+                            Write-Host "No artist candidates found for '$artistQuery'."
+                            if ($NonInteractive) {
+                                Write-Warning "NonInteractive: skipping album because no artist candidates were found for '$artistQuery'."
+                                break
                             }
+                            $inputF = Read-Host "Enter new search, 'skip' to skip album, or 'id:<id>' to select by id"
+                            if ($inputF -eq 'skip') { break }
+                            if ($inputF -like 'id:*') { $id = $inputF.Substring(3); $ProviderArtist = @{ id = $id; name = $id }; $stage = 'B'; continue }
+                            if ($inputF) { $artistQuery = $inputF; continue } else { continue }
+                        }
     
                         Write-Host "Artist candidates for '$artistQuery':"
                         for ($i = 0; $i -lt $candidates.Count; $i++) {
@@ -116,25 +116,25 @@ function Invoke-MuFoManual {
                         try { $albumsForArtist = Invoke-ProviderGetAlbums -Provider $Provider -ArtistId $ProviderArtist.id -AlbumType 'Album' } catch { Write-Warning "Get-ArtistAlbums failed: $_"; $albumsForArtist = @() }
                         # Normalize to array so .Count works reliably
                         $albumsForArtist = @($albumsForArtist)
-                            if (-not $albumsForArtist -or $albumsForArtist.Count -eq 0) {
-                                Write-Host "No albums found for artist id $($ProviderArtist.id)."
-                                if ($NonInteractive) {
-                                    Write-Warning "NonInteractive: skipping album because no albums found for artist id $($ProviderArtist.id)."
-                                    break
-                                }
-                                $inputF = Read-Host "Enter 'back', 'skip', 'id:<id>' or album name to filter"
-                                if ($inputF -ieq 'back') { $stage = 'A'; continue }
-                                if ($inputF -eq 'skip') { break }
-                                if ($inputF -like 'id:*') { $id = $inputF.Substring(3); $ProviderAlbum = @{ id = $id; name = $id }; $stage = 'C'; continue }
-                                if ($inputF) { $artistQuery = $inputF; $stage = 'A'; continue } else { continue }
+                        if (-not $albumsForArtist -or $albumsForArtist.Count -eq 0) {
+                            Write-Host "No albums found for artist id $($ProviderArtist.id)."
+                            if ($NonInteractive) {
+                                Write-Warning "NonInteractive: skipping album because no albums found for artist id $($ProviderArtist.id)."
+                                break
                             }
+                            $inputF = Read-Host "Enter 'back', 'skip', 'id:<id>' or album name to filter"
+                            if ($inputF -ieq 'back') { $stage = 'A'; continue }
+                            if ($inputF -eq 'skip') { break }
+                            if ($inputF -like 'id:*') { $id = $inputF.Substring(3); $ProviderAlbum = @{ id = $id; name = $id }; $stage = 'C'; continue }
+                            if ($inputF) { $artistQuery = $inputF; $stage = 'A'; continue } else { continue }
+                        }
     
                         # sort by Jaccard similarity descending
                         $albumsForArtist = $albumsForArtist | Sort-Object { - (Get-StringSimilarity-Jaccard -String1 $albumName -String2 $_.Name) }
     
                         $page = 1; $pageSize = 25
                         while ($true) {
-                           # Clear-Host
+                            # Clear-Host
                             Write-Host "Albums for artist $($ProviderArtist.name):"
                             Write-Host "for local album: $($albumName) (year: $year)"
                             $totalPages = [math]::Ceiling($albumsForArtist.Count / $pageSize)
@@ -145,24 +145,24 @@ function Invoke-MuFoManual {
                                 Write-Host "[$($i+1)] $($albumsForArtist[$i].name)  (id: $($albumsForArtist[$i].id)) (year: $($albumsForArtist[$i].release_date))"
                             }
     
-                                # Non-interactive album selection: prefer explicit AlbumId, then goB, then AutoSelect or NonInteractive
-                                if ($AlbumId) { $ProviderAlbum = @{ id = $AlbumId; name = $AlbumId }; $stage = 'C'; break }
-                                if ($goB) { $ProviderAlbum = $albumsForArtist[0]; $stage = 'C'; break }
-                                if ($AutoSelect -or $NonInteractive) { $ProviderAlbum = $albumsForArtist[0]; $stage = 'C'; break }
+                            # Non-interactive album selection: prefer explicit AlbumId, then goB, then AutoSelect or NonInteractive
+                            if ($AlbumId) { $ProviderAlbum = @{ id = $AlbumId; name = $AlbumId }; $stage = 'C'; break }
+                            if ($goB) { $ProviderAlbum = $albumsForArtist[0]; $stage = 'C'; break }
+                            if ($AutoSelect -or $NonInteractive) { $ProviderAlbum = $albumsForArtist[0]; $stage = 'C'; break }
 
-                                $inputF = Read-Host "Select album [1] (Enter=first), number, 'back', 'next', 'prev', 'skip', 'id:<id>', or text to filter:"
-                                if ($inputF -ieq 'next') { if ($page -lt $totalPages) { $page++ } ; continue }
-                                if ($inputF -ieq 'prev') { if ($page -gt 1) { $page-- } ; continue }
-                                if ($inputF -ieq 'back') { $stage = 'A'; break }
-                                if ($inputF -eq '') { $ProviderAlbum = $albumsForArtist[0]; $stage = 'C'; break }
-                                if ($inputF -like 'id:*') { $id = $inputF.Substring(3); $ProviderAlbum = @{ id = $id; name = $id }; $stage = 'C'; break }
-                                if ($inputF -match '^\d+$') { $idx = [int]$inputF; if ($idx -ge 1 -and $idx -le $albumsForArtist.Count) { $ProviderAlbum = $albumsForArtist[$idx - 1]; $stage = 'C'; break } else { Write-Warning "Invalid"; continue } }
-                                    if ($inputF -ieq 'next') { if ($page -lt $totalPages) { $page++ } ; continue }
-                                    if ($inputF -ieq 'prev') { if ($page -gt 1) { $page-- } ; continue }
-                                    if ($inputF -ieq 'back') { $stage = 'A'; break }
-                                    if ($inputF -eq '') { $ProviderAlbum = $albumsForArtist[0]; $stage = 'C'; break }
-                                    if ($inputF -like 'id:*') { $id = $inputF.Substring(3); $ProviderAlbum = @{ id = $id; name = $id }; $stage = 'C'; break }
-                                    if ($inputF -match '^\d+$') { $idx = [int]$inputF; if ($idx -ge 1 -and $idx -le $albumsForArtist.Count) { $ProviderAlbum = $albumsForArtist[$idx - 1]; $stage = 'C'; break } else { Write-Warning "Invalid"; continue } }
+                            $inputF = Read-Host "Select album [1] (Enter=first), number, 'back', 'next', 'prev', 'skip', 'id:<id>', or text to filter:"
+                            if ($inputF -ieq 'next') { if ($page -lt $totalPages) { $page++ } ; continue }
+                            if ($inputF -ieq 'prev') { if ($page -gt 1) { $page-- } ; continue }
+                            if ($inputF -ieq 'back') { $stage = 'A'; break }
+                            if ($inputF -eq '') { $ProviderAlbum = $albumsForArtist[0]; $stage = 'C'; break }
+                            if ($inputF -like 'id:*') { $id = $inputF.Substring(3); $ProviderAlbum = @{ id = $id; name = $id }; $stage = 'C'; break }
+                            if ($inputF -match '^\d+$') { $idx = [int]$inputF; if ($idx -ge 1 -and $idx -le $albumsForArtist.Count) { $ProviderAlbum = $albumsForArtist[$idx - 1]; $stage = 'C'; break } else { Write-Warning "Invalid"; continue } }
+                            if ($inputF -ieq 'next') { if ($page -lt $totalPages) { $page++ } ; continue }
+                            if ($inputF -ieq 'prev') { if ($page -gt 1) { $page-- } ; continue }
+                            if ($inputF -ieq 'back') { $stage = 'A'; break }
+                            if ($inputF -eq '') { $ProviderAlbum = $albumsForArtist[0]; $stage = 'C'; break }
+                            if ($inputF -like 'id:*') { $id = $inputF.Substring(3); $ProviderAlbum = @{ id = $id; name = $id }; $stage = 'C'; break }
+                            if ($inputF -match '^\d+$') { $idx = [int]$inputF; if ($idx -ge 1 -and $idx -le $albumsForArtist.Count) { $ProviderAlbum = $albumsForArtist[$idx - 1]; $stage = 'C'; break } else { Write-Warning "Invalid"; continue } }
                             # treat as filter
                             $filtered = $albumsForArtist | Where-Object { $_.name -like "*$inputF*" }
                             if ($filtered.Count -gt 0) { $albumsForArtist = $filtered; $page = 1; continue } else { Write-Warning "No matches"; continue }
@@ -189,6 +189,7 @@ function Invoke-MuFoManual {
                                 TrackNumber = $tagFile.Tag.Track
                                 Title       = $tagFile.Tag.Title
                                 TagFile     = $tagFile
+                                Composer    = if ($tagFile.Tag.Composers) { $tagFile.Tag.Composers -join '; ' } else { 'Unknown Composer' }
                                 Artist      = if ($tagFile.Tag.FirstPerformer) { $tagFile.Tag.FirstPerformer } else { 'Unknown Artist' }
                                 Name        = if ($tagFile.Tag.Title) { $tagFile.Tag.Title } else { $f.BaseName }
                                 Duration    = $tagFile.Properties.Duration.TotalMilliseconds
@@ -197,7 +198,7 @@ function Invoke-MuFoManual {
     
                         try { $tracksForAlbum = Invoke-ProviderGetTracks -Provider $Provider -AlbumId $ProviderAlbum.id } catch { Write-Warning "Get-SpotifyAlbumTracks failed: $_"; $tracksForAlbum = @() }
                         # Normalize to array and defensively map properties (different providers may return different shapes)
-                      <#   $tracksForAlbum = @($tracksForAlbum) | ForEach-Object {
+                        <#   $tracksForAlbum = @($tracksForAlbum) | ForEach-Object {
                             # Defensive handling: some providers or earlier pipeline steps can emit ErrorRecord
                             # or Exception objects into the collection. Handle those explicitly so we don't
                             # accidentally use exception text as a track title (which caused the 'artists'
@@ -301,7 +302,8 @@ function Invoke-MuFoManual {
                             if ($tracksForAlbum -and $tracksForAlbum.Count -gt 0) {
                                 $hasDiscNumbers = ($tracksForAlbum | Where-Object { ($_.PSObject.Properties.Match('DiscNumber') -and $_.DiscNumber -gt 0) -or ($_.PSObject.Properties.Match('disc_number') -and $_.disc_number -gt 0) }).Count -gt 0
                             }
-                        } catch { $hasDiscNumbers = $false }
+                        }
+                        catch { $hasDiscNumbers = $false }
                         $sortMethod = if ($hasDiscNumbers) { 'byTrackNumber' } else { 'byName' }
 
                         # Debug: when verbose, print the raw provider track list so users can verify
@@ -311,7 +313,8 @@ function Invoke-MuFoManual {
                                 Write-Host "\n[DEBUG] Provider tracks for album: $($ProviderAlbum.name) (count: $($tracksForAlbum.Count))" -ForegroundColor Cyan
                                 $tracksForAlbum | Select-Object id, Title, DiscNumber, TrackNumber | Format-Table -AutoSize
                             }
-                        } catch {
+                        }
+                        catch {
                             Write-Verbose "Failed to print debug provider tracks: $($_.Exception.Message)"
                         }
                         $exitdo = $false
@@ -324,10 +327,10 @@ function Invoke-MuFoManual {
 
                             # Pause briefly so the user can read the displayed track alignment
                             # Avoid blocking in non-interactive or auto-apply modes
-                            if (-not $NonInteractive -and -not $goC) {
+                            <# if (-not $NonInteractive -and -not $goC) {
                                 Write-Host "`nPress Enter to continue (or Ctrl+C to abort)..." -ForegroundColor Cyan
                                 Read-Host | Out-Null
-                            }
+                            } #>
 
                             # If goC is set, auto-run save-all and skip interactive prompts (honor -WhatIf)
                             if ($goC) {
@@ -366,40 +369,40 @@ function Invoke-MuFoManual {
                                     }
     
                                     if ($moveResult -and $moveResult.Success) {
-                                            # If the move would not change the path, don't prompt or attempt to re-open.
-                                            if ($isWhatIf) {
-                                                Write-Host "WhatIf: album would be moved:" -ForegroundColor Yellow
-                                                Write-Host -NoNewline -ForegroundColor Green "Old: "
-                                                Write-Host $oldpath
-                                                Write-Host -NoNewline -ForegroundColor Green "New: "
-                                                Write-Host $moveResult.NewAlbumPath
-                                                if ($moveResult.NewAlbumPath -ne $oldpath -and -not ($NonInteractive -or $goC) -and -not $isWhatIf) {
-                                                    # Only pause for an explicit interactive run. In preview/WhatIf or when
-                                                    # NonInteractive/goC is set, skip the blocking prompt so unattended
-                                                    # runs don't hang.
-                                                    Read-Host -Prompt "Press Enter to continue"
-                                                }
-                                                else {
-                                                    Write-Verbose "NonInteractive/goC/WhatIf or no-path-change: skipping pause after move."
-                                                }
+                                        # If the move would not change the path, don't prompt or attempt to re-open.
+                                        if ($isWhatIf) {
+                                            Write-Host "WhatIf: album would be moved:" -ForegroundColor Yellow
+                                            Write-Host -NoNewline -ForegroundColor Green "Old: "
+                                            Write-Host $oldpath
+                                            Write-Host -NoNewline -ForegroundColor Green "New: "
+                                            Write-Host $moveResult.NewAlbumPath
+                                            if ($moveResult.NewAlbumPath -ne $oldpath -and -not ($NonInteractive -or $goC) -and -not $isWhatIf) {
+                                                # Only pause for an explicit interactive run. In preview/WhatIf or when
+                                                # NonInteractive/goC is set, skip the blocking prompt so unattended
+                                                # runs don't hang.
+                                                Read-Host -Prompt "Press Enter to continue"
+                                            }
+                                            else {
+                                                Write-Verbose "NonInteractive/goC/WhatIf or no-path-change: skipping pause after move."
+                                            }
+                                            $stage = 'C'
+                                            $exitDo = $true
+                                            break
+                                        }
+                                        else {
+                                            # If the new path is identical to the current one, avoid reloading
+                                            if ($moveResult.NewAlbumPath -eq $oldpath) {
+                                                Write-Verbose "Move result indicates no change to album path; continuing."
                                                 $stage = 'C'
                                                 $exitDo = $true
                                                 break
                                             }
-                                            else {
-                                                # If the new path is identical to the current one, avoid reloading
-                                                if ($moveResult.NewAlbumPath -eq $oldpath) {
-                                                    Write-Verbose "Move result indicates no change to album path; continuing."
-                                                    $stage = 'C'
-                                                    $exitDo = $true
-                                                    break
-                                                }
-                                                $album = Get-Item -LiteralPath $moveResult.NewAlbumPath
-                                                $stage = "C"
-                                                $exitDo = $true
-                                                break 
-                                            }
+                                            $album = Get-Item -LiteralPath $moveResult.NewAlbumPath
+                                            $stage = "C"
+                                            $exitDo = $true
+                                            break 
                                         }
+                                    }
                                     else {
                                         Write-Warning "Move failed or was skipped. Move result: $moveResult"
                                     }
@@ -408,33 +411,50 @@ function Invoke-MuFoManual {
                                     try {
                                         # Safe retrieval of artist genres (ProviderArtist may be a hashtable or minimal object)
                                         $artistGenres = @()
-                                        if ($ProviderArtist) {
+                                        if ($ProviderArtist -and $ProviderArtist.genres.Count -gt 0) {
                                             try {
                                                 if ($ProviderArtist -is [System.Collections.IDictionary]) { $artistGenres = $ProviderArtist['genres'] }
                                                 elseif ($ProviderArtist.PSObject.Properties.Match('genres')) { $artistGenres = $ProviderArtist.genres }
-                                            } catch { $artistGenres = @() }
+                                            }
+                                            catch { $artistGenres = @() }
                                         }
+                                        elseif ($null -ne $ProviderAlbum -and $null -ne $ProviderAlbum.genre) {
+                                            try {
+                                                if ($ProviderAlbum -is [System.Collections.IDictionary]) { $artistGenres = $ProviderAlbum['genre'] }
+                                                elseif ($ProviderAlbum.PSObject.Properties.Match('genre')) { $artistGenres = $ProviderAlbum.genre }
+                                            }
+                                            catch { $artistGenres = @() }
+                                        }
+                                        # $genreTag = if ($null -ne $ProviderAlbum.genre) { $ProviderAlbum.genre -join '; ' } else { $ProviderArtist.genre -join '; ' }
+
                                         for ($i = 0; $i -lt $tracksForAlbum.Count; $i++) {
                                             $spotifyTrack = $tracksForAlbum[$i]
                                             $audioFile = $audioFiles[$i]
                                             $filePath = $audioFile.FilePath
                                             # compute album artist value defensively to avoid expression parsing issues
-                                            $albumArtistValue = if ($ProviderArtist -and $ProviderArtist.PSObject.Properties.Match('name')) { $ProviderArtist.name } else { $ProviderArtist }
-
+                                            $albumArtistValue = if ($ProviderArtist -and $ProviderArtist.PSObject.Properties['name']) { $ProviderArtist.name } else { $ProviderArtist }
+                                            $artistT = $spotifyTrack.artists.name -join '; '
+                                            $genreT = $artistGenres -join '; ' 
+                                        # $composerT= $ProviderAlbum
+                                         
                                             $tags = @{
-                                                Title       = $spotifyTrack.Title
-                                                Track       = $spotifyTrack.TrackNumber
-                                                Disc        = $spotifyTrack.DiscNumber
-                                                Performers  = $spotifyTrack.Artist
-                                                Genres      = $artistGenres
+                                                Title       = $spotifyTrack.name
+                                                Track       = "{0:D2}" -f $spotifyTrack.track_number
+                                                Disc        = "{0:D2}" -f $spotifyTrack.disc_number
+                                                Performers  = $artistT
+                                                Genres      = $genreT
                                                 AlbumArtist = $albumArtistValue
                                                 Date        = $year
                                                 Album       = $ProviderAlbum.name
                                             }
+                                            #if there is a $spotifyTrack.composer, add that to the $tags
+                                        if ($spotifyTrack.composer) {
+                                            $tags.Composers = $spotifyTrack.composer -join '; '
+                                        }
                                             Write-Verbose ("Saving tags to: {0}" -f $filePath)
                                             Write-Verbose ("Tag values:\n{0}" -f ($tags | Out-String))
                                             $res = Save-TagsForFile -FilePath $filePath -TagValues $tags -WhatIf:$isWhatIf
-                                            if ($res.Success) { Write-Host ("Saved tags: {0} -> {1:D2}.{2:D2}: {3}" -f (Split-Path -Leaf $filePath), $spotifyTrack.DiscNumber, $spotifyTrack.TrackNumber, $spotifyTrack.Title) -ForegroundColor Green }
+                                            if ($res.Success) { Write-Host ("Saved tags: {0} -> {1:D2}.{2:D2}: {3}" -f (Split-Path -Leaf $filePath), $spotifyTrack.disc_number, $spotifyTrack.track_number, $spotifyTrack.name) -ForegroundColor Green }
                                             else { Write-Warning ("Skipped/Failed: {0} ({1})" -f $filePath, ($res.Reason -or 'unknown')) }
                                         }
                                         $stage = 'C'
@@ -453,19 +473,33 @@ function Invoke-MuFoManual {
                                     }
                                 }
                                 '^sa$' {
+
+
+
+
+
+
+
+                                    
                                     for ($i = 0; $i -lt $tracksForAlbum.Count; $i++) {
                                         $spotifyTrack = $tracksForAlbum[$i]
                                         $audioFile = $audioFiles[$i]
                                         $filePath = $audioFile.FilePath
+
+                                        $genreTag = if ($null -ne $ProviderAlbum.genre) { $ProviderAlbum.genre -join '; ' } else { $ProviderArtist.genre -join '; ' }
                                         $tags = @{
                                             Title       = $spotifyTrack.Title
                                             Track       = $spotifyTrack.TrackNumber
                                             Disc        = $spotifyTrack.DiscNumber
-                                            Performers  = $spotifyTrack.Artist
-                                            Genres      = $ProviderArtist.genres
+                                            Performers  = $spotifyTrack.artists.name -join '; '
+                                            Genres      = $genreTag
                                             AlbumArtist = $ProviderArtist.name
                                             Date        = $year
                                             Album       = $ProviderAlbum.name
+                                        }
+                                        #if there is a $spotifyTrack.composer, add that to the $tags
+                                        if ($spotifyTrack.composer) {
+                                            $tags.Composer = $spotifyTrack.composer -join '; '
                                         }
                                         $res = Save-TagsForFile -FilePath $filePath -TagValues $tags -WhatIf:$isWhatIf
                                         if ($res.Success) { Write-Host ("Saved tags: {0} -> {1:D2}.{2:D2}: {3}" -f (Split-Path -Leaf $filePath), $spotifyTrack.DiscNumber, $spotifyTrack.TrackNumber, $spotifyTrack.Title) -ForegroundColor Green }
@@ -511,12 +545,12 @@ function Invoke-MuFoManual {
                                             Write-Host $oldpath
                                             Write-Host -NoNewline -ForegroundColor Green "New: "
                                             Write-Host $moveResult.NewAlbumPath
-                                                if ($moveResult.NewAlbumPath -ne $oldpath -and -not ($NonInteractive -or $goC) -and -not $isWhatIf) {
-                                                    Read-Host -Prompt "Press Enter to continue"
-                                                }
-                                                else {
-                                                    Write-Verbose "NonInteractive/goC/WhatIf or no-path-change: skipping pause after move."
-                                                }
+                                            if ($moveResult.NewAlbumPath -ne $oldpath -and -not ($NonInteractive -or $goC) -and -not $isWhatIf) {
+                                                Read-Host -Prompt "Press Enter to continue"
+                                            }
+                                            else {
+                                                Write-Verbose "NonInteractive/goC/WhatIf or no-path-change: skipping pause after move."
+                                            }
                                             $stage = 'C'
                                             $exitDo = $true
                                             $albumDone = $true
@@ -656,10 +690,10 @@ function Invoke-MuFoManual {
                                         }
                                     }
     
-                                            $stage = 'C'
-                                            $exitDo = $true
-                                            $albumDone = $true
-                                            break 
+                                    $stage = 'C'
+                                    $exitDo = $true
+                                    $albumDone = $true
+                                    break 
                                 }
     
                                 default { Write-Warning "Unknown option"; continue }
