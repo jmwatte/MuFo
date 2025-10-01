@@ -300,7 +300,7 @@ function Invoke-MuFoManual {
                         $hasDiscNumbers = $false
                         try {
                             if ($tracksForAlbum -and $tracksForAlbum.Count -gt 0) {
-                                $hasDiscNumbers = ($tracksForAlbum | Where-Object { ($_.PSObject.Properties.Match('DiscNumber') -and $_.DiscNumber -gt 0) -or ($_.PSObject.Properties.Match('disc_number') -and $_.disc_number -gt 0) }).Count -gt 0
+                                $hasDiscNumbers = ($tracksForAlbum | Where-Object { ($_.PSObject.Properties.Match('disc_Number') -and $_.disc_Number -gt 0) -or ($_.PSObject.Properties.Match('disc_number') -and $_.disc_number -gt 0) }).Count -gt 0
                             }
                         }
                         catch { $hasDiscNumbers = $false }
@@ -311,7 +311,7 @@ function Invoke-MuFoManual {
                         try {
                             if ($PSBoundParameters.ContainsKey('Verbose')) {
                                 Write-Host "\n[DEBUG] Provider tracks for album: $($ProviderAlbum.name) (count: $($tracksForAlbum.Count))" -ForegroundColor Cyan
-                                $tracksForAlbum | Select-Object id, Title, DiscNumber, TrackNumber | Format-Table -AutoSize
+                                $tracksForAlbum | Select-Object id, name, disc_number, track_number | Format-Table -AutoSize
                             }
                         }
                         catch {
@@ -419,11 +419,11 @@ function Invoke-MuFoManual {
                                             $filePath = $audioFile.FilePath
 
                                             $tags = get-Tags -Artist $ProviderArtist -Album $ProviderAlbum -SpotifyTrack $tracksForAlbum[$i]
-                                           # $spotifyTrack = $tracksForAlbum[$i]
+                                            # $spotifyTrack = $tracksForAlbum[$i]
                                             # compute album artist value defensively to avoid expression parsing issues
-                                           # $albumArtistValue = if ($ProviderArtist -and $ProviderArtist.PSObject.Properties['name']) { $ProviderArtist.name } else { $ProviderArtist }
+                                            # $albumArtistValue = if ($ProviderArtist -and $ProviderArtist.PSObject.Properties['name']) { $ProviderArtist.name } else { $ProviderArtist }
                                             #$artistT = $spotifyTrack.artists.name -join '; '
-                                        # $composerT= $ProviderAlbum
+                                            # $composerT= $ProviderAlbum
                                          
                                             # $tags = @{
                                             #     Title       = $spotifyTrack.name
@@ -436,9 +436,9 @@ function Invoke-MuFoManual {
                                             #     Album       = $ProviderAlbum.name
                                             # }
                                             #if there is a $spotifyTrack.composer, add that to the $tags
-                                        # if ($spotifyTrack.composer) {
-                                        #     $tags.Composers = $spotifyTrack.composer -join '; '
-                                        # }
+                                            # if ($spotifyTrack.composer) {
+                                            #     $tags.Composers = $spotifyTrack.composer -join '; '
+                                            # }
                                             Write-Verbose ("Saving tags to: {0}" -f $filePath)
                                             Write-Verbose ("Tag values:\n{0}" -f ($tags | Out-String))
                                             $res = Save-TagsForFile -FilePath $filePath -TagValues $tags -WhatIf:$isWhatIf
@@ -461,15 +461,25 @@ function Invoke-MuFoManual {
                                     }
                                 }
                                 '^sa$' {
-
-
-
-
-
-
-
-
                                     for ($i = 0; $i -lt $tracksForAlbum.Count; $i++) {
+                                        $audioFile = $audioFiles[$i]
+                                        $filePath = $audioFile.FilePath
+
+                                        $tags = get-Tags -Artist $ProviderArtist -Album $ProviderAlbum -SpotifyTrack $tracksForAlbum[$i]
+                                     
+
+                                        Write-Verbose ("Saving tags to: {0}" -f $filePath)
+                                        Write-Verbose ("Tag values:\n{0}" -f ($tags | Out-String))
+                                        $res = Save-TagsForFile -FilePath $filePath -TagValues $tags -WhatIf:$isWhatIf
+                                        if ($res.Success) { Write-Host ("Saved tags: {0} -> {1:D2}.{2:D2}: {3}" -f (Split-Path -Leaf $filePath), $tags.Disc, $tags.Track, $tags.Title) -ForegroundColor Green }
+                                        else { Write-Warning ("Skipped/Failed: {0} ({1})" -f $filePath, ($res.Reason -or 'unknown')) }
+                                    }
+
+
+
+
+
+                                    <# for ($i = 0; $i -lt $tracksForAlbum.Count; $i++) {
                                         $spotifyTrack = $tracksForAlbum[$i]
                                         $audioFile = $audioFiles[$i]
                                         $filePath = $audioFile.FilePath
@@ -492,7 +502,7 @@ function Invoke-MuFoManual {
                                         $res = Save-TagsForFile -FilePath $filePath -TagValues $tags -WhatIf:$isWhatIf
                                         if ($res.Success) { Write-Host ("Saved tags: {0} -> {1:D2}.{2:D2}: {3}" -f (Split-Path -Leaf $filePath), $spotifyTrack.DiscNumber, $spotifyTrack.TrackNumber, $spotifyTrack.Title) -ForegroundColor Green }
                                         else { Write-Warning ("Skipped/Failed: {0} ({1})" -f $filePath, ($res.Reason -or 'unknown')) }
-                                    }
+                                    } #>
     
                                     # dispose any lingering TagFile handles only when actually applying changes (not in -WhatIf)
                                     if (-not $isWhatIf) {
