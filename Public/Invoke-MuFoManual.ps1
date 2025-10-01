@@ -410,51 +410,39 @@ function Invoke-MuFoManual {
                                 '^st$' {
                                     try {
                                         # Safe retrieval of artist genres (ProviderArtist may be a hashtable or minimal object)
-                                        $artistGenres = @()
-                                        if ($ProviderArtist -and $ProviderArtist.genres.Count -gt 0) {
-                                            try {
-                                                if ($ProviderArtist -is [System.Collections.IDictionary]) { $artistGenres = $ProviderArtist['genres'] }
-                                                elseif ($ProviderArtist.PSObject.Properties.Match('genres')) { $artistGenres = $ProviderArtist.genres }
-                                            }
-                                            catch { $artistGenres = @() }
-                                        }
-                                        elseif ($null -ne $ProviderAlbum -and $null -ne $ProviderAlbum.genre) {
-                                            try {
-                                                if ($ProviderAlbum -is [System.Collections.IDictionary]) { $artistGenres = $ProviderAlbum['genre'] }
-                                                elseif ($ProviderAlbum.PSObject.Properties.Match('genre')) { $artistGenres = $ProviderAlbum.genre }
-                                            }
-                                            catch { $artistGenres = @() }
-                                        }
+                                        # $artistgenres = get-GenresTags -Artist $ProviderArtist -Album $ProviderAlbum
+                                        # $genreT = $artistGenres -join '; ' 
                                         # $genreTag = if ($null -ne $ProviderAlbum.genre) { $ProviderAlbum.genre -join '; ' } else { $ProviderArtist.genre -join '; ' }
 
                                         for ($i = 0; $i -lt $tracksForAlbum.Count; $i++) {
-                                            $spotifyTrack = $tracksForAlbum[$i]
                                             $audioFile = $audioFiles[$i]
                                             $filePath = $audioFile.FilePath
+
+                                            $tags = get-Tags -Artist $ProviderArtist -Album $ProviderAlbum -SpotifyTrack $tracksForAlbum[$i]
+                                           # $spotifyTrack = $tracksForAlbum[$i]
                                             # compute album artist value defensively to avoid expression parsing issues
-                                            $albumArtistValue = if ($ProviderArtist -and $ProviderArtist.PSObject.Properties['name']) { $ProviderArtist.name } else { $ProviderArtist }
-                                            $artistT = $spotifyTrack.artists.name -join '; '
-                                            $genreT = $artistGenres -join '; ' 
+                                           # $albumArtistValue = if ($ProviderArtist -and $ProviderArtist.PSObject.Properties['name']) { $ProviderArtist.name } else { $ProviderArtist }
+                                            #$artistT = $spotifyTrack.artists.name -join '; '
                                         # $composerT= $ProviderAlbum
                                          
-                                            $tags = @{
-                                                Title       = $spotifyTrack.name
-                                                Track       = "{0:D2}" -f $spotifyTrack.track_number
-                                                Disc        = "{0:D2}" -f $spotifyTrack.disc_number
-                                                Performers  = $artistT
-                                                Genres      = $genreT
-                                                AlbumArtist = $albumArtistValue
-                                                Date        = $year
-                                                Album       = $ProviderAlbum.name
-                                            }
+                                            # $tags = @{
+                                            #     Title       = $spotifyTrack.name
+                                            #     Track       = "{0:D2}" -f $spotifyTrack.track_number
+                                            #     Disc        = "{0:D2}" -f $spotifyTrack.disc_number
+                                            #     Performers  = $artistT
+                                            #     Genres      = $genreT
+                                            #     AlbumArtist = $albumArtistValue
+                                            #     Date        = $year
+                                            #     Album       = $ProviderAlbum.name
+                                            # }
                                             #if there is a $spotifyTrack.composer, add that to the $tags
-                                        if ($spotifyTrack.composer) {
-                                            $tags.Composers = $spotifyTrack.composer -join '; '
-                                        }
+                                        # if ($spotifyTrack.composer) {
+                                        #     $tags.Composers = $spotifyTrack.composer -join '; '
+                                        # }
                                             Write-Verbose ("Saving tags to: {0}" -f $filePath)
                                             Write-Verbose ("Tag values:\n{0}" -f ($tags | Out-String))
                                             $res = Save-TagsForFile -FilePath $filePath -TagValues $tags -WhatIf:$isWhatIf
-                                            if ($res.Success) { Write-Host ("Saved tags: {0} -> {1:D2}.{2:D2}: {3}" -f (Split-Path -Leaf $filePath), $spotifyTrack.disc_number, $spotifyTrack.track_number, $spotifyTrack.name) -ForegroundColor Green }
+                                            if ($res.Success) { Write-Host ("Saved tags: {0} -> {1:D2}.{2:D2}: {3}" -f (Split-Path -Leaf $filePath), $tags.Disc, $tags.Track, $tags.Title) -ForegroundColor Green }
                                             else { Write-Warning ("Skipped/Failed: {0} ({1})" -f $filePath, ($res.Reason -or 'unknown')) }
                                         }
                                         $stage = 'C'
@@ -480,7 +468,7 @@ function Invoke-MuFoManual {
 
 
 
-                                    
+
                                     for ($i = 0; $i -lt $tracksForAlbum.Count; $i++) {
                                         $spotifyTrack = $tracksForAlbum[$i]
                                         $audioFile = $audioFiles[$i]
