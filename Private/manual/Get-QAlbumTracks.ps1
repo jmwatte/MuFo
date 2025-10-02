@@ -45,6 +45,8 @@ function Get-QAlbumTracks {
             throw "PowerHTML module is required but not installed. Install it with: Install-Module PowerHTML"
         }
         Import-Module PowerHTML -ErrorAction Stop
+         # Load System.Web for HTML decoding
+        Add-Type -AssemblyName System.Web
     }
 
     process {
@@ -188,7 +190,7 @@ function Get-QAlbumTracks {
         foreach ($node in $children) {
             $r = $node.SelectSingleNode('.//div[contains(concat(" ", normalize-space(@class), " "), " player__tracks ")]//p[contains(concat(" ", normalize-space(@class), " "), " player__work ")]')
             if ($r) {
-                $currentWorkTitle = $r.InnerText.Split("   ")[0].Trim() 
+                $currentWorkTitle = [System.Web.HttpUtility]::HtmlDecode($r.InnerText.Split("   ")[0].Trim())
                 # $diskAttr = $node.GetAttributeValue("data-disk", $null)
                 # if ($diskAttr) {
                 #     $currentDisc = "DISQUE $diskAttr"
@@ -206,7 +208,7 @@ function Get-QAlbumTracks {
 
             if ($node.SelectSingleNode(".//div[contains(@class,'track__items')]")) {
                 $trackNode = $node.SelectSingleNode(".//div[contains(@class,'track__items')]")
-                $title = $trackNode.GetAttributeValue("title", "Unknown Title")
+                $title = [System.Web.HttpUtility]::HtmlDecode($trackNode.GetAttributeValue("title", "Unknown Title"))
                 $durationNode = $trackNode.SelectSingleNode(".//span[contains(@class,'track__item--duration')]")
                 $duration = if ($durationNode) { $durationNode.InnerText.Trim() } else { "Unknown Duration" }
                 $trackNumberNode = $trackNode.SelectSingleNode(".//div[contains(@class,'track__item--number')]/span")

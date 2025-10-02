@@ -20,6 +20,9 @@ function Search-QItem {
     }
     Import-Module PowerHTML
 
+    # Load System.Web for HTML decoding
+    Add-Type -AssemblyName System.Web
+
     # Construct the search URL (using be-fr as default locale; could be parameterized)
     $url = "https://www.qobuz.com/be-fr/search/artists/$([uri]::EscapeDataString($Query))"
    
@@ -39,6 +42,9 @@ function Search-QItem {
             $title = $card.GetAttributeValue('title', '')
             if (-not $title) { continue }
 
+            # Decode HTML entities in the title
+            $title = [System.Web.HttpUtility]::HtmlDecode($title)
+
             # Extract the link
             $link = $card.SelectSingleNode('.//a[@class="CoverModelOverlay"]')
             if (-not $link) { continue }
@@ -52,7 +58,7 @@ function Search-QItem {
             } else {
                 continue  # Skip if no ID
             }
- $genres = @()
+            $genres = @()
  
 
             # Create the item object (similar to Spotify structure)

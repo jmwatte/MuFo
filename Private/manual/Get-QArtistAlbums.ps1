@@ -1,5 +1,4 @@
 # Private/QGet-ArtistAlbums.ps1
-# Private/QGet-ArtistAlbums.ps1
 function Get-QArtistAlbums {
     [CmdletBinding()]
     param(
@@ -17,6 +16,9 @@ function Get-QArtistAlbums {
             throw "PowerHTML module is required but not installed. Install it with: Install-Module PowerHTML"
         }
         Import-Module PowerHTML -ErrorAction Stop
+
+        # Load System.Web for HTML decoding
+        Add-Type -AssemblyName System.Web
 
         # Normalize base URL: accept either the full URL or the relative interpreter path
         if ($Id -match '^https?://') {
@@ -101,6 +103,9 @@ function Get-QArtistAlbums {
                 $albumName = $nameNode.InnerText.Trim()
                 if ([string]::IsNullOrWhiteSpace($albumName)) { continue }
 
+                # Decode HTML entities in the album name
+                $albumName = [System.Web.HttpUtility]::HtmlDecode($albumName)
+
                 # The <h3> is inside <a href="..."> — get the ancestor <a> (parent)
                 $linkNode = $nameNode.ParentNode
                 if (-not $linkNode) { continue }
@@ -171,6 +176,10 @@ function Get-QArtistAlbums {
                     foreach ($nameNode in @($albumNodes2)) {
                         $albumName = $nameNode.InnerText.Trim()
                         if ([string]::IsNullOrWhiteSpace($albumName)) { continue }
+
+                        # Decode HTML entities in the album name
+                        $albumName = [System.Web.HttpUtility]::HtmlDecode($albumName)
+
                         $linkNode = $nameNode.ParentNode
                         if (-not $linkNode) { continue }
                         $href = $linkNode.GetAttributeValue('href', '')
