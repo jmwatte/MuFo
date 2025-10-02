@@ -319,11 +319,11 @@ function Invoke-MuFoManual {
                         }
                         $exitdo = $false
                         do {
-                            $sorted = Set-Tracks -SortMethod $sortMethod -AudioFiles $audioFiles -SpotifyTracks $tracksForAlbum
-                            # $audioFiles = $sorted.Audio
-                            # $tracksForAlbum = $sorted.Spotify
+                            $pairedTracks = Set-Tracks -SortMethod $sortMethod -AudioFiles $audioFiles -SpotifyTracks $tracksForAlbum
+                            # $audioFiles = $pairedTracks.Audio
+                            # $tracksForAlbum = $pairedTracks.Spotify
     
-                            Show-Tracks -PairedTracks $sorted  -AlbumName $ProviderAlbum.name -SpotifyArtist $ProviderArtist
+                            Show-Tracks -PairedTracks $pairedTracks  -AlbumName $ProviderAlbum.name -SpotifyArtist $ProviderArtist
 
                             # Pause briefly so the user can read the displayed track alignment
                             # Avoid blocking in non-interactive or auto-apply modes
@@ -720,14 +720,14 @@ function Invoke-MuFoManual {
                 if ($albumDone) { break } else { continue }
             } # end foreach albums
         }
-    
-        end {
-            return [PSCustomObject]@{
-                Path      = $Path
-                Completed = $true
-                WhatIf    = $isWhatIf
-            }
+    }
+    end {
+        return [PSCustomObject]@{
+            Path      = $Path
+            Completed = $true
+            WhatIf    = $isWhatIf
         }
     }
 }
+
 

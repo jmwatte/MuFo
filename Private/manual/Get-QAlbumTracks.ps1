@@ -211,6 +211,10 @@ function Get-QAlbumTracks {
                 $title = [System.Web.HttpUtility]::HtmlDecode($trackNode.GetAttributeValue("title", "Unknown Title"))
                 $durationNode = $trackNode.SelectSingleNode(".//span[contains(@class,'track__item--duration')]")
                 $duration = if ($durationNode) { $durationNode.InnerText.Trim() } else { "Unknown Duration" }
+                #duration should be in ms if format is "00:04:07"
+                if ($duration -match '(\d{2}):(\d{2}):(\d{2})') {
+                    $duration = [int]$matches[1] * 3600000 + [int]$matches[2] * 60000 + [int]$matches[3] * 1000
+                }
                 $trackNumberNode = $trackNode.SelectSingleNode(".//div[contains(@class,'track__item--number')]/span")
                 $trackNumber = if ($trackNumberNode) { "{0:D2}" -f [int]($trackNumberNode.InnerText.Trim()) } else { "Unknown Number" }
                 #$trackNumber = if ($trackNumberNode) { $trackNumberNode.InnerText.Trim() } else { "Unknown Number" }
