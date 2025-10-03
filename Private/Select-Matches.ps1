@@ -14,7 +14,7 @@ function Select-matches {
 
         # Prompt the user to select a matching audio file
         while (-not $matchingAudioFile) {
-            $audioFile = $AudioFiles | Out-GridView -Title "Select matching audio file for '$($spotifyTrack.Name)'" -PassThru
+            $audioFile = $AudioFiles | Out-GridView -Title "Select matching audio file for '$($spotifyTrack.Title)'" -PassThru
 
             if ($audioFile) {
                 $manualMatches += $audioFile

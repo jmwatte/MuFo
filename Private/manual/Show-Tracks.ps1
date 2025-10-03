@@ -72,15 +72,15 @@ function Show-Tracks {
             }
 
             if ($audio) {
-                $s=if($Reverse){'↑ (from Audio)'}else{'_'}
+                $s=if($Reverse){'↑'}else{'_'}
                 $color = if ($spotify -and $audio.Title -eq $spotify.name) { 'Green' } else { 'Yellow' }
                 Write-Host ("$($s)`t{0:D2}.{1:D2}: {2}" -f $audio.DiscNumber, $audio.TrackNumber, $audio.Title) -ForegroundColor $color
 
                 $audioArtist = if ($value = Get-IfExists  $audio  'Artist') { $value } else { 'Unknown' }
                 $artistColor = if ($spotify -and $audioArtist -eq $artistDisplay) { 'Green' } else { 'Yellow' }
                 Write-Host ("`t`tartist: {0}" -f $audioArtist) -ForegroundColor $artistColor
-                $audioGenres = if ($value = Get-IfExists  $audio  'Genres' -and $value) { $value -join ', ' } else { 'Unknown' }
-                $genresColor = if ($SpotifyArtist -and $SpotifyArtist.genres -and ($audioGenres -eq ($SpotifyArtist.genres -join ', '))) { 'Green' } else { 'Yellow' }
+                $audioGenres = if ($value = Get-IfExists  $audio.TagFile.tag  'Genres') { $value -join ', ' } else { 'Unknown' }
+                $genresColor = if ($value = Get-IfExists $SpotifyArtist 'genres' -and ($audioGenres -eq ($value -join ', '))) { 'Green' } else { 'Yellow' }
                 Write-Host ("`t`tgenres: {0}" -f $audioGenres) -ForegroundColor $genresColor
 
                 $audioComposer = if ($value = Get-IfExists  $audio  'Composer' -and $value) { $value -join ', ' } else { 'Unknown' }

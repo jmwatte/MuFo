@@ -1,7 +1,7 @@
 function Invoke-MuFoManual {
     [CmdletBinding(SupportsShouldProcess = $true)]
     param(
-        [Parameter(Mandatory = $true, Position = 0)]
+        [Parameter(Mandatory = $true, Position = 0, ValueFromPipeline = $true)]
         [ValidateNotNullOrEmpty()]
         [string]$Path,
         [Parameter(Mandatory = $false)]
@@ -69,10 +69,13 @@ function Invoke-MuFoManual {
             $albumDone = $false
             while ($true) {
                 switch ($stage) {
+                    
                     "A" {
+                        Clear-Host
                         try { $r = Invoke-ProviderSearch -Provider $Provider -query $artistQuery -Type artist } catch { Write-Warning "Search failed: $_"; $r = $null }
                         $candidates = @()
-                        if ($r -and $r.artists -and $r.artists.items) { $candidates = $r.artists.items }
+                        if ($value = Get-IfExists $r.artists "items") { $candidates = $value }
+                        #if ($r -and $r.artists -and $r.artists.items) { $candidates = $r.artists.items }
                         # Normalize to array so .Count is available even for single-item responses
                         $candidates = @($candidates)
     
@@ -116,6 +119,8 @@ function Invoke-MuFoManual {
                     }
     
                     "B" {
+                        Clear-Host
+                        Write-Host "Searching for albums for artist: $($ProviderArtist.name) (id: $($ProviderArtist.id))"
                         try { $albumsForArtist = Invoke-ProviderGetAlbums -Provider $Provider -ArtistId $ProviderArtist.id -AlbumType 'Album' } catch { Write-Warning "Get-ArtistAlbums failed: $_"; $albumsForArtist = @() }
                         # Normalize to array so .Count works reliably
                         $albumsForArtist = @($albumsForArtist)
@@ -125,17 +130,33 @@ function Invoke-MuFoManual {
                                 Write-Warning "NonInteractive: skipping album because no albums found for artist id $($ProviderArtist.id)."
                                 break
                             }
-                            $inputF = Read-Host "Enter 'back', 'skip', 'id:<id>' or album name to filter"
-                            if ($inputF -ieq 'back') { $stage = 'A'; continue }
-                            if ($inputF -eq 'skip') { break }
-                            if ($inputF -like 'id:*') { $id = $inputF.Substring(3); $ProviderAlbum = @{ id = $id; name = $id }; $stage = 'C'; continue }
-                            if ($inputF) { $artistQuery = $inputF; $stage = 'A'; continue } else { continue }
+                        
+                            $inputF = Read-Host "Enter '(b)ack', '(s)kip', 'id:<id>' or album name to filter"
+                            switch -Regex ($inputF) {
+                                '^b$' {
+                                    $stage = 'A'; continue
+                                }
+                                '^s$' {
+                                    break
+                                }
+                                '^id:.*' {
+                                    $id = $inputF.Substring(3); $ProviderAlbum = @{ id = $id; name = $id }; $stage = 'C'; continue
+                                }
+                                default {
+                                    if ($inputF) { $artistQuery = $inputF; $stage = 'A'; continue } else { continue }
+                                }
+                                # if ($inputF -ieq 'back') { $stage = 'A'; continue }
+                                # if ($inputF -eq 'skip') { break }
+                                #  if ($inputF -like 'id:*') { $id = $inputF.Substring(3); $ProviderAlbum = @{ id = $id; name = $id }; $stage = 'C'; continue }
+                                # if ($inputF) { $artistQuery = $inputF; $stage = 'A'; continue } else { continue }
+                            }
                         }
     
                         # sort by Jaccard similarity descending
                         $albumsForArtist = $albumsForArtist | Sort-Object { - (Get-StringSimilarity-Jaccard -String1 $albumName -String2 $_.Name) }
     
                         $page = 1; $pageSize = 25
+                        $exitdo = $false
                         while ($true) {
                             # Clear-Host
                             Write-Host "Albums for artist $($ProviderArtist.name):"
@@ -153,26 +174,67 @@ function Invoke-MuFoManual {
                             if ($goB) { $ProviderAlbum = $albumsForArtist[0]; $stage = 'C'; break }
                             if ($AutoSelect -or $NonInteractive) { $ProviderAlbum = $albumsForArtist[0]; $stage = 'C'; break }
 
-                            $inputF = Read-Host "Select album [1] (Enter=first), number, 'back', 'next', 'prev', 'skip', 'id:<id>', or text to filter:"
-                            if ($inputF -ieq 'next') { if ($page -lt $totalPages) { $page++ } ; continue }
-                            if ($inputF -ieq 'prev') { if ($page -gt 1) { $page-- } ; continue }
-                            if ($inputF -ieq 'back') { $stage = 'A'; break }
-                            if ($inputF -eq '') { $ProviderAlbum = $albumsForArtist[0]; $stage = 'C'; break }
-                            if ($inputF -like 'id:*') { $id = $inputF.Substring(3); $ProviderAlbum = @{ id = $id; name = $id }; $stage = 'C'; break }
-                            if ($inputF -match '^\d+$') { $idx = [int]$inputF; if ($idx -ge 1 -and $idx -le $albumsForArtist.Count) { $ProviderAlbum = $albumsForArtist[$idx - 1]; $stage = 'C'; break } else { Write-Warning "Invalid"; continue } }
-                            if ($inputF -ieq 'next') { if ($page -lt $totalPages) { $page++ } ; continue }
-                            if ($inputF -ieq 'prev') { if ($page -gt 1) { $page-- } ; continue }
-                            if ($inputF -ieq 'back') { $stage = 'A'; break }
-                            if ($inputF -eq '') { $ProviderAlbum = $albumsForArtist[0]; $stage = 'C'; break }
-                            if ($inputF -like 'id:*') { $id = $inputF.Substring(3); $ProviderAlbum = @{ id = $id; name = $id }; $stage = 'C'; break }
-                            if ($inputF -match '^\d+$') { $idx = [int]$inputF; if ($idx -ge 1 -and $idx -le $albumsForArtist.Count) { $ProviderAlbum = $albumsForArtist[$idx - 1]; $stage = 'C'; break } else { Write-Warning "Invalid"; continue } }
-                            # treat as filter
-                            $filtered = $albumsForArtist | Where-Object { $_.name -like "*$inputF*" }
-                            if ($filtered.Count -gt 0) { $albumsForArtist = $filtered; $page = 1; continue } else { Write-Warning "No matches"; continue }
+                            $inputF = Read-Host "Select album [1] (Enter=first), number, '(b)ack', '(n)ext', '(p)rev', '(s)kip', 'id:<id>', or text to filter:"
+                            
+                            switch -Regex ($inputF) {
+                                '^n$' {
+                                    if ($page -lt $totalPages) { $page++ }
+                                    continue
+                                }
+                                '^p$' {
+                                    if ($page -gt 1) { $page-- }
+                                    continue
+                                }
+                                '^b$' {
+                                    $stage = 'A'
+                                    $exitdo = $true
+                                    break
+                                }
+                                '^$' {
+                                    $ProviderAlbum = $albumsForArtist[0]
+                                    $exitdo = $true                                        
+                                    $stage = 'C'
+                                    break
+                                }
+                                '^id:(.+)$' {
+                                    $id = $matches[1]
+                                    $ProviderAlbum = @{ id = $id; name = $id }
+                                    $exitdo = $true
+                                    $stage = 'C'
+                                    break
+                                }
+                                '^\d+$' {
+                                    $idx = [int]$inputF
+                                    if ($idx -ge 1 -and $idx -le $albumsForArtist.Count) {
+                                        $ProviderAlbum = $albumsForArtist[$idx - 1]
+                                        $stage = 'C'
+                                        $exitdo = $true
+                                        break
+                                    }
+                                    else {
+                                        Write-Warning "Invalid"
+                                        continue
+                                    }
+                                }
+                                default {
+                                    $filtered = $albumsForArtist | Where-Object { $_.name -like "*$inputF*" }
+                                    if ($filtered.Count -gt 0) {
+                                        $albumsForArtist = $filtered
+                                        $page = 1
+                                        continue
+                                    }
+                                    else {
+                                        Write-Warning "No matches"
+                                        continue
+                                    }
+                                }
+                            }   
+                            if ($exitdo) { break }
                         }
                     }
-    
                     "C" {
+                        Clear-Host
+                        Write-Host "Searching tracks for album: $($ProviderAlbum.name) (id: $($ProviderAlbum.id))"
                         # If the caller asked for non-interactive behavior, do not try to drive the
                         # interactive track-selection UI. This prevents Read-Host from blocking the
                         # process in unattended runs. The caller can run interactively to inspect and
@@ -322,8 +384,8 @@ function Invoke-MuFoManual {
                         }
                         $exitdo = $false
                         do {
-                            Write-Host "DEBUG Invoke-MuFoManual: Called Set-Tracks with SortMethod=$sortMethod, Reverse=$reverseSource, AudioFiles count=$($audioFiles.Count), SpotifyTracks count=$($tracksForAlbum.Count)"
-                            write-host $ReverseSource
+                            # Write-Host "DEBUG Invoke-MuFoManual: Called Set-Tracks with SortMethod=$sortMethod, Reverse=$reverseSource, AudioFiles count=$($audioFiles.Count), SpotifyTracks count=$($tracksForAlbum.Count)"
+                            # write-host $ReverseSource
                             # Around line 325 in Invoke-MuFoManual.ps1
                             $param = @{
                                 SortMethod    = $sortMethod
@@ -333,13 +395,20 @@ function Invoke-MuFoManual {
                             if ($reverseSource) { $param.Reverse = $true }
                             $pairedTracks = Set-Tracks @param
 
+                            $paramshow = @{
+                                PairedTracks  = $pairedTracks
+                                AlbumName     = $ProviderAlbum.name
+                                SortMethod    = $sortMethod
+                                AudioFiles    = $audioFiles
+                                SpotifyTracks = $tracksForAlbum
+                            }
+                            if ($reverseSource) { $paramshow.Reverse = $true }
 
 
-
-                                                    # $audioFiles = $pairedTracks.Audio
+                            # $audioFiles = $pairedTracks.Audio
                             # $tracksForAlbum = $pairedTracks.Spotify
     
-                            Show-Tracks -PairedTracks $pairedTracks  -AlbumName $ProviderAlbum.name -SpotifyArtist $ProviderArtist -Reverse $ReverseSource
+                            Show-Tracks - @paramshow
 
                             # Pause briefly so the user can read the displayed track alignment
                             # Avoid blocking in non-interactive or auto-apply modes
@@ -364,8 +433,9 @@ function Invoke-MuFoManual {
                                 '^n$' { $sortMethod = 'byName'; continue }
                                 '^l$' { $sortMethod = 'byTitle'; continue }
                                 '^h$' { $sortMethod = 'Hybrid'; continue }
+                                '^m$' { $sortMethod = 'Manual'; continue }
                                 '^r$' { $ReverseSource = -not $ReverseSource; continue }
-                                '^b$' { $stage = 'B'; break }
+                                '^b$' { $stage = 'B'; $exitdo = $true; break }
                                 '^skip$' { break 3 }
                                 '^sf$' {
                                     $year = Get-ReleaseYear -ReleaseDate $ProviderAlbum.release_date
