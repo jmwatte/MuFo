@@ -20,7 +20,10 @@ function Invoke-MuFoManual {
         [Parameter(Mandatory = $false)]
         [switch]$goB,
         [Parameter(Mandatory = $false)]
-        [switch]$goC
+        [switch]$goC,
+        [Parameter(Mandatory = $false)]
+        [switch]$ReverseSource
+
     )
 
     begin {
@@ -180,7 +183,7 @@ function Invoke-MuFoManual {
                             break 2
                         }
                         # collect audio files and tags
-                        $audioFiles = Get-ChildItem -Path $album.FullName -File | Where-Object { $_.Extension -match '\.(mp3|flac|wav|m4a|aac|ogg|ape)' }
+                        $audioFiles = Get-ChildItem -LiteralPath $album.FullName -File -Recurse | Where-Object { $_.Extension -match '\.(mp3|flac|wav|m4a|aac|ogg|ape)' }
                         $audioFiles = foreach ($f in $audioFiles) {
                             $tagFile = [TagLib.File]::Create($f.FullName)
                             [PSCustomObject]@{
@@ -319,11 +322,24 @@ function Invoke-MuFoManual {
                         }
                         $exitdo = $false
                         do {
-                            $pairedTracks = Set-Tracks -SortMethod $sortMethod -AudioFiles $audioFiles -SpotifyTracks $tracksForAlbum
-                            # $audioFiles = $pairedTracks.Audio
+                            Write-Host "DEBUG Invoke-MuFoManual: Called Set-Tracks with SortMethod=$sortMethod, Reverse=$reverseSource, AudioFiles count=$($audioFiles.Count), SpotifyTracks count=$($tracksForAlbum.Count)"
+                            write-host $ReverseSource
+                            # Around line 325 in Invoke-MuFoManual.ps1
+                            $param = @{
+                                SortMethod    = $sortMethod
+                                AudioFiles    = $audioFiles
+                                SpotifyTracks = $tracksForAlbum
+                            }
+                            if ($reverseSource) { $param.Reverse = $true }
+                            $pairedTracks = Set-Tracks @param
+
+
+
+
+                                                    # $audioFiles = $pairedTracks.Audio
                             # $tracksForAlbum = $pairedTracks.Spotify
     
-                            Show-Tracks -PairedTracks $pairedTracks  -AlbumName $ProviderAlbum.name -SpotifyArtist $ProviderArtist
+                            Show-Tracks -PairedTracks $pairedTracks  -AlbumName $ProviderAlbum.name -SpotifyArtist $ProviderArtist -Reverse $ReverseSource
 
                             # Pause briefly so the user can read the displayed track alignment
                             # Avoid blocking in non-interactive or auto-apply modes
@@ -338,7 +354,7 @@ function Invoke-MuFoManual {
                                 $inputF = 'sa'
                             }
                             else {
-                                Write-Host "`nOptions: SortBy(d)uration,SortBy(t)rackNumber,SortBy(n)ame,(st)saveTags,(sf)older,(sa)ll,(b)ack, (s)kip"
+                                Write-Host "`nOptions:SortByTit(l)e,(d)uration,(t)rackNumber,(n)ame,(h)ybrid,(r)everse,(s)ave Tags(st),(sf)older,(sa)ll,(b)ack, (s)kip"
                                 $inputF = Read-Host "Select tracks or command"
                             }
     
@@ -346,6 +362,9 @@ function Invoke-MuFoManual {
                                 '^d$' { $sortMethod = 'byDuration'; continue }
                                 '^t$' { $sortMethod = 'byTrackNumber'; continue }
                                 '^n$' { $sortMethod = 'byName'; continue }
+                                '^l$' { $sortMethod = 'byTitle'; continue }
+                                '^h$' { $sortMethod = 'Hybrid'; continue }
+                                '^r$' { $ReverseSource = -not $ReverseSource; continue }
                                 '^b$' { $stage = 'B'; break }
                                 '^skip$' { break 3 }
                                 '^sf$' {
