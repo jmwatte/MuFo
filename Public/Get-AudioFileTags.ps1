@@ -23,8 +23,11 @@ function Get-AudioFileTags {
 .PARAMETER ShowProgress
     Display progress bar for large collections (automatically enabled for >10 files).
 
+.PARAMETER Summary
+    Return a summary object with each tag field as a comma-separated list of all unique values across all files.
+
 .OUTPUTS
-    Array of PSCustomObject with comprehensive tag fields including classical music metadata.
+    Array of PSCustomObject with comprehensive tag fields including classical music metadata, or a single summary object if -Summary is specified.
 
 .EXAMPLE
     Get-AudioFileTags -Path "C:\Music\Arvo Pärt\1999 - Alina" -IncludeComposer
@@ -47,7 +50,9 @@ function Get-AudioFileTags {
         
         [long]$MaxFileSizeMB = 500,
         
-        [switch]$ShowProgress
+        [switch]$ShowProgress,
+        
+        [switch]$Summary
     )
 
     begin {
@@ -425,6 +430,28 @@ function Get-AudioFileTags {
             Write-Verbose "All $successCount files processed successfully"
         }
 
-        return $results
+        # If Summary is requested, create a summary object with unique values
+        if ($Summary) {
+            $summary = [PSCustomObject]@{}
+            if ($results.Count -gt 0) {
+                $properties = $results[0].PSObject.Properties.Name
+                foreach ($prop in $properties) {
+                    $allValues = @()
+                    foreach ($result in $results) {
+                        $value = $result.$prop
+                        if ($value -is [array]) {
+                            $allValues += $value
+                        } else {
+                            $allValues += $value
+                        }
+                    }
+                    $uniqueValues = $allValues | Where-Object { $_ -ne $null -and $_ -ne '' } | Select-Object -Unique | Sort-Object
+                    $summary | Add-Member -MemberType NoteProperty -Name $prop -Value ($uniqueValues -join ', ')
+                }
+            }
+            return $summary
+        } else {
+            return $results
+        }
     }
 }
