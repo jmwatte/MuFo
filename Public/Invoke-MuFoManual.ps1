@@ -252,7 +252,7 @@ function Invoke-MuFoManual {
                     }
                     "C" {
                         Clear-Host
-                        if($useWhatIf){$HostColor='Gray'}else{$HostColor='DarkYellow'}
+                        if($useWhatIf){$HostColor='Cyan'}else{$HostColor='Gray'}
                         Write-Host "Searching tracks for album: $($ProviderAlbum.name) (id: $($ProviderAlbum.id))"
                         # If the caller asked for non-interactive behavior, do not try to drive the
                         # interactive track-selection UI. This prevents Read-Host from blocking the
@@ -402,32 +402,36 @@ function Invoke-MuFoManual {
                             Write-Verbose "Failed to print debug provider tracks: $($_.Exception.Message)"
                         }
                         $exitdo = $false
+                        $needDisplay = $true
                         do {
-                            # Write-Host "DEBUG Invoke-MuFoManual: Called Set-Tracks with SortMethod=$sortMethod, Reverse=$reverseSource, AudioFiles count=$($audioFiles.Count), SpotifyTracks count=$($tracksForAlbum.Count)"
-                            # write-host $ReverseSource
-                            # Around line 325 in Invoke-MuFoManual.ps1
-                            $param = @{
-                                SortMethod    = $sortMethod
-                                AudioFiles    = $audioFiles
-                                SpotifyTracks = $tracksForAlbum
-                            }
-                            if ($reverseSource) { $param.Reverse = $true }
-                            $pairedTracks = Set-Tracks @param
+                            if ($needDisplay) {
+                                # Write-Host "DEBUG Invoke-MuFoManual: Called Set-Tracks with SortMethod=$sortMethod, Reverse=$reverseSource, AudioFiles count=$($audioFiles.Count), SpotifyTracks count=$($tracksForAlbum.Count)"
+                                # write-host $ReverseSource
+                                # Around line 325 in Invoke-MuFoManual.ps1
+                                $param = @{
+                                    SortMethod    = $sortMethod
+                                    AudioFiles    = $audioFiles
+                                    SpotifyTracks = $tracksForAlbum
+                                }
+                                if ($reverseSource) { $param.Reverse = $true }
+                                $pairedTracks = Set-Tracks @param
 
-                            $paramshow = @{
-                                PairedTracks  = $pairedTracks
-                                AlbumName     = $ProviderAlbum.name
-                                SortMethod    = $sortMethod
-                                AudioFiles    = $audioFiles
-                                SpotifyTracks = $tracksForAlbum
-                            }
-                            if ($reverseSource) { $paramshow.Reverse = $true }
+                                $paramshow = @{
+                                    PairedTracks  = $pairedTracks
+                                    AlbumName     = $ProviderAlbum.name
+                                    SortMethod    = $sortMethod
+                                    AudioFiles    = $audioFiles
+                                    SpotifyTracks = $tracksForAlbum
+                                }
+                                if ($reverseSource) { $paramshow.Reverse = $true }
 
 
-                            # $audioFiles = $pairedTracks.Audio
-                            # $tracksForAlbum = $pairedTracks.Spotify
+                                # $audioFiles = $pairedTracks.Audio
+                                # $tracksForAlbum = $pairedTracks.Spotify
     
-                            Show-Tracks - @paramshow
+                                Show-Tracks - @paramshow
+                                $needDisplay = $false
+                            }
 
                             # Pause briefly so the user can read the displayed track alignment
                             # Avoid blocking in non-interactive or auto-apply modes
@@ -448,17 +452,16 @@ function Invoke-MuFoManual {
                             }
     
                             switch -Regex ($inputF) {
-                                '^d$' { $sortMethod = 'byDuration'; continue }
-                                '^t$' { $sortMethod = 'byTrackNumber'; continue }
-                                '^n$' { $sortMethod = 'byName'; continue }
-                                '^l$' { $sortMethod = 'byTitle'; continue }
-                                '^h$' { $sortMethod = 'Hybrid'; continue }
-                                '^m$' { $sortMethod = 'Manual'; continue }
-                                '^r$' { $ReverseSource = -not $ReverseSource; continue }
+                                '^d$' { $sortMethod = 'byDuration'; $needDisplay = $true; continue }
+                                '^t$' { $sortMethod = 'byTrackNumber'; $needDisplay = $true; continue }
+                                '^n$' { $sortMethod = 'byName'; $needDisplay = $true; continue }
+                                '^l$' { $sortMethod = 'byTitle'; $needDisplay = $true; continue }
+                                '^h$' { $sortMethod = 'Hybrid'; $needDisplay = $true; continue }
+                                '^m$' { $sortMethod = 'Manual'; $needDisplay = $true; continue }
+                                '^r$' { $ReverseSource = -not $ReverseSource; $needDisplay = $true; continue }
                                 '^b$' { $stage = 'B'; $exitdo = $true; break }
                                 '^whatif$|^w$' {
                                     $useWhatIf = -not $useWhatIf
-                                    Write-Host "WhatIf mode toggled: $($useWhatIf ? 'Enabled (preview only)' : 'Disabled (will apply changes)')" -ForegroundColor Yellow
                                     continue
                                 }
                                 '^skip$' { break 3 }
@@ -696,6 +699,15 @@ function Invoke-MuFoManual {
     
                                 '^(\d+(?:\.\.\d+|\-\d+)) (\+?\w+) (.+)$' {
                                     # Parse range, tag, and value from input (e.g., "1..8 +composer J.S. Bach")
+                                    if ($tracksForAlbum.Count -eq 0) {
+                                        Write-Warning "No tracks available for tagging"
+                                        continue
+                                    }
+                                    if ($audioFiles.Count -eq 0) {
+                                        Write-Warning "No audio files available for tagging"
+                                        continue
+                                    }
+                                    $maxIndex = [math]::Min($tracksForAlbum.Count, $audioFiles.Count)
                                     $rangeStr = $matches[1]
                                     $tagName = $matches[2]
                                     $tagValue = $matches[3]
@@ -705,32 +717,34 @@ function Invoke-MuFoManual {
                                     if ($rangeStr -match '^(\d+)\.\.(\d+)$') {
                                         $start = [int]$matches[1]
                                         $end = [int]$matches[2]
-                                        if ($start -le $end -and $start -ge 1 -and $end -le $tracksForAlbum.Count) {
+                                        $end = [math]::Min($end, $maxIndex)
+                                        if ($start -le $end -and $start -ge 1) {
                                             $indices = $start..$end
                                         }
                                         else {
-                                            Write-Warning "Invalid range: $rangeStr (must be 1 to $($tracksForAlbum.Count))"
+                                            Write-Warning "Invalid range: $rangeStr (must be 1 to $maxIndex)"
                                             continue
                                         }
                                     }
                                     elseif ($rangeStr -match '^(\d+)\-(\d+)$') {
                                         $start = [int]$matches[1]
                                         $end = [int]$matches[2]
-                                        if ($start -le $end -and $start -ge 1 -and $end -le $tracksForAlbum.Count) {
+                                        $end = [math]::Min($end, $maxIndex)
+                                        if ($start -le $end -and $start -ge 1) {
                                             $indices = $start..$end
                                         }
                                         else {
-                                            Write-Warning "Invalid range: $rangeStr (must be 1 to $($tracksForAlbum.Count))"
+                                            Write-Warning "Invalid range: $rangeStr (must be 1 to $maxIndex)"
                                             continue
                                         }
                                     }
                                     elseif ($rangeStr -match '^\d+$') {
                                         $idx = [int]$rangeStr
-                                        if ($idx -ge 1 -and $idx -le $tracksForAlbum.Count) {
+                                        if ($idx -ge 1 -and $idx -le $maxIndex) {
                                             $indices = @($idx)
                                         }
                                         else {
-                                            Write-Warning "Invalid track number: $idx (must be 1 to $($tracksForAlbum.Count))"
+                                            Write-Warning "Invalid track number: $idx (must be 1 to $maxIndex)"
                                             continue
                                         }
                                     }
