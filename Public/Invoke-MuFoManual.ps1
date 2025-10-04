@@ -405,6 +405,7 @@ function Invoke-MuFoManual {
                         $needDisplay = $true
                         do {
                             if ($needDisplay) {
+                                if($useWhatIf){$HostColor='Cyan'}else{$HostColor='Gray'}
                                 # Write-Host "DEBUG Invoke-MuFoManual: Called Set-Tracks with SortMethod=$sortMethod, Reverse=$reverseSource, AudioFiles count=$($audioFiles.Count), SpotifyTracks count=$($tracksForAlbum.Count)"
                                 # write-host $ReverseSource
                                 # Around line 325 in Invoke-MuFoManual.ps1
@@ -428,12 +429,10 @@ function Invoke-MuFoManual {
 
                                 # $audioFiles = $pairedTracks.Audio
                                 # $tracksForAlbum = $pairedTracks.Spotify
-    
+
                                 Show-Tracks - @paramshow
                                 $needDisplay = $false
-                            }
-
-                            # Pause briefly so the user can read the displayed track alignment
+                            }                            # Pause briefly so the user can read the displayed track alignment
                             # Avoid blocking in non-interactive or auto-apply modes
                             <# if (-not $NonInteractive -and -not $goC) {
                                 Write-Host "`nPress Enter to continue (or Ctrl+C to abort)..." -ForegroundColor Cyan
@@ -447,7 +446,8 @@ function Invoke-MuFoManual {
                             }
                             else {
                                # if($useWhatIf){$HostColor='Cyan'}else{$HostColor='Gray'}
-                                Write-Host "`nOptions:SortByTit(l)e,(d)uration,(t)rackNumber,(n)ame,(h)ybrid,(r)everse,(s)ave Tags(st),(sf)older,(sa)ll,(b)ack,(w)hatif (s)kip" -ForegroundColor $HostColor
+                                $whatIfStatus = if ($useWhatIf) { "ON" } else { "OFF" }
+                                Write-Host "`nOptions:SortByTit(l)e,(d)uration,(t)rackNumber,(n)ame,(h)ybrid,(r)everse,(s)ave Tags(st),(sf)older,(sa)ll,(b)ack,(w)hatif $whatIfStatus (s)kip" -ForegroundColor $HostColor
                                 $inputF = Read-Host "Select tracks or command"
                             }
     
@@ -462,6 +462,7 @@ function Invoke-MuFoManual {
                                 '^b$' { $stage = 'B'; $exitdo = $true; break }
                                 '^whatif$|^w$' {
                                     $useWhatIf = -not $useWhatIf
+                                    $needDisplay = $true
                                     continue
                                 }
                                 '^skip$' { break 3 }

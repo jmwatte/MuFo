@@ -20,14 +20,11 @@ function Get-AudioFileTags {
 .PARAMETER MaxFileSizeMB
     Maximum file size in MB to process (default: 500MB). Larger files are skipped to avoid performance issues.
 
-.PARAMETER ShowProgress
-    Display progress bar for large collections (automatically enabled for >10 files).
-
-.PARAMETER Summary
-    Return a summary object with each tag field as a comma-separated list of all unique values across all files.
+.PARAMETER AllTags
+    Include all available tag properties from the audio file, not just the standard ones.
 
 .OUTPUTS
-    Array of PSCustomObject with comprehensive tag fields including classical music metadata, or a single summary object if -Summary is specified.
+    Array of PSCustomObject with comprehensive tag fields including classical music metadata, or a single summary object if -Summary is specified. If -AllTags is specified, all TagLib tag properties are included.
 
 .EXAMPLE
     Get-AudioFileTags -Path "C:\Music\Arvo Pärt\1999 - Alina" -IncludeComposer
@@ -52,7 +49,9 @@ function Get-AudioFileTags {
         
         [switch]$ShowProgress,
         
-        [switch]$Summary
+        [switch]$Summary,
+        
+        [switch]$AllTags
     )
 
     begin {
@@ -372,6 +371,20 @@ function Get-AudioFileTags {
                     Add-Member -InputObject $normalizedTag -MemberType NoteProperty -Name "SuggestedAlbumArtist" -Value $suggestedAlbumArtist
                 }
 
+                # If AllTags is requested, add all TagLib tag properties
+                if ($AllTags) {
+                    $tag.PSObject.Properties | ForEach-Object {
+                        if (-not $normalizedTag.PSObject.Properties.Match($_.Name)) {
+                            try {
+                                Add-Member -InputObject $normalizedTag -MemberType NoteProperty -Name $_.Name -Value $_.Value
+                            } catch {
+                                # Skip invalid property names or duplicates
+                                Write-Verbose "Skipping tag property '$($_.Name)': $($_.Exception.Message)"
+                            }
+                        }
+                    }
+                }
+
                 $results += $normalizedTag
                 
                 # Log detailed information if requested
@@ -432,7 +445,7 @@ function Get-AudioFileTags {
 
         # If Summary is requested, create a summary object with unique values
         if ($Summary) {
-            $summary = [PSCustomObject]@{}
+            $summaryObj = [PSCustomObject]@{}
             if ($results.Count -gt 0) {
                 $properties = $results[0].PSObject.Properties.Name
                 foreach ($prop in $properties) {
@@ -446,10 +459,10 @@ function Get-AudioFileTags {
                         }
                     }
                     $uniqueValues = $allValues | Where-Object { $_ -ne $null -and $_ -ne '' } | Select-Object -Unique | Sort-Object
-                    $summary | Add-Member -MemberType NoteProperty -Name $prop -Value ($uniqueValues -join ', ')
+                    $summaryObj | Add-Member -MemberType NoteProperty -Name $prop -Value ($uniqueValues -join ', ')
                 }
             }
-            return $summary
+            return $summaryObj
         } else {
             return $results
         }
