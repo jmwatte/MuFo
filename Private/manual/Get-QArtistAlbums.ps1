@@ -42,7 +42,7 @@ function Get-QArtistAlbums {
         $maxPages = $null
 
         while ($true) {
-            Write-Verbose ("Fetching Qobuz artist page: {0}" -f $pageUrl)
+            Write-Host ("Fetching Qobuz artist page: {0}" -f $pageUrl)
 
             try {
                 $resp = Invoke-WebRequest -Uri $pageUrl -UseBasicParsing -ErrorAction Stop
@@ -90,7 +90,7 @@ function Get-QArtistAlbums {
                         Write-Warning ("Detected {0} pages but capping to {1} to avoid excessive requests" -f $maxPages, $maxPagesCap)
                         $maxPages = $maxPagesCap
                     }
-                    Write-Verbose ("Detected total pages: {0}" -f $maxPages)
+                    Write-Host ("Detected total pages: {0}" -f $maxPages)
                 }
             }
 
@@ -162,7 +162,7 @@ function Get-QArtistAlbums {
             if ($maxPages -and $page -eq 1) {
                 for ($p = 2; $p -le $maxPages; $p++) {
                     $nextPageUrl = ("{0}/page/{1}" -f $artistBase.TrimEnd('/'), $p)
-                    Write-Verbose ("Fetching Qobuz artist page: {0}" -f $nextPageUrl)
+                    Write-Host ("Fetching Qobuz artist page: {0}" -f $nextPageUrl)
                     try {
                         $resp2 = Invoke-WebRequest -Uri $nextPageUrl -UseBasicParsing -ErrorAction Stop
                         $doc2 = ConvertFrom-Html -Content $resp2.Content

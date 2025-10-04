@@ -56,16 +56,23 @@ function Invoke-MuFoManual {
     process {
         $artist = Split-Path -Leaf $Path
         $albums = Get-ChildItem -LiteralPath $Path -Directory
-    
         foreach ($album in $albums) {
+            $useWhatIf = $isWhatIf
+            if($useWhatIf){$HostColor='Gray'}else{$HostColor='DarkYellow'}
             # derive album name and year
-            $album.Name -match '^(?<year>\d{4})' | Out-Null
-            $year = $matches.year
-            $albumName = if ($year) { $album.Name.Substring(5).Trim().Trim("-").Trim() } else { $album.Name.Trim("-").Trim() }
-    
+                       # Try to extract year from the start of the folder name (e.g., "2023 - Album Name")
+            if ($album.Name -match '^(\d{4})\s*[-]?\s*(.+)') {
+                $year = $matches[1]
+                $albumName = $matches[2].Trim()
+            } else {
+                $year = $null
+                $albumName = $album.Name.Trim()
+            }
             $artistQuery = $artist
             $stage = "A"
-    
+            $cachedAlbums = $null
+            $page = 1
+            $pageSize = 25
             $albumDone = $false
             while ($true) {
                 switch ($stage) {
@@ -121,7 +128,12 @@ function Invoke-MuFoManual {
                     "B" {
                         Clear-Host
                         Write-Host "Searching for albums for artist: $($ProviderArtist.name) (id: $($ProviderArtist.id))"
-                        try { $albumsForArtist = Invoke-ProviderGetAlbums -Provider $Provider -ArtistId $ProviderArtist.id -AlbumType 'Album' } catch { Write-Warning "Get-ArtistAlbums failed: $_"; $albumsForArtist = @() }
+                        if ($cachedAlbums) {
+                            $albumsForArtist = $cachedAlbums
+                        } else {
+                            try { $albumsForArtist = Invoke-ProviderGetAlbums -Provider $Provider -ArtistId $ProviderArtist.id -AlbumType 'Album' } catch { Write-Warning "Get-ArtistAlbums failed: $_"; $albumsForArtist = @() }
+                            $cachedAlbums = $albumsForArtist
+                        }
                         # Normalize to array so .Count works reliably
                         $albumsForArtist = @($albumsForArtist)
                         if (-not $albumsForArtist -or $albumsForArtist.Count -eq 0) {
@@ -151,11 +163,10 @@ function Invoke-MuFoManual {
                                 # if ($inputF) { $artistQuery = $inputF; $stage = 'A'; continue } else { continue }
                             }
                         }
-    
+                        Clear-Host
                         # sort by Jaccard similarity descending
                         $albumsForArtist = $albumsForArtist | Sort-Object { - (Get-StringSimilarity-Jaccard -String1 $albumName -String2 $_.Name) }
-    
-                        $page = 1; $pageSize = 25
+
                         $exitdo = $false
                         while ($true) {
                             # Clear-Host
@@ -423,7 +434,8 @@ function Invoke-MuFoManual {
                                 $inputF = 'sa'
                             }
                             else {
-                                Write-Host "`nOptions:SortByTit(l)e,(d)uration,(t)rackNumber,(n)ame,(h)ybrid,(r)everse,(s)ave Tags(st),(sf)older,(sa)ll,(b)ack, (s)kip"
+                               # if($useWhatIf){$HostColor='Cyan'}else{$HostColor='Gray'}
+                                Write-Host "`nOptions:SortByTit(l)e,(d)uration,(t)rackNumber,(n)ame,(h)ybrid,(r)everse,(s)ave Tags(st),(sf)older,(sa)ll,(b)ack,(w)hatif (s)kip" -ForegroundColor $HostColor
                                 $inputF = Read-Host "Select tracks or command"
                             }
     
@@ -436,6 +448,11 @@ function Invoke-MuFoManual {
                                 '^m$' { $sortMethod = 'Manual'; continue }
                                 '^r$' { $ReverseSource = -not $ReverseSource; continue }
                                 '^b$' { $stage = 'B'; $exitdo = $true; break }
+                                '^whatif$|^w$' {
+                                    $useWhatIf = -not $useWhatIf
+                                    Write-Host "WhatIf mode toggled: $($useWhatIf ? 'Enabled (preview only)' : 'Disabled (will apply changes)')" -ForegroundColor Yellow
+                                    continue
+                                }
                                 '^skip$' { break 3 }
                                 '^sf$' {
                                     $year = Get-ReleaseYear -ReleaseDate $ProviderAlbum.release_date
@@ -450,22 +467,17 @@ function Invoke-MuFoManual {
                                         NewAlbumName = $safeAlbumName
                                     }
                                     # call Move-AlbumFolder and pass -WhatIf from the caller (if requested)
-                                    if ($isWhatIf) {
-                                        $moveResult = Move-AlbumFolder @mvArgs -WhatIf
-                                    }
-                                    else {
-                                        $moveResult = Move-AlbumFolder @mvArgs
-                                    }
+                                    $moveResult = Move-AlbumFolder @mvArgs -WhatIf:$useWhatIf
     
                                     if ($moveResult -and $moveResult.Success) {
                                         # If the move would not change the path, don't prompt or attempt to re-open.
-                                        if ($isWhatIf) {
+                                        if ($useWhatIf) {
                                             Write-Host "WhatIf: album would be moved:" -ForegroundColor Yellow
                                             Write-Host -NoNewline -ForegroundColor Green "Old: "
                                             Write-Host $oldpath
                                             Write-Host -NoNewline -ForegroundColor Green "New: "
                                             Write-Host $moveResult.NewAlbumPath
-                                            if ($moveResult.NewAlbumPath -ne $oldpath -and -not ($NonInteractive -or $goC) -and -not $isWhatIf) {
+                                            if ($moveResult.NewAlbumPath -ne $oldpath -and -not ($NonInteractive -or $goC) -and -not $useWhatIf) {
                                                 # Only pause for an explicit interactive run. In preview/WhatIf or when
                                                 # NonInteractive/goC is set, skip the blocking prompt so unattended
                                                 # runs don't hang.
@@ -506,7 +518,7 @@ function Invoke-MuFoManual {
                                                 $tags = get-Tags -Artist $ProviderArtist -Album $ProviderAlbum -SpotifyTrack $pair.SpotifyTrack                        
                                                 Write-Verbose ("Saving tags to: {0}" -f $filePath)
                                                 Write-Verbose ("Tag values:\n{0}" -f ($tags | Out-String))
-                                                $res = Save-TagsForFile -FilePath $filePath -TagValues $tags -WhatIf:$isWhatIf
+                                                $res = Save-TagsForFile -FilePath $filePath -TagValues $tags -WhatIf:$useWhatIf
                                                 if ($res.Success) { 
                                                     Write-Host ("Saved tags: {0} -> {1:D2}.{2:D2}: {3}" -f (Split-Path -Leaf $filePath), $tags.Disc, $tags.Track, $tags.Title) -ForegroundColor Green 
                                                 }
@@ -555,7 +567,7 @@ function Invoke-MuFoManual {
                                             $tags = get-Tags -Artist $ProviderArtist -Album $ProviderAlbum -SpotifyTrack $pair.SpotifyTrack                        
                                             Write-Verbose ("Saving tags to: {0}" -f $filePath)
                                             Write-Verbose ("Tag values:\n{0}" -f ($tags | Out-String))
-                                            $res = Save-TagsForFile -FilePath $filePath -TagValues $tags -WhatIf:$isWhatIf
+                                            $res = Save-TagsForFile -FilePath $filePath -TagValues $tags -WhatIf:$useWhatIf
                                             if ($res.Success) { 
                                                 Write-Host ("Saved tags: {0} -> {1:D2}.{2:D2}: {3}" -f (Split-Path -Leaf $filePath), $tags.Disc, $tags.Track, $tags.Title) -ForegroundColor Green 
                                             }
@@ -611,7 +623,7 @@ function Invoke-MuFoManual {
                                     } #>
     
                                     # dispose any lingering TagFile handles only when actually applying changes (not in -WhatIf)
-                                    if (-not $isWhatIf) {
+                                    if (-not $useWhatIf) {
                                         foreach ($a in $audioFiles) {
                                             if ($a.TagFile) {
                                                 try { $a.TagFile.Dispose() } catch { Write-Verbose "Failed disposing TagFile for $($a.FilePath): $_" }
@@ -635,21 +647,16 @@ function Invoke-MuFoManual {
                                         NewAlbumName = $safeAlbumName
                                     }
     
-                                    if ($isWhatIf) {
-                                        $moveResult = Move-AlbumFolder @mvArgs -WhatIf
-                                    }
-                                    else {
-                                        $moveResult = Move-AlbumFolder @mvArgs
-                                    }
+                                    $moveResult = Move-AlbumFolder @mvArgs -WhatIf:$useWhatIf
 
                                     if ($moveResult -and $moveResult.Success) {
-                                        if ($isWhatIf) {
+                                        if ($useWhatIf) {
                                             Write-Host "WhatIf: album would be moved:" -ForegroundColor Yellow
                                             Write-Host -NoNewline -ForegroundColor Green "Old: "
                                             Write-Host $oldpath
                                             Write-Host -NoNewline -ForegroundColor Green "New: "
                                             Write-Host $moveResult.NewAlbumPath
-                                            if ($moveResult.NewAlbumPath -ne $oldpath -and -not ($NonInteractive -or $goC) -and -not $isWhatIf) {
+                                            if ($moveResult.NewAlbumPath -ne $oldpath -and -not ($NonInteractive -or $goC) -and -not $useWhatIf) {
                                                 Read-Host -Prompt "Press Enter to continue"
                                             }
                                             else {
@@ -785,7 +792,7 @@ function Invoke-MuFoManual {
                                         }
     
                                         # Save the tag
-                                        $res = Save-TagsForFile -FilePath $filePath -TagValues $tags -WhatIf:$isWhatIf
+                                        $res = Save-TagsForFile -FilePath $filePath -TagValues $tags -WhatIf:$useWhatIf
                                         if ($res.Success) {
                                             Write-Host ("Updated tag '$actualTagName' for track $idx ($($spotifyTrack.Title)): '$newValue'") -ForegroundColor Green
                                         }
@@ -814,7 +821,7 @@ function Invoke-MuFoManual {
         return [PSCustomObject]@{
             Path      = $Path
             Completed = $true
-            WhatIf    = $isWhatIf
+            WhatIf    = $useWhatIf
         }
     }
 }
