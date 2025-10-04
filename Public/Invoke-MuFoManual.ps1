@@ -71,6 +71,7 @@ function Invoke-MuFoManual {
             $artistQuery = $artist
             $stage = "A"
             $cachedAlbums = $null
+            $cachedArtistId = $null
             $page = 1
             $pageSize = 25
             $albumDone = $false
@@ -128,6 +129,10 @@ function Invoke-MuFoManual {
                     "B" {
                         Clear-Host
                         Write-Host "Searching for albums for artist: $($ProviderArtist.name) (id: $($ProviderArtist.id))"
+                        if ($cachedArtistId -ne $ProviderArtist.id) {
+                            $cachedAlbums = $null
+                            $cachedArtistId = $ProviderArtist.id
+                        }
                         if ($cachedAlbums) {
                             $albumsForArtist = $cachedAlbums
                         } else {
@@ -197,6 +202,8 @@ function Invoke-MuFoManual {
                                     continue
                                 }
                                 '^b$' {
+                                    $cachedAlbums = $null
+                                    $cachedArtistId = $null
                                     $stage = 'A'
                                     $exitdo = $true
                                     break
@@ -245,6 +252,7 @@ function Invoke-MuFoManual {
                     }
                     "C" {
                         Clear-Host
+                        if($useWhatIf){$HostColor='Gray'}else{$HostColor='DarkYellow'}
                         Write-Host "Searching tracks for album: $($ProviderAlbum.name) (id: $($ProviderAlbum.id))"
                         # If the caller asked for non-interactive behavior, do not try to drive the
                         # interactive track-selection UI. This prevents Read-Host from blocking the
