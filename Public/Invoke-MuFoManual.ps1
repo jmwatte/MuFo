@@ -266,17 +266,23 @@ function Invoke-MuFoManual {
                         # collect audio files and tags
                         $audioFiles = Get-ChildItem -LiteralPath $album.FullName -File -Recurse | Where-Object { $_.Extension -match '\.(mp3|flac|wav|m4a|aac|ogg|ape)' }
                         $audioFiles = foreach ($f in $audioFiles) {
-                            $tagFile = [TagLib.File]::Create($f.FullName)
-                            [PSCustomObject]@{
-                                FilePath    = $f.FullName
-                                DiscNumber  = $tagFile.Tag.Disc
-                                TrackNumber = $tagFile.Tag.Track
-                                Title       = $tagFile.Tag.Title
-                                TagFile     = $tagFile
-                                Composer    = if ($tagFile.Tag.Composers) { $tagFile.Tag.Composers -join '; ' } else { 'Unknown Composer' }
-                                Artist      = if ($tagFile.Tag.FirstPerformer) { $tagFile.Tag.FirstPerformer } else { 'Unknown Artist' }
-                                Name        = if ($tagFile.Tag.Title) { $tagFile.Tag.Title } else { $f.BaseName }
-                                Duration    = $tagFile.Properties.Duration.TotalMilliseconds
+                            try {
+                                $tagFile = [TagLib.File]::Create($f.FullName)
+                                [PSCustomObject]@{
+                                    FilePath    = $f.FullName
+                                    DiscNumber  = $tagFile.Tag.Disc
+                                    TrackNumber = $tagFile.Tag.Track
+                                    Title       = $tagFile.Tag.Title
+                                    TagFile     = $tagFile
+                                    Composer    = if ($tagFile.Tag.Composers) { $tagFile.Tag.Composers -join '; ' } else { 'Unknown Composer' }
+                                    Artist      = if ($tagFile.Tag.FirstPerformer) { $tagFile.Tag.FirstPerformer } else { 'Unknown Artist' }
+                                    Name        = if ($tagFile.Tag.Title) { $tagFile.Tag.Title } else { $f.BaseName }
+                                    Duration    = $tagFile.Properties.Duration.TotalMilliseconds
+                                }
+                            }
+                            catch {
+                                Write-Warning "Skipping corrupted or invalid audio file: $($f.FullName) - Error: $($_.Exception.Message)"
+                                continue
                             }
                         }
     
