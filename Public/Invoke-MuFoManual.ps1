@@ -136,7 +136,30 @@ function Invoke-MuFoManual {
                         if ($cachedAlbums) {
                             $albumsForArtist = $cachedAlbums
                         } else {
-                            try { $albumsForArtist = Invoke-ProviderGetAlbums -Provider $Provider -ArtistId $ProviderArtist.id -AlbumType 'Album' } catch { Write-Warning "Get-ArtistAlbums failed: $_"; $albumsForArtist = @() }
+                            # Try smart search first: search for artist + album name together
+                            Write-Verbose "Starting smart album search for: $albumName"
+                            try { 
+                                $albumsForArtist = Invoke-ProviderSearchAlbums `
+                                    -Provider $Provider `
+                                    -ArtistId $ProviderArtist.id `
+                                    -ArtistName $ProviderArtist.name `
+                                    -AlbumName $albumName `
+                                    -MastersOnly:($Provider -eq 'Discogs')
+                                
+                                if (-not $albumsForArtist -or $albumsForArtist.Count -eq 0) {
+                                    Write-Verbose "No albums found via smart search, fetching all albums for artist"
+                                    $albumsForArtist = Invoke-ProviderGetAlbums -Provider $Provider -ArtistId $ProviderArtist.id -AlbumType 'Album'
+                                }
+                            } catch { 
+                                Write-Warning "Album search failed: $_"
+                                Write-Verbose "Falling back to fetching all albums for artist"
+                                try { 
+                                    $albumsForArtist = Invoke-ProviderGetAlbums -Provider $Provider -ArtistId $ProviderArtist.id -AlbumType 'Album' 
+                                } catch { 
+                                    Write-Warning "Get-ArtistAlbums failed: $_"
+                                    $albumsForArtist = @() 
+                                }
+                            }
                             $cachedAlbums = $albumsForArtist
                         }
                         # Normalize to array so .Count works reliably
@@ -190,7 +213,7 @@ function Invoke-MuFoManual {
                             if ($goB) { $ProviderAlbum = $albumsForArtist[0]; $stage = 'C'; break }
                             if ($AutoSelect -or $NonInteractive) { $ProviderAlbum = $albumsForArtist[0]; $stage = 'C'; break }
 
-                            $inputF = Read-Host "Select album(s) [1] (Enter=first), number(s) (e.g., 1,3,5-8), '(b)ack', '(n)ext', '(p)rev', '(s)kip', 'id:<id>', or text to filter:"
+                            $inputF = Read-Host "Select album(s) [1] (Enter=first), number(s) (e.g., 1,3,5-8), '(b)ack', '(n)ext', '(p)rev', '(s)kip', 'id:<id>', '*' (all albums), or text to search:"
                             
                             switch -Regex ($inputF) {
                                 '^n$' {
@@ -220,6 +243,21 @@ function Invoke-MuFoManual {
                                     $exitdo = $true
                                     $stage = 'C'
                                     break
+                                }
+                                '^\*$' {
+                                    # User wants to see ALL albums for artist
+                                    Write-Host "Fetching all albums for artist..." -ForegroundColor Cyan
+                                    try {
+                                        $albumsForArtist = Invoke-ProviderGetAlbums -Provider $Provider -ArtistId $ProviderArtist.id -AlbumType 'Album'
+                                        $albumsForArtist = @($albumsForArtist)
+                                        $albumsForArtist = $albumsForArtist | Sort-Object { - (Get-StringSimilarity-Jaccard -String1 $albumName -String2 $_.Name) }
+                                        $cachedAlbums = $albumsForArtist
+                                        $page = 1
+                                        Write-Host "Loaded $($albumsForArtist.Count) albums" -ForegroundColor Green
+                                    } catch {
+                                        Write-Warning "Failed to fetch all albums: $_"
+                                    }
+                                    continue
                                 }
                                 '^[\d,\-\s]+$' {
                                     # Parse multi-selection: "1,3,5-8,12"
@@ -315,14 +353,38 @@ function Invoke-MuFoManual {
                                     break
                                 }
                                 default {
+                                    # User entered text - try as a new search term first
+                                    Write-Host "Searching for albums matching: '$inputF'..." -ForegroundColor Cyan
+                                    try {
+                                        $searchResults = Invoke-ProviderSearchAlbums `
+                                            -Provider $Provider `
+                                            -ArtistId $ProviderArtist.id `
+                                            -ArtistName $ProviderArtist.name `
+                                            -AlbumName $inputF `
+                                            -MastersOnly:($Provider -eq 'Discogs')
+                                        
+                                        if ($searchResults -and $searchResults.Count -gt 0) {
+                                            $albumsForArtist = @($searchResults)
+                                            $albumsForArtist = $albumsForArtist | Sort-Object { - (Get-StringSimilarity-Jaccard -String1 $inputF -String2 $_.Name) }
+                                            $cachedAlbums = $albumsForArtist
+                                            $page = 1
+                                            Write-Host "Found $($albumsForArtist.Count) albums matching '$inputF'" -ForegroundColor Green
+                                            continue
+                                        }
+                                    } catch {
+                                        Write-Verbose "Search failed: $_"
+                                    }
+                                    
+                                    # Fallback to local filtering if search failed or returned no results
                                     $filtered = $albumsForArtist | Where-Object { $_.name -like "*$inputF*" }
                                     if ($filtered.Count -gt 0) {
                                         $albumsForArtist = $filtered
                                         $page = 1
+                                        Write-Host "Filtered to $($filtered.Count) albums" -ForegroundColor Green
                                         continue
                                     }
                                     else {
-                                        Write-Warning "No matches"
+                                        Write-Warning "No matches found for '$inputF'"
                                         continue
                                     }
                                 }
