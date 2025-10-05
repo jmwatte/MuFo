@@ -190,7 +190,7 @@ function Invoke-MuFoManual {
                             if ($goB) { $ProviderAlbum = $albumsForArtist[0]; $stage = 'C'; break }
                             if ($AutoSelect -or $NonInteractive) { $ProviderAlbum = $albumsForArtist[0]; $stage = 'C'; break }
 
-                            $inputF = Read-Host "Select album [1] (Enter=first), number, '(b)ack', '(n)ext', '(p)rev', '(s)kip', 'id:<id>', or text to filter:"
+                            $inputF = Read-Host "Select album(s) [1] (Enter=first), number(s) (e.g., 1,3,5-8), '(b)ack', '(n)ext', '(p)rev', '(s)kip', 'id:<id>', or text to filter:"
                             
                             switch -Regex ($inputF) {
                                 '^n$' {
@@ -221,18 +221,98 @@ function Invoke-MuFoManual {
                                     $stage = 'C'
                                     break
                                 }
-                                '^\d+$' {
-                                    $idx = [int]$inputF
-                                    if ($idx -ge 1 -and $idx -le $albumsForArtist.Count) {
-                                        $ProviderAlbum = $albumsForArtist[$idx - 1]
+                                '^[\d,\-\s]+$' {
+                                    # Parse multi-selection: "1,3,5-8,12"
+                                    $selectedIndices = @()
+                                    $parts = $inputF -split ','
+                                    foreach ($part in $parts) {
+                                        $part = $part.Trim()
+                                        if ($part -match '^(\d+)-(\d+)$') {
+                                            # Range: 5-8
+                                            $start = [int]$matches[1]
+                                            $end = [int]$matches[2]
+                                            $selectedIndices += $start..$end
+                                        } elseif ($part -match '^\d+$') {
+                                            # Single number: 3
+                                            $selectedIndices += [int]$part
+                                        }
+                                    }
+                                    
+                                    # Validate all indices
+                                    $validIndices = $selectedIndices | Where-Object { $_ -ge 1 -and $_ -le $albumsForArtist.Count } | Select-Object -Unique | Sort-Object
+                                    
+                                    if ($validIndices.Count -eq 0) {
+                                        Write-Warning "No valid album numbers selected"
+                                        continue
+                                    }
+                                    
+                                    # If single selection, go directly to Stage C
+                                    if ($validIndices.Count -eq 1) {
+                                        $ProviderAlbum = $albumsForArtist[$validIndices[0] - 1]
                                         $stage = 'C'
                                         $exitdo = $true
                                         break
                                     }
-                                    else {
-                                        Write-Warning "Invalid"
+                                    
+                                    # Multiple selections: combine all albums into one bucket
+                                    Write-Host "`nFetching tracks from $($validIndices.Count) selected albums..." -ForegroundColor Cyan
+                                    
+                                    $combinedTracks = @()
+                                    $albumNames = @()
+                                    $failedAlbums = 0
+                                    
+                                    foreach ($idx in $validIndices) {
+                                        $currentAlbum = $albumsForArtist[$idx - 1]
+                                        $albumNames += $currentAlbum.name
+                                        
+                                        Write-Host "  [$idx] Fetching: $($currentAlbum.name)..." -ForegroundColor Gray
+                                        
+                                        try {
+                                            $tracks = Invoke-ProviderGetTracks -Provider $Provider -AlbumId $currentAlbum.id
+                                            if ($tracks) {
+                                                $combinedTracks += $tracks
+                                                Write-Host "    ✓ Added $($tracks.Count) tracks" -ForegroundColor Green
+                                            } else {
+                                                Write-Warning "    ✗ No tracks returned for album: $($currentAlbum.name)"
+                                                $failedAlbums++
+                                            }
+                                        }
+                                        catch {
+                                            Write-Warning "    ✗ Failed to fetch tracks for album: $($currentAlbum.name) - $_"
+                                            $failedAlbums++
+                                        }
+                                    }
+                                    
+                                    if ($combinedTracks.Count -eq 0) {
+                                        Write-Warning "No tracks retrieved from any selected albums. Please try again."
                                         continue
                                     }
+                                    
+                                    # Create a synthetic combined album object
+                                    $firstAlbum = $albumsForArtist[$validIndices[0] - 1]
+                                    $ProviderAlbum = [PSCustomObject]@{
+                                        id = "combined_$($validIndices -join '_')"
+                                        name = if ($validIndices.Count -eq 2) { 
+                                            "$($albumNames[0]) + $($albumNames[1])" 
+                                        } else { 
+                                            "$($albumNames[0]) + $($validIndices.Count - 1) more albums" 
+                                        }
+                                        release_date = $firstAlbum.release_date
+                                        _isCombined = $true
+                                        _albumCount = $validIndices.Count
+                                        _albumNames = $albumNames
+                                        _selectedIndices = $validIndices
+                                        _tracks = $combinedTracks
+                                    }
+                                    
+                                    Write-Host "`n✓ Combined $($combinedTracks.Count) tracks from $($validIndices.Count) albums" -ForegroundColor Green
+                                    if ($failedAlbums -gt 0) {
+                                        Write-Warning "  Note: $failedAlbums album(s) failed to load"
+                                    }
+                                    
+                                    $stage = 'C'
+                                    $exitdo = $true
+                                    break
                                 }
                                 default {
                                     $filtered = $albumsForArtist | Where-Object { $_.name -like "*$inputF*" }
@@ -253,7 +333,20 @@ function Invoke-MuFoManual {
                     "C" {
                         Clear-Host
                         if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Red' }
-                        Write-Host "Searching tracks for album: $($ProviderAlbum.name) (id: $($ProviderAlbum.id))"
+                        
+                        # Display appropriate header for single or combined albums
+                        if ($ProviderAlbum._isCombined) {
+                            Write-Host "Processing COMBINED album set:" -ForegroundColor Yellow
+                            Write-Host "  Albums: $($ProviderAlbum._albumCount)" -ForegroundColor Cyan
+                            Write-Host "  Tracks: $($ProviderAlbum._tracks.Count)" -ForegroundColor Cyan
+                            foreach ($albumName in $ProviderAlbum._albumNames) {
+                                Write-Host "    - $albumName" -ForegroundColor Gray
+                            }
+                            Write-Host ""
+                        } else {
+                            Write-Host "Searching tracks for album: $($ProviderAlbum.name) (id: $($ProviderAlbum.id))"
+                        }
+                        
                         # If the caller asked for non-interactive behavior, do not try to drive the
                         # interactive track-selection UI. This prevents Read-Host from blocking the
                         # process in unattended runs. The caller can run interactively to inspect and
@@ -286,7 +379,18 @@ function Invoke-MuFoManual {
                             }
                         }
     
-                        try { $tracksForAlbum = Invoke-ProviderGetTracks -Provider $Provider -AlbumId $ProviderAlbum.id } catch { Write-Warning "Get-SpotifyAlbumTracks failed: $_"; $tracksForAlbum = @() }
+                        # Check if this is a combined album (tracks already fetched) or single album (need to fetch)
+                        if ($ProviderAlbum._isCombined) {
+                            Write-Verbose "Using pre-fetched tracks from combined album"
+                            $tracksForAlbum = $ProviderAlbum._tracks
+                        } else {
+                            try { 
+                                $tracksForAlbum = Invoke-ProviderGetTracks -Provider $Provider -AlbumId $ProviderAlbum.id 
+                            } catch { 
+                                Write-Warning "Get-AlbumTracks failed: $_"
+                                $tracksForAlbum = @() 
+                            }
+                        }
                         # Normalize to array and defensively map properties (different providers may return different shapes)
                         <#   $tracksForAlbum = @($tracksForAlbum) | ForEach-Object {
                             # Defensive handling: some providers or earlier pipeline steps can emit ErrorRecord

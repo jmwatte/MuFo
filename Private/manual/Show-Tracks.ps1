@@ -51,7 +51,13 @@ function Show-Tracks {
                 if ($spotify) {
                     $disc = if ($value = Get-IfExists $spotify 'disc_number') { $value } else { 1 }
                     $track = if ($value = Get-IfExists $spotify 'track_number') { $value } else { 0 }
-                    Write-Host ("↓`t{0:D2}.{1:D2}: {2}" -f $disc, $track, $spotify.name)
+                    
+                    # Format duration from milliseconds
+                    $durationMs = if ($value = Get-IfExists $spotify 'duration_ms') { $value } elseif ($value = Get-IfExists $spotify 'duration') { $value } else { 0 }
+                    $durationSpan = [TimeSpan]::FromMilliseconds($durationMs)
+                    $durationStr = "{0:mm\:ss}" -f $durationSpan
+                    
+                    Write-Host ("↓`t{0:D2}.{1:D2}: {2} ({3})" -f $disc, $track, $spotify.name, $durationStr)
 
                     $a = $spotify.artists
                     if ($a -is [System.Collections.IEnumerable] -and -not ($a -is [string])) {
@@ -88,7 +94,21 @@ function Show-Tracks {
                 if ($audio) {
                     $arrow = if ($Reverse) { '↑' } else { '_' }
                     $color = if ($spotify -and $audio.Title -eq $spotify.name) { 'Green' } else { 'Yellow' }
-                    Write-Host ("$arrow`t{0:D2}.{1:D2}: {2}" -f $audio.DiscNumber, $audio.TrackNumber, $audio.Title) -ForegroundColor $color
+                    
+                    # Format audio file duration (stored as milliseconds in Invoke-MuFoManual)
+                    $audioDurationStr = if ($audio.Duration) {
+                        if ($audio.Duration -is [TimeSpan]) {
+                            "{0:mm\:ss}" -f $audio.Duration
+                        } else {
+                            # Duration is in milliseconds
+                            $durationSpan = [TimeSpan]::FromMilliseconds($audio.Duration)
+                            "{0:mm\:ss}" -f $durationSpan
+                        }
+                    } else {
+                        "00:00"
+                    }
+                    
+                    Write-Host ("$arrow`t{0:D2}.{1:D2}: {2} ({3})" -f $audio.DiscNumber, $audio.TrackNumber, $audio.Title, $audioDurationStr) -ForegroundColor $color
 
                     $audioArtist = if ($value = Get-IfExists $audio 'Artist') { $value } else { 'Unknown' }
                     $artistColor = if ($spotify -and $audioArtist -eq $artistDisplay) { 'Green' } else { 'Yellow' }

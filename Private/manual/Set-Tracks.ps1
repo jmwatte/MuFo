@@ -12,91 +12,153 @@ function Set-Tracks {
     #Write-Host "DEBUG: Starting Set-Tracks with Reverse=$Reverse"
     switch ($SortMethod) {
         "byName" {
-            if ($Reverse) {
-                Write-Host "DEBUG: Using Reverse mode for byName"
-                # Iterate over audio files, match to Spotify by filename similarity
+            # Build all possible matches with scores (filename similarity + duration)
+            # This approach works for both normal and reverse modes
+            $matchesR = @()
+            
+            foreach ($spotify in $SpotifyTracks) {
                 foreach ($audio in $AudioFiles) {
                     $filename = [System.IO.Path]::GetFileNameWithoutExtension($audio.FilePath)
-                    $bestMatch = $null
-                    $bestSimilarity = 0
-                    foreach ($spotify in $SpotifyTracks) {
-                        $similarity = Get-StringSimilarity-Jaccard -String1 $filename -String2 $spotify.name
-                        if ($similarity -gt $bestSimilarity) {
-                            $bestSimilarity = $similarity
-                            $bestMatch = $spotify
-                        }
-                    }
-                    $spotifyTrack = if ($bestSimilarity -ge 0.8) { $bestMatch } else { $null }
                     
-                    $pairedTracks += [PSCustomObject]@{
-                        SpotifyTrack = $spotifyTrack
-                        AudioFile    = $audio
+                    # Primary: Filename similarity
+                    $nameSimilarity = Get-StringSimilarity-Jaccard -String1 $spotify.name -String2 $filename
+                    
+                    # Only consider if similarity is reasonable (>= 0.5)
+                    if ($nameSimilarity -ge 0.5) {
+                        # Secondary: Duration closeness as tiebreaker
+                        $diff = [Math]::Abs($spotify.duration_ms - $audio.Duration)
+                        $tolerance = [Math]::Max($spotify.duration_ms, 1) * 0.1
+                        $durationScore = if ($diff -le $tolerance) { 1 - ($diff / $tolerance) } else { 0 }
+                        
+                        # Combined score: name (80%) + duration (20%)
+                        $score = ($nameSimilarity * 80) + ($durationScore * 20)
+                        
+                        $matchesR += [PSCustomObject]@{
+                            Spotify = $spotify
+                            Audio   = $audio
+                            Score   = $score
+                        }
                     }
                 }
             }
-            else {
-                # Original: Iterate over Spotify tracks
-                $SpotifyTracks = $SpotifyTracks | Sort-Object name
-                foreach ($spotify in $SpotifyTracks) {
-                    $bestMatch = $null
-                    $bestSimilarity = 0
-                    foreach ($audio in $AudioFiles) {
-                        $filename = [System.IO.Path]::GetFileNameWithoutExtension($audio.FilePath)
-                        $similarity = Get-StringSimilarity-Jaccard -String1 $spotify.name -String2 $filename
-                        if ($similarity -gt $bestSimilarity) {
-                            $bestSimilarity = $similarity
-                            $bestMatch = $audio
-                        }
-                    }
-                    $audioFile = if ($bestSimilarity -ge 0.8) { $bestMatch } else { $null }
+            
+            # Greedy assignment with deduplication
+            $matchesR = $matchesR | Sort-Object Score -Descending
+            $usedSpotify = @{}
+            $usedAudio = @{}
+            
+            foreach ($match in $matchesR) {
+                $spotifyId = if ($match.Spotify.id) { $match.Spotify.id } else { $match.Spotify.name }
+                $audioPath = $match.Audio.FilePath
+                
+                # Only use if score is good enough and not already used
+                if ($match.Score -ge 40 -and
+                    -not $usedSpotify.ContainsKey($spotifyId) -and 
+                    -not $usedAudio.ContainsKey($audioPath)) {
                     
                     $pairedTracks += [PSCustomObject]@{
-                        SpotifyTrack = $spotify
-                        AudioFile    = $audioFile
+                        SpotifyTrack = $match.Spotify
+                        AudioFile    = $match.Audio
                     }
+                    $usedSpotify[$spotifyId] = $true
+                    $usedAudio[$audioPath] = $true
+                }
+            }
+            
+            # Add unpaired Spotify tracks
+            $unpairedSpotify = $SpotifyTracks | Where-Object { 
+                $sid = if ($_.id) { $_.id } else { $_.name }
+                -not $usedSpotify.ContainsKey($sid)
+            }
+            foreach ($spotify in $unpairedSpotify) {
+                $pairedTracks += [PSCustomObject]@{
+                    SpotifyTrack = $spotify
+                    AudioFile    = $null
+                }
+            }
+            
+            # Add unpaired audio files
+            $unpairedAudio = $AudioFiles | Where-Object { 
+                -not $usedAudio.ContainsKey($_.FilePath)
+            }
+            foreach ($audio in $unpairedAudio) {
+                $pairedTracks += [PSCustomObject]@{
+                    SpotifyTrack = $null
+                    AudioFile    = $audio
                 }
             }
         }
         "byTitle" {
-            if ($Reverse) {
-                # Iterate over audio files, match to Spotify by title similarity
+            # Build all possible matches with scores (title similarity + duration)
+            $matchesR = @()
+            
+            foreach ($spotify in $SpotifyTracks) {
                 foreach ($audio in $AudioFiles) {
-                    $bestMatch = $null
-                    $bestSimilarity = 0
-                    foreach ($spotify in $SpotifyTracks) {
-                        $similarity = Get-StringSimilarity-Jaccard -String1 $audio.Title -String2 $spotify.name
-                        if ($similarity -gt $bestSimilarity) {
-                            $bestSimilarity = $similarity
-                            $bestMatch = $spotify
-                        }
-                    }
-                    $spotifyTrack = if ($bestSimilarity -ge 0.8) { $bestMatch } else { $null }
+                    # Primary: Title similarity
+                    $titleSimilarity = Get-StringSimilarity-Jaccard -String1 $spotify.name -String2 $audio.Title
                     
-                    $pairedTracks += [PSCustomObject]@{
-                        SpotifyTrack = $spotifyTrack
-                        AudioFile    = $audio
+                    # Only consider if similarity is reasonable (>= 0.5)
+                    if ($titleSimilarity -ge 0.5) {
+                        # Secondary: Duration closeness as tiebreaker
+                        $diff = [Math]::Abs($spotify.duration_ms - $audio.Duration)
+                        $tolerance = [Math]::Max($spotify.duration_ms, 1) * 0.1
+                        $durationScore = if ($diff -le $tolerance) { 1 - ($diff / $tolerance) } else { 0 }
+                        
+                        # Combined score: title (80%) + duration (20%)
+                        $score = ($titleSimilarity * 80) + ($durationScore * 20)
+                        
+                        $matchesR += [PSCustomObject]@{
+                            Spotify = $spotify
+                            Audio   = $audio
+                            Score   = $score
+                        }
                     }
                 }
             }
-            else {
-                # Original: Iterate over Spotify tracks
-                $SpotifyTracks = $SpotifyTracks | Sort-Object name
-                foreach ($spotify in $SpotifyTracks) {
-                    $bestMatch = $null
-                    $bestSimilarity = 0
-                    foreach ($audio in $AudioFiles) {
-                        $similarity = Get-StringSimilarity-Jaccard -String1 $spotify.name -String2 $audio.Title
-                        if ($similarity -gt $bestSimilarity) {
-                            $bestSimilarity = $similarity
-                            $bestMatch = $audio
-                        }
-                    }
-                    $audioFile = if ($bestSimilarity -ge 0.8) { $bestMatch } else { $null }
+            
+            # Greedy assignment with deduplication
+            $matchesR = $matchesR | Sort-Object Score -Descending
+            $usedSpotify = @{}
+            $usedAudio = @{}
+            
+            foreach ($match in $matchesR) {
+                $spotifyId = if ($match.Spotify.id) { $match.Spotify.id } else { $match.Spotify.name }
+                $audioPath = $match.Audio.FilePath
+                
+                # Only use if score is good enough and not already used
+                if ($match.Score -ge 40 -and
+                    -not $usedSpotify.ContainsKey($spotifyId) -and 
+                    -not $usedAudio.ContainsKey($audioPath)) {
                     
                     $pairedTracks += [PSCustomObject]@{
-                        SpotifyTrack = $spotify
-                        AudioFile    = $audioFile
+                        SpotifyTrack = $match.Spotify
+                        AudioFile    = $match.Audio
                     }
+                    $usedSpotify[$spotifyId] = $true
+                    $usedAudio[$audioPath] = $true
+                }
+            }
+            
+            # Add unpaired Spotify tracks
+            $unpairedSpotify = $SpotifyTracks | Where-Object { 
+                $sid = if ($_.id) { $_.id } else { $_.name }
+                -not $usedSpotify.ContainsKey($sid)
+            }
+            foreach ($spotify in $unpairedSpotify) {
+                $pairedTracks += [PSCustomObject]@{
+                    SpotifyTrack = $spotify
+                    AudioFile    = $null
+                }
+            }
+            
+            # Add unpaired audio files
+            $unpairedAudio = $AudioFiles | Where-Object { 
+                -not $usedAudio.ContainsKey($_.FilePath)
+            }
+            foreach ($audio in $unpairedAudio) {
+                $pairedTracks += [PSCustomObject]@{
+                    SpotifyTrack = $null
+                    AudioFile    = $audio
                 }
             }
         }
@@ -132,45 +194,74 @@ function Set-Tracks {
             }
         }
         "byDuration" {
-            if ($Reverse) {
-                # Iterate over audio files, match to Spotify by duration
+            # Build all possible matches with scores (duration + title similarity)
+            $matchesR = @()
+            
+            foreach ($spotify in $SpotifyTracks) {
                 foreach ($audio in $AudioFiles) {
-                    $spotifyTrack = $null
-                    $minDiff = [double]::MaxValue
-                    foreach ($spotify in $SpotifyTracks) {
-                        $diff = [Math]::Abs($audio.Duration - $spotify.duration_ms)
-                        $tolerance = $audio.Duration * 0.1  # 10% tolerance
-                        if ($diff -le $tolerance -and $diff -lt $minDiff) {
-                            $minDiff = $diff
-                            $spotifyTrack = $spotify
-                        }
-                    }
+                    $diff = [Math]::Abs($spotify.duration_ms - $audio.Duration)
+                    $tolerance = $spotify.duration_ms * 0.1  # 10% tolerance
                     
-                    $pairedTracks += [PSCustomObject]@{
-                        SpotifyTrack = $spotifyTrack
-                        AudioFile    = $audio
+                    if ($diff -le $tolerance) {
+                        # Primary: Duration score (closer = higher score)
+                        $durationScore = 1 - ($diff / $tolerance)
+                        
+                        # Secondary: Title similarity as tiebreaker
+                        $titleSimilarity = Get-StringSimilarity-Jaccard -String1 $spotify.name -String2 $audio.Title
+                        
+                        # Combined score: duration (70%) + title (30%)
+                        $score = ($durationScore * 70) + ($titleSimilarity * 30)
+                        
+                        $matchesR += [PSCustomObject]@{
+                            Spotify = $spotify
+                            Audio   = $audio
+                            Score   = $score
+                        }
                     }
                 }
             }
-            else {
-                # Original: Iterate over Spotify tracks
-                $SpotifyTracks = $SpotifyTracks | Sort-Object duration_ms
-                foreach ($spotify in $SpotifyTracks) {
-                    $audioFile = $null
-                    $minDiff = [double]::MaxValue
-                    foreach ($audio in $AudioFiles) {
-                        $diff = [Math]::Abs($spotify.duration_ms - $audio.Duration)
-                        $tolerance = $spotify.duration_ms * 0.1  # 10% tolerance
-                        if ($diff -le $tolerance -and $diff -lt $minDiff) {
-                            $minDiff = $diff
-                            $audioFile = $audio
-                        }
-                    }
+            
+            # Greedy assignment with deduplication
+            $matchesR = $matchesR | Sort-Object Score -Descending
+            $usedSpotify = @{}
+            $usedAudio = @{}
+            
+            foreach ($match in $matchesR) {
+                $spotifyId = if ($match.Spotify.id) { $match.Spotify.id } else { $match.Spotify.name }
+                $audioPath = $match.Audio.FilePath
+                
+                if (-not $usedSpotify.ContainsKey($spotifyId) -and 
+                    -not $usedAudio.ContainsKey($audioPath)) {
                     
                     $pairedTracks += [PSCustomObject]@{
-                        SpotifyTrack = $spotify
-                        AudioFile    = $audioFile
+                        SpotifyTrack = $match.Spotify
+                        AudioFile    = $match.Audio
                     }
+                    $usedSpotify[$spotifyId] = $true
+                    $usedAudio[$audioPath] = $true
+                }
+            }
+            
+            # Add unpaired Spotify tracks
+            $unpairedSpotify = $SpotifyTracks | Where-Object { 
+                $sid = if ($_.id) { $_.id } else { $_.name }
+                -not $usedSpotify.ContainsKey($sid)
+            }
+            foreach ($spotify in $unpairedSpotify) {
+                $pairedTracks += [PSCustomObject]@{
+                    SpotifyTrack = $spotify
+                    AudioFile    = $null
+                }
+            }
+            
+            # Add unpaired audio files
+            $unpairedAudio = $AudioFiles | Where-Object { 
+                -not $usedAudio.ContainsKey($_.FilePath)
+            }
+            foreach ($audio in $unpairedAudio) {
+                $pairedTracks += [PSCustomObject]@{
+                    SpotifyTrack = $null
+                    AudioFile    = $audio
                 }
             }
         }
