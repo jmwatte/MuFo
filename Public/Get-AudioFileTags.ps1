@@ -303,6 +303,8 @@ function Get-AudioFileTags {
                     Year            = if ($tag -and $tag.Year) { $tag.Year } else { $null }
                     Genre           = if ($genres.Count -gt 0) { $genres[0] } else { $null }
                     Genres          = $genres
+                    Composer        = if ($composers.Count -gt 0) { $composers[0] } else { $null }
+                    Composers       = $composers
                     Duration        = if ($properties -and $properties.Duration) { $properties.Duration } else { [TimeSpan]::Zero }
                     DurationSeconds = if ($properties -and $properties.Duration) { [double]$properties.Duration.TotalSeconds } else { 0.0 }
                     Bitrate         = if ($properties -and $properties.AudioBitrate) { $properties.AudioBitrate } else { 0 }
@@ -312,7 +314,7 @@ function Get-AudioFileTags {
 
                 # Add classical music analysis if requested
                 if ($IncludeComposer) {
-                    # Extract composer information
+                    # Enhanced composer extraction (checking comment field as fallback)
                     $composer = $null
                     if ($composers.Count -gt 0) {
                         $composer = $composers[0]
@@ -362,9 +364,7 @@ function Get-AudioFileTags {
                         }
                     }
 
-                    # Add classical music properties
-                    Add-Member -InputObject $normalizedTag -MemberType NoteProperty -Name "Composer" -Value $composer
-                    Add-Member -InputObject $normalizedTag -MemberType NoteProperty -Name "Composers" -Value $composers
+                    # Add classical music analysis properties (Composer/Composers already in base object)
                     Add-Member -InputObject $normalizedTag -MemberType NoteProperty -Name "IsClassical" -Value $isClassical
                     Add-Member -InputObject $normalizedTag -MemberType NoteProperty -Name "ContributingArtists" -Value $contributingArtists
                     Add-Member -InputObject $normalizedTag -MemberType NoteProperty -Name "Conductor" -Value $conductor

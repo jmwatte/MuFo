@@ -40,11 +40,56 @@ function Save-TagsForFile {
                     'Title' { $tagFile.Tag.Title = $v }
                     'Track' { $tagFile.Tag.Track = [uint]$v }
                     'Disc' { $tagFile.Tag.Disc = [uint]$v }
-                    'Performers' { $tagFile.Tag.Performers = @($v) }
-                    'Genres' { $tagFile.Tag.Genres = ($tagFile.Tag.Genres + @($v)) | Select-Object -Unique }
+                    'Performers' { 
+                        if ($v -is [string] -and $v -match ';') {
+                            $tagFile.Tag.Performers = $v -split '\s*;\s*'
+                        } else {
+                            $tagFile.Tag.Performers = @($v)
+                        }
+                    }
+                    'Genres' {
+                        # Replace genres (don't append). Handle both string and array inputs.
+                        if ($v -is [array]) {
+                            $tagFile.Tag.Genres = $v
+                        } elseif ($v -is [string] -and $v -match ';') {
+                            $tagFile.Tag.Genres = $v -split '\s*;\s*'
+                        } else {
+                            $tagFile.Tag.Genres = @($v)
+                        }
+                    }
                     'Date' { $tagFile.Tag.Year = [uint]$v }
                     'Album' { $tagFile.Tag.Album = $v }
-                    'Composer' {$tagFile.Tag.Composers}
+                    'Composer' { 
+                        if ($v -is [string] -and $v -match ';') {
+                            $tagFile.Tag.Composers = $v -split '\s*;\s*'
+                        } else {
+                            $tagFile.Tag.Composers = @($v)
+                        }
+                    }
+                    'Composers' { 
+                        if ($v -is [string] -and $v -match ';') {
+                            $tagFile.Tag.Composers = $v -split '\s*;\s*'
+                        } else {
+                            $tagFile.Tag.Composers = @($v)
+                        }
+                    }
+                    'Conductor' {
+                        # Store conductor in Conductor field if available (classical music)
+                        if ($tagFile.Tag.PSObject.Properties['Conductor']) {
+                            $tagFile.Tag.Conductor = $v
+                        } else {
+                            # Fallback: add to Comment if Conductor field doesn't exist
+                            if ($tagFile.Tag.Comment) {
+                                $tagFile.Tag.Comment += "`nConductor: $v"
+                            } else {
+                                $tagFile.Tag.Comment = "Conductor: $v"
+                            }
+                        }
+                    }
+                    'Comment' {
+                        # Store full production credits in Comment field
+                        $tagFile.Tag.Comment = $v
+                    }
                     default {
                         if ($tagFile.Tag.PSObject.Properties.Match($k)) {
                             $tagFile.Tag.$k = $v

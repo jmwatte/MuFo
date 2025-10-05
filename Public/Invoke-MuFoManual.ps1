@@ -58,7 +58,7 @@ function Invoke-MuFoManual {
         $albums = Get-ChildItem -LiteralPath $Path -Directory
         foreach ($album in $albums) {
             $useWhatIf = $isWhatIf
-            if($useWhatIf){$HostColor='Gray'}else{$HostColor='DarkYellow'}
+            if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Red' }
             # derive album name and year
                        # Try to extract year from the start of the folder name (e.g., "2023 - Album Name")
             if ($album.Name -match '^(\d{4})\s*[-]?\s*(.+)') {
@@ -252,7 +252,7 @@ function Invoke-MuFoManual {
                     }
                     "C" {
                         Clear-Host
-                        if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Gray' }
+                        if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Red' }
                         Write-Host "Searching tracks for album: $($ProviderAlbum.name) (id: $($ProviderAlbum.id))"
                         # If the caller asked for non-interactive behavior, do not try to drive the
                         # interactive track-selection UI. This prevents Read-Host from blocking the
@@ -275,7 +275,7 @@ function Invoke-MuFoManual {
                                     Title       = $tagFile.Tag.Title
                                     TagFile     = $tagFile
                                     Composer    = if ($tagFile.Tag.Composers) { $tagFile.Tag.Composers -join '; ' } else { 'Unknown Composer' }
-                                    Artist      = if ($tagFile.Tag.FirstPerformer) { $tagFile.Tag.FirstPerformer } else { 'Unknown Artist' }
+                                    Artist      = if ($tagFile.Tag.Performers) { $tagFile.Tag.Performers -join '; ' } else { 'Unknown Artist' }
                                     Name        = if ($tagFile.Tag.Title) { $tagFile.Tag.Title } else { $f.BaseName }
                                     Duration    = $tagFile.Properties.Duration.TotalMilliseconds
                                 }
@@ -413,7 +413,7 @@ function Invoke-MuFoManual {
                         $goCDisplayShown = $false
                         do {
                             if ($refreshTracks -or -not $pairedTracks) {
-                                if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Gray' }
+                                if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Red' }
                                 $param = @{
                                     SortMethod    = $sortMethod
                                     AudioFiles    = $audioFiles
@@ -441,7 +441,7 @@ function Invoke-MuFoManual {
                                 $inputF = 'sa'
                             }
                             else {
-                                if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Gray' }
+                                if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Red' }
                                 $whatIfStatus = if ($useWhatIf) { "ON" } else { "OFF" }
                                 $optionsLine = "`nOptions:SortByTit(l)e,(d)uration,(t)rackNumber,(n)ame,(h)ybrid,(m)anual,(r)everse,(s)ave Tags(st),(sf)older,(sa)ll,(b)ack,(w)hatif $whatIfStatus (s)kip"
                                 $commandList = @('d','t','n','l','h','m','r','st','sf','sa','b','w','whatif','skip')
@@ -565,6 +565,39 @@ function Invoke-MuFoManual {
                                             if ($res.Success) { Write-Host ("Saved tags: {0} -> {1:D2}.{2:D2}: {3}" -f (Split-Path -Leaf $filePath), $tags.Disc, $tags.Track, $tags.Title) -ForegroundColor Green }
                                             else { Write-Warning ("Skipped/Failed: {0} ({1})" -f $filePath, ($res.Reason -or 'unknown')) }
                                         } #>
+                                        
+                                        # Dispose old TagFile handles and reload to show updated tags
+                                        if (-not $useWhatIf) {
+                                            foreach ($af in $audioFiles) {
+                                                if ($af.TagFile) {
+                                                    try { $af.TagFile.Dispose() } catch { Write-Verbose "Failed disposing TagFile: $_" }
+                                                    $af.TagFile = $null
+                                                }
+                                            }
+                                            # Reload audio files with fresh TagLib handles
+                                            $audioFiles = Get-ChildItem -LiteralPath $album.FullName -File -Recurse | Where-Object { $_.Extension -match '\.(mp3|flac|wav|m4a|aac|ogg|ape)' }
+                                            $audioFiles = foreach ($f in $audioFiles) {
+                                                try {
+                                                    $tagFile = [TagLib.File]::Create($f.FullName)
+                                                    [PSCustomObject]@{
+                                                        FilePath    = $f.FullName
+                                                        DiscNumber  = $tagFile.Tag.Disc
+                                                        TrackNumber = $tagFile.Tag.Track
+                                                        Title       = $tagFile.Tag.Title
+                                                        TagFile     = $tagFile
+                                                        Composer    = if ($tagFile.Tag.Composers) { $tagFile.Tag.Composers -join '; ' } else { 'Unknown Composer' }
+                                                        Artist      = if ($tagFile.Tag.Performers) { $tagFile.Tag.Performers -join '; ' } else { 'Unknown Artist' }
+                                                        Name        = if ($tagFile.Tag.Title) { $tagFile.Tag.Title } else { $f.BaseName }
+                                                        Duration    = $tagFile.Properties.Duration.TotalMilliseconds
+                                                    }
+                                                }
+                                                catch {
+                                                    Write-Warning "Skipping corrupted or invalid audio file: $($f.FullName) - Error: $($_.Exception.Message)"
+                                                    continue
+                                                }
+                                            }
+                                            $refreshTracks = $true
+                                        }
                                         $stage = 'C'
                                         $exitDo = $true
                                         break
@@ -654,6 +687,7 @@ function Invoke-MuFoManual {
                                                 $a.TagFile = $null
                                             }
                                         }
+                                        # NOTE: Audio files will be reloaded AFTER the folder move (if move happens)
                                     }
                                     else {
                                         # In preview mode keep TagFile open so UI can continue to inspect tags.
@@ -699,7 +733,33 @@ function Invoke-MuFoManual {
                                                 $albumDone = $true
                                                 break
                                             }
+                                            # Folder was moved - update $album and reload audio files from new location
                                             $album = Get-Item -LiteralPath $moveResult.NewAlbumPath
+                                            
+                                            # Reload audio files with fresh TagLib handles from the NEW album path
+                                            $audioFiles = Get-ChildItem -LiteralPath $album.FullName -File -Recurse | Where-Object { $_.Extension -match '\.(mp3|flac|wav|m4a|aac|ogg|ape)' }
+                                            $audioFiles = foreach ($f in $audioFiles) {
+                                                try {
+                                                    $tagFile = [TagLib.File]::Create($f.FullName)
+                                                    [PSCustomObject]@{
+                                                        FilePath    = $f.FullName
+                                                        DiscNumber  = $tagFile.Tag.Disc
+                                                        TrackNumber = $tagFile.Tag.Track
+                                                        Title       = $tagFile.Tag.Title
+                                                        TagFile     = $tagFile
+                                                        Composer    = if ($tagFile.Tag.Composers) { $tagFile.Tag.Composers -join '; ' } else { 'Unknown Composer' }
+                                                        Artist      = if ($tagFile.Tag.Performers) { $tagFile.Tag.Performers -join '; ' } else { 'Unknown Artist' }
+                                                        Name        = if ($tagFile.Tag.Title) { $tagFile.Tag.Title } else { $f.BaseName }
+                                                        Duration    = $tagFile.Properties.Duration.TotalMilliseconds
+                                                    }
+                                                }
+                                                catch {
+                                                    Write-Warning "Skipping corrupted or invalid audio file: $($f.FullName) - Error: $($_.Exception.Message)"
+                                                    continue
+                                                }
+                                            }
+                                            $refreshTracks = $true
+                                            
                                             $stage = "C"
                                             $exitDo = $true
                                             break 

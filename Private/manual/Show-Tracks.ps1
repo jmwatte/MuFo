@@ -94,13 +94,40 @@ function Show-Tracks {
                     $artistColor = if ($spotify -and $audioArtist -eq $artistDisplay) { 'Green' } else { 'Yellow' }
                     Write-Host ("`t`tartist: {0}" -f $audioArtist) -ForegroundColor $artistColor
 
-                    $audioGenres = if ($value = Get-IfExists $audio.TagFile.tag 'Genres') { $value -join ', ' } else { 'Unknown' }
-                    $genresColor = if ($value = Get-IfExists $SpotifyArtist 'genres' -and ($audioGenres -eq ($value -join ', '))) { 'Green' } else { 'Yellow' }
+                    # Read genres from TagLib.Tag (uppercase T)
+                    $audioGenresValue = if ($audio.TagFile -and $audio.TagFile.Tag -and $audio.TagFile.Tag.Genres) { $audio.TagFile.Tag.Genres } else { $null }
+                    $audioGenres = if ($audioGenresValue) { $audioGenresValue -join ', ' } else { 'Unknown' }
+                    $spotifyGenresValue = Get-IfExists $SpotifyArtist 'genres'
+                    $genresColor = if ($spotifyGenresValue -and ($audioGenres -eq ($spotifyGenresValue -join ', '))) { 'Green' } else { 'Yellow' }
                     Write-Host ("`t`tgenres: {0}" -f $audioGenres) -ForegroundColor $genresColor
 
-                    $audioComposer = if ($value = Get-IfExists $audio 'Composer' -and $value) { $value -join ', ' } else { 'Unknown' }
-                    $composerColor = if ($value = Get-IfExists $spotify 'Composer' -and ($audioComposer -eq ($value -join ', '))) { 'Green' } else { 'Yellow' }
+                    $audioComposerValue = Get-IfExists $audio 'Composer'
+                    $audioComposer = if ($audioComposerValue) { if ($audioComposerValue -is [array]) { $audioComposerValue -join ', ' } else { $audioComposerValue } } else { 'Unknown' }
+                    $spotifyComposerValue = Get-IfExists $spotify 'Composer'
+                    $composerColor = if ($spotifyComposerValue -and ($audioComposer -eq ($spotifyComposerValue -join ', '))) { 'Green' } else { 'Yellow' }
                     Write-Host ("`t`tcomposer: {0}" -f $audioComposer) -ForegroundColor $composerColor
+
+                    # Display additional classical music / detailed credits (if from Qobuz)
+                    if ($spotifyConductor = Get-IfExists $spotify 'Conductor') {
+                        Write-Host ("`t`tconductor: {0}" -f $spotifyConductor) -ForegroundColor Cyan
+                    }
+                    if ($spotifyEnsemble = Get-IfExists $spotify 'Ensemble') {
+                        Write-Host ("`t`tensemble: {0}" -f $spotifyEnsemble) -ForegroundColor Cyan
+                    }
+                    if ($spotifyFeatured = Get-IfExists $spotify 'FeaturedArtist') {
+                        Write-Host ("`t`tfeatured: {0}" -f $spotifyFeatured) -ForegroundColor Cyan
+                    }
+                    
+                    # Display detailed role breakdown if available (Qobuz rich metadata)
+                    if ($detailedRoles = Get-IfExists $spotify 'DetailedRoles') {
+                        if ($detailedRoles -and $detailedRoles.Count -gt 0) {
+                            Write-Host "`t`t--- Production Credits ---" -ForegroundColor DarkCyan
+                            foreach ($person in ($detailedRoles.Keys | Sort-Object)) {
+                                $roles = $detailedRoles[$person]
+                                Write-Host ("`t`t{0}: {1}" -f $person, $roles) -ForegroundColor DarkCyan
+                            }
+                        }
+                    }
 
                     Write-Host "filename: $($audio.Name)"
                 }

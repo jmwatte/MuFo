@@ -29,6 +29,36 @@ function Get-GtmProductField {
         return $null
     }
 }
+
+function Get-TrackV2Field {
+    param (
+        [Parameter(Mandatory)]
+        [string]$TrackV2Raw,
+
+        [Parameter(Mandatory)]
+        [string]$FieldName
+    )
+
+    try {
+        # Decode HTML entities
+        $decoded = [System.Net.WebUtility]::HtmlDecode($TrackV2Raw)
+
+        # Convert to JSON
+        $json = $decoded | ConvertFrom-Json
+
+        # Extract the field directly from the root object
+        if ($json.PSObject.Properties.Name -contains $FieldName) {
+            return $json.$FieldName
+        }
+        else {
+            return $null
+        }
+    }
+    catch {
+        Write-Verbose "Failed to parse data-track-v2 for field '$FieldName': $_"
+        return $null
+    }
+}
 # filepath: c:\Users\resto\Documents\PowerShell\Modules\MuFo\Private\Get-QAlbumTracks.ps1
 function Get-QAlbumTracks {
     [CmdletBinding()]
@@ -168,23 +198,122 @@ function Get-QAlbumTracks {
         $currentDisc = "01"
         function ParsePerformer($inputb) {
             if (-not $inputb -or $inputb -eq "Unknown Performer") {
-                return @{ Composer = $null; Artist = $null; MainArtist = $null }
+                return @{ 
+                    Composers = @()
+                    Performers = @()
+                    MainArtists = @()
+                    FeaturedArtists = @()
+                    Conductor = $null
+                    Ensemble = $null
+                    FullCredits = ""
+                    DetailedRoles = @{}
+                }
             }
+            
+            # Store original for Comment field
+            $fullCredits = $inputb
+            
+            # Parse format: "Name, Role, Role - Name, Role - Name, Role"
             $entries = $inputb -split " - "
-            $roles = @{}
+            $composers = @()
+            $performers = @()
+            $mainArtists = @()
+            $featuredArtists = @()
+            $conductor = $null
+            $ensemble = $null
+            $detailedRoles = @{}  # For display in Show-Tracks
+            
             foreach ($entry in $entries) {
                 $parts = $entry -split ", "
                 if ($parts.Length -lt 2) { continue }
+                
                 $name = $parts[0].Trim()
-                for ($i = 1; $i -lt $parts.Length; $i++) {
-                    $role = $parts[$i].Trim()
-                    $roles[$role] = $name
+                $roles = $parts[1..($parts.Length - 1)]
+                
+                # Store all roles for this person (for detailed display)
+                $detailedRoles[$name] = $roles -join ", "
+                
+                # Detect ensemble/orchestra by name pattern (e.g., "Royal Philharmonic Orchestra", "il Gardellino")
+                if ($name -match '(Orchestra|Ensemble|Philharmonic|Symphony|Quartet|Quintet|Trio)' -or $roles -contains 'Ensemble') {
+                    if (-not $ensemble) {
+                        $ensemble = $name
+                    }
+                    if ($name -notin $performers) {
+                        $performers += $name
+                    }
+                }
+                
+                foreach ($role in $roles) {
+                    $role = $role.Trim()
+                    
+                    # Extract Composers (including ComposerLyricist)
+                    if ($role -match '^Composer') {
+                        if ($name -notin $composers) {
+                            $composers += $name
+                        }
+                    }
+                    
+                    # Extract Conductor (including StringsConductor)
+                    if ($role -match 'Conductor') {
+                        $conductor = $name
+                        if ($name -notin $performers) {
+                            $performers += $name
+                        }
+                    }
+                    
+                    # Extract Ensemble (explicit role)
+                    if ($role -match '^Ensemble') {
+                        $ensemble = $name
+                        if ($name -notin $performers) {
+                            $performers += $name
+                        }
+                    }
+                    
+                    # Extract MainArtist
+                    if ($role -eq 'MainArtist') {
+                        if ($name -notin $mainArtists) {
+                            $mainArtists += $name
+                        }
+                        if ($name -notin $performers) {
+                            $performers += $name
+                        }
+                    }
+                    
+                    # Extract FeaturedArtist
+                    if ($role -eq 'FeaturedArtist') {
+                        if ($name -notin $featuredArtists) {
+                            $featuredArtists += $name
+                        }
+                        if ($name -notin $performers) {
+                            $performers += $name
+                        }
+                    }
+                    
+                    # Extract Vocalists
+                    if ($role -eq 'Vocalist') {
+                        if ($name -notin $performers) {
+                            $performers += $name
+                        }
+                    }
+                    
+                    # Add other performer roles (Artist, Soloist, etc.)
+                    if ($role -in @('Artist', 'Performer', 'Soloist', 'Instrumentalist')) {
+                        if ($name -notin $performers) {
+                            $performers += $name
+                        }
+                    }
                 }
             }
+            
             return @{
-                Composer   = $roles['Composer']
-                Artist     = $roles['Artist']
-                MainArtist = $roles['MainArtist']
+                Composers = $composers
+                Performers = $performers
+                MainArtists = $mainArtists
+                FeaturedArtists = $featuredArtists
+                Conductor = $conductor
+                Ensemble = $ensemble
+                FullCredits = $fullCredits
+                DetailedRoles = $detailedRoles
             }
         }
         foreach ($node in $children) {
@@ -205,6 +334,12 @@ function Get-QAlbumTracks {
 
             $dataGtm = $node.SelectSingleNode(".//div[contains(@class,'track')and @data-track]").GetAttributes('data-gtm').value  
             $categoryGenre = Get-GtmProductField -GtmRaw $dataGtm  -FieldName 'category'
+            $subCategoryGenre = Get-GtmProductField -GtmRaw $dataGtm  -FieldName 'subCategory'
+            
+            # Extract additional metadata from data-track-v2 (label, quality, etc.)
+            $dataTrackV2 = $node.SelectSingleNode(".//div[contains(@class,'track')and @data-track]").GetAttributes('data-track-v2').value
+            $label = Get-TrackV2Field -TrackV2Raw $dataTrackV2 -FieldName 'item_category2'
+            $quality = Get-TrackV2Field -TrackV2Raw $dataTrackV2 -FieldName 'item_variant_max'
 
             if ($node.SelectSingleNode(".//div[contains(@class,'track__items')]")) {
                 $trackNode = $node.SelectSingleNode(".//div[contains(@class,'track__items')]")
@@ -219,15 +354,34 @@ function Get-QAlbumTracks {
                 $trackNumber = if ($trackNumberNode) { "{0:D2}" -f [int]($trackNumberNode.InnerText.Trim()) } else { "Unknown Number" }
                 #$trackNumber = if ($trackNumberNode) { $trackNumberNode.InnerText.Trim() } else { "Unknown Number" }
                 $infoNode = $node.SelectSingleNode(".//div[@class='track__infos']/p[@class='track__info']")
-                $performerInfo = if ($infoNode) { $infoNode.InnerText.Trim() } else { "Unknown Performer" }
+                $performerInfo = if ($infoNode) { $infoNode.InnerText.Trim() } else { "" }
                 $parsed = ParsePerformer $performerInfo
 
+                # Build artists array from parsed performers and main artists
                 $artists = @()
-                if ($parsed.Artist) {
-                    $artists += [PSCustomObject]@{ name = $parsed.Artist; type = "artist" }
+                foreach ($performer in $parsed.Performers) {
+                    $artistType = if ($performer -in $parsed.MainArtists) { "main" } else { "artist" }
+                    $artists += [PSCustomObject]@{ name = $performer; type = $artistType }
                 }
-                if ($parsed.MainArtist -and $parsed.MainArtist -ne $parsed.Artist) {
-                    $artists += [PSCustomObject]@{ name = $parsed.MainArtist; type = "main" }
+                
+                # Fallback: If no artist found, try to extract from data-gtm "item_brand" field (album artist)
+                if ($artists.Count -eq 0) {
+                    try {
+                        $albumArtist = Get-GtmProductField -GtmRaw $dataGtm -FieldName 'item_brand'
+                        if ($albumArtist -and $albumArtist -ne '') {
+                            $artists += [PSCustomObject]@{ name = $albumArtist; type = "album_artist" }
+                            Write-Verbose "Using album artist fallback: $albumArtist"
+                        }
+                    } catch {
+                        Write-Verbose "Could not extract album artist from GTM data"
+                    }
+                }
+
+                # Combine all composers with semicolon separator
+                $composerString = if ($parsed.Composers.Count -gt 0) { 
+                    $parsed.Composers -join '; ' 
+                } else { 
+                    $null 
                 }
 
                 $out = [PSCustomObject]@{
@@ -240,11 +394,23 @@ function Get-QAlbumTracks {
                     TrackNumber  = $trackNumber
                     duration_ms  = $duration
                     duration     = $duration
-                    composer     = $parsed.Composer
+                    composer     = $composerString
+                    Composers    = $composerString
+                    Conductor    = $parsed.Conductor
+                    Ensemble     = $parsed.Ensemble
+                    FeaturedArtist = if ($parsed.FeaturedArtists.Count -gt 0) { $parsed.FeaturedArtists -join '; ' } else { $null }
                     # Provider-normalized artist fields (Qobuz track entries often lack explicit performers)
                     artists      = $artists
-                    Artist       = $artists
-                    genres       = $categoryGenre
+                    Artist       = if ($artists.Count -gt 0) { ($artists | ForEach-Object { $_.name }) -join '; ' } else { 'Unknown Artist' }
+                    # Genres: include both category and subCategory if available
+                    genres       = @($categoryGenre, $subCategoryGenre) | Where-Object { $_ -ne $null -and $_ -ne '' }
+                    # Additional metadata from Qobuz (label, quality)
+                    label        = $label
+                    quality      = $quality
+                    # Full production credits for Comment field
+                    Comment      = $parsed.FullCredits
+                    # Detailed role breakdown for Show-Tracks display
+                    DetailedRoles = $parsed.DetailedRoles
                 }
 
 
