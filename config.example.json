@@ -1,0 +1,13 @@
+{
+  "Spotify": {
+    "ClientId": "YOUR_SPOTIFY_CLIENT_ID_HERE",
+    "ClientSecret": "YOUR_SPOTIFY_CLIENT_SECRET_HERE"
+  },
+  "Qobuz": {
+    "AppId": "YOUR_QOBUZ_APP_ID_HERE",
+    "Secret": "YOUR_QOBUZ_SECRET_HERE"
+  },
+  "Discogs": {
+    "Token": "YOUR_DISCOGS_PERSONAL_ACCESS_TOKEN_HERE"
+  }
+}

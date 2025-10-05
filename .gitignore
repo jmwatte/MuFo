@@ -1,1 +1,17 @@
+# External libraries (TagLib-Sharp)
 lib/
+
+# Configuration files with sensitive credentials
+config.json
+*.local.json
+
+# User-specific settings
+.mufo/
+
+# Test output and debug files
+mufo-debug.json
+*.log
+
+# Temporary test files
+test-area/
+test-fixtures/local/
