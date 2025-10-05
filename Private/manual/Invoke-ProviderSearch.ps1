@@ -2,7 +2,7 @@ function Invoke-ProviderSearch {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [ValidateSet('Spotify', 'Qobuz')]
+        [ValidateSet('Spotify', 'Qobuz', 'Discogs')]
         [string]$Provider,
 
         [Parameter(Mandatory)]
@@ -16,5 +16,6 @@ function Invoke-ProviderSearch {
     switch ($Provider) {
         'Spotify' { Search-Item -Query $Query -Type $Type }
         'Qobuz'   { Search-QItem -Query $Query -Type $Type }
+        'Discogs' { Search-DItem -Query $Query -Type $Type }
     }
 }

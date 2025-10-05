@@ -5,7 +5,7 @@ function Invoke-MuFoManual {
         [ValidateNotNullOrEmpty()]
         [string]$Path,
         [Parameter(Mandatory = $false)]
-        [ValidateSet('Spotify', 'Qobuz')]  # Add more providers as needed
+        [ValidateSet('Spotify', 'Qobuz', 'Discogs')]  # Add more providers as needed
         [string]$Provider = 'Spotify',  # Default to Spotify for compatibility
         [Parameter(Mandatory = $false)]
         [string]$ArtistId,

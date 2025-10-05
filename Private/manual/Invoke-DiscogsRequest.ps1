@@ -56,8 +56,13 @@ Get credentials at: https://www.discogs.com/settings/developers
     }
 
     # Rate limiting: max 60 requests per minute for authenticated requests
-    if (-not $script:DiscogsLastRequest) { $script:DiscogsLastRequest = [datetime]::MinValue }
-    if (-not $script:DiscogsRequestCount) { $script:DiscogsRequestCount = 0 }
+    # Initialize script-scoped variables if they don't exist
+    if (-not (Get-Variable -Name DiscogsLastRequest -Scope Script -ErrorAction SilentlyContinue)) {
+        $script:DiscogsLastRequest = [datetime]::MinValue
+    }
+    if (-not (Get-Variable -Name DiscogsRequestCount -Scope Script -ErrorAction SilentlyContinue)) {
+        $script:DiscogsRequestCount = 0
+    }
 
     $now = [datetime]::Now
     $elapsed = ($now - $script:DiscogsLastRequest).TotalSeconds
@@ -84,8 +89,10 @@ Get credentials at: https://www.discogs.com/settings/developers
     }
 
     # Determine authentication method
-    $hasOAuth = ($config.ConsumerKey -and $config.ConsumerSecret)
-    $hasToken = ($config.Token)
+    # Handle both hashtable and PSCustomObject
+    $hasOAuth = ($config.PSObject.Properties['ConsumerKey'] -and $config.ConsumerKey -and 
+                 $config.PSObject.Properties['ConsumerSecret'] -and $config.ConsumerSecret)
+    $hasToken = ($config.PSObject.Properties['Token'] -and $config.Token)
 
     if ($hasToken) {
         # Personal Access Token authentication (preferred - simpler and works)
