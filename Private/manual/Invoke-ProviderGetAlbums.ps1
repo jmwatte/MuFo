@@ -9,12 +9,26 @@ function Invoke-ProviderGetAlbums {
         [string]$ArtistId,  # For Spotify: ID; for Qobuz: full href; for Discogs: numeric ID
 
         [Parameter()]
-        [string]$AlbumType = 'Album'  # For Spotify compatibility
+        [string]$AlbumType = 'Album',  # For Spotify compatibility
+
+        [Parameter()]
+        [switch]$MastersOnly,  # Discogs: Only master releases
+
+        [Parameter()]
+        [switch]$IncludeSingles,  # Discogs: Include singles
+
+        [Parameter()]
+        [switch]$IncludeCompilations  # Discogs: Include compilations
     )
 
     switch ($Provider) {
         'Spotify' { Get-ArtistAlbums -Id $ArtistId -Album }
         'Qobuz'   { Get-QArtistAlbums -Id $ArtistId }  # $ArtistId is $href
-        'Discogs' { Get-DArtistAlbums -Id $ArtistId }
+        'Discogs' { 
+            Get-DArtistAlbums -Id $ArtistId `
+                -MastersOnly:$MastersOnly `
+                -IncludeSingles:$IncludeSingles `
+                -IncludeCompilations:$IncludeCompilations
+        }
     }
 }

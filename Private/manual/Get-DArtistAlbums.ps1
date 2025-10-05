@@ -24,7 +24,19 @@ function Get-DArtistAlbums {
 
         [Parameter(Mandatory = $false)]
         [ValidateSet('Album')]
-        [string]$Album = 'Album'
+        [string]$Album = 'Album',
+
+        [Parameter(Mandatory = $false)]
+        [switch]$MastersOnly = $true,  # DEFAULT: Only get master releases (canonical versions) - reduces duplicates
+
+        [Parameter(Mandatory = $false)]
+        [switch]$IncludeSingles,  # Include singles
+
+        [Parameter(Mandatory = $false)]
+        [switch]$IncludeCompilations,  # Include compilations
+
+        [Parameter(Mandatory = $false)]
+        [switch]$IncludeAppearances  # Include guest appearances
     )
 
     try {
@@ -40,26 +52,50 @@ function Get-DArtistAlbums {
             
             if ($response.releases) {
                 foreach ($release in $response.releases) {
-                    # Filter to main releases (skip appearances on compilations, etc.)
-                    # You can adjust this filter based on your needs
+                    # Apply filters based on parameters
                     $includeRelease = $true
                     
-                    # Skip if this is just an appearance (not main artist)
-                    if ($release.role -and $release.role -ne 'Main') {
+                    # Check role - skip appearances unless requested
+                    if ($release.role -and $release.role -ne 'Main' -and -not $IncludeAppearances) {
+                        Write-Verbose "Skipping appearance: $($release.title)"
                         $includeRelease = $false
+                    }
+                    
+                    # Check type - filter singles, compilations, etc.
+                    if ($release.type) {
+                        $releaseType = $release.type.ToLower()
+                        
+                        # Skip singles unless requested
+                        if ($releaseType -match 'single' -and -not $IncludeSingles) {
+                            Write-Verbose "Skipping single: $($release.title)"
+                            $includeRelease = $false
+                        }
+                        
+                        # Skip compilations unless requested
+                        if ($releaseType -match 'compilation' -and -not $IncludeCompilations) {
+                            Write-Verbose "Skipping compilation: $($release.title)"
+                            $includeRelease = $false
+                        }
+                        
+                        # If MastersOnly, skip non-master releases
+                        if ($MastersOnly -and $releaseType -ne 'master') {
+                            Write-Verbose "Skipping non-master release: $($release.title)"
+                            $includeRelease = $false
+                        }
                     }
                     
                     if ($includeRelease) {
                         # Transform to match Spotify-like structure
+                        # Handle optional properties that may not be present
                         $albumObj = [PSCustomObject]@{
-                            name         = $release.title
+                            name         = if ($release.title) { $release.title } else { "Unknown Album" }
                             id           = $release.id
-                            release_date = $release.year  # Discogs uses year, not full date
-                            type         = $release.type  # master, release, etc.
-                            artist       = $release.artist
-                            format       = $release.format  # CD, Vinyl, etc.
-                            label        = $release.label
-                            resource_url = $release.resource_url
+                            release_date = if ($release.year) { $release.year } else { "" }
+                            type         = if ($release.type) { $release.type } else { "release" }
+                            artist       = if ($release.artist) { $release.artist } else { "" }
+                            format       = if ($release.PSObject.Properties['format']) { $release.format } else { "" }
+                            label        = if ($release.PSObject.Properties['label']) { $release.label } else { "" }
+                            resource_url = if ($release.PSObject.Properties['resource_url']) { $release.resource_url } else { "" }
                         }
                         
                         $allReleases += $albumObj
