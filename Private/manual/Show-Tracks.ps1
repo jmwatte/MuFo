@@ -3,121 +3,151 @@ function Show-Tracks {
         [array]$PairedTracks,
         [string]$AlbumName,
         [PSCustomObject]$SpotifyArtist,
-        #add a parameter reverse so we can flip certain things
-        [switch]$Reverse
+        [switch]$Reverse,
+        [string]$OptionsText,
+        [string[]]$ValidCommands,
+        [string]$PromptColor = 'Gray',
+        [scriptblock]$InputReader
     )
 
-    $pageSize = 10  # Number of tracks per page; adjust as needed
+    $supportsCommands = $ValidCommands -and $ValidCommands.Count -gt 0
+    $commandLookup = @{}
+    if ($supportsCommands) {
+        foreach ($cmd in $ValidCommands) {
+            if ($null -ne $cmd) {
+                $commandLookup[$cmd.ToString().ToLowerInvariant()] = $cmd
+            }
+        }
+    }
+
+    $reader = if ($InputReader) { $InputReader } else { { param($prompt) Read-Host -Prompt $prompt } }
+
+    $pageSize = 10
     $page = 0
-    $totalPages = [math]::Ceiling($PairedTracks.Count / $pageSize)
+    $totalPages = if ($PairedTracks.Count -gt 0) { [math]::Ceiling($PairedTracks.Count / $pageSize) } else { 1 }
 
     while ($true) {
         Clear-Host
         Write-Host "Tracks for album $($AlbumName): (Page $($page + 1) of $totalPages)`n"
 
-        $start = $page * $pageSize
-        $end = [math]::Min($start + $pageSize - 1, $PairedTracks.Count - 1)
+        if ($PairedTracks.Count -eq 0) {
+            Write-Host "No tracks available for display." -ForegroundColor Yellow
+            Write-Host "`nPage 1 of 1 (Tracks 0 of 0)"
+        }
+        else {
+            $start = $page * $pageSize
+            $end = [math]::Min($start + $pageSize - 1, $PairedTracks.Count - 1)
 
-        for ($i = $start; $i -le $end; $i++) {
-            $pair = $PairedTracks[$i]
-            $num = $i + 1
+            for ($i = $start; $i -le $end; $i++) {
+                $pair = $PairedTracks[$i]
+                $num = $i + 1
 
-            $spotify = $pair.SpotifyTrack
-            $audio = $pair.AudioFile
+                $spotify = $pair.SpotifyTrack
+                $audio = $pair.AudioFile
 
-            Write-Host "[$num]"
+                Write-Host "[$num]"
 
-            if ($spotify) {
-                $disc = if ($value = Get-IfExists $spotify 'disc_number') { $value } else { 1 }
-                $track = if ($value = Get-IfExists  $spotify  'track_number') { $value } else { 0 }
-                Write-Host ("↓`t{0:D2}.{1:D2}: {2}" -f $disc, $track, $spotify.name)
+                $artistDisplay = 'Unknown'
+                if ($spotify) {
+                    $disc = if ($value = Get-IfExists $spotify 'disc_number') { $value } else { 1 }
+                    $track = if ($value = Get-IfExists $spotify 'track_number') { $value } else { 0 }
+                    Write-Host ("↓`t{0:D2}.{1:D2}: {2}" -f $disc, $track, $spotify.name)
 
-                # Artist display
-                $a = $spotify.artists
-                if ($a -is [System.Collections.IEnumerable] -and -not ($a -is [string])) {
-                    $artistDisplay = ($a | ForEach-Object { if ($_.PSObject.Properties.Match('name')) { $_.name } else { $_ } }) -join ', '
-                }
-                else {
-                    $artistDisplay = $a
-                }
-                Write-Host ("`t`tartist: {0}" -f $artistDisplay)
-
-                # Genres from SpotifyArtist (if available)
-                if ($value = Get-IfExists  $SpotifyArtist  'genres') {
-                    $providerGenres = $value -join ', '
-                    Write-Host ("`t`tgenres: {0}" -f $providerGenres)
-                }
-                elseif ($value = Get-IfExists  $spotify  'genres') {
-                    $providerGenres = $value -join ', '
-                    Write-Host ("`t`tgenres: {0}" -f $providerGenres)
-                }
-
-                # Composer (if available)
-                if ($value = Get-IfExists  $spotify 'composer') {
-                    if ($value -is [System.Collections.IEnumerable] -and -not ($value -is [string])) {
-                        $providerComposer = $value -join ', '
+                    $a = $spotify.artists
+                    if ($a -is [System.Collections.IEnumerable] -and -not ($a -is [string])) {
+                        $artistDisplay = ($a | ForEach-Object { if ($_.PSObject.Properties.Match('name')) { $_.name } else { $_ } }) -join ', '
                     }
                     else {
-                        $providerComposer = $value
+                        $artistDisplay = $a
                     }
-                    Write-Host ("`t`tcomposer: {0}" -f $providerComposer)
+                    Write-Host ("`t`tartist: {0}" -f $artistDisplay)
+
+                    if ($value = Get-IfExists $SpotifyArtist 'genres') {
+                        $providerGenres = $value -join ', '
+                        Write-Host ("`t`tgenres: {0}" -f $providerGenres)
+                    }
+                    elseif ($value = Get-IfExists $spotify 'genres') {
+                        $providerGenres = $value -join ', '
+                        Write-Host ("`t`tgenres: {0}" -f $providerGenres)
+                    }
+
+                    if ($value = Get-IfExists $spotify 'composer') {
+                        if ($value -is [System.Collections.IEnumerable] -and -not ($value -is [string])) {
+                            $providerComposer = $value -join ', '
+                        }
+                        else {
+                            $providerComposer = $value
+                        }
+                        Write-Host ("`t`tcomposer: {0}" -f $providerComposer)
+                    }
                 }
-                # if ($spotify.PSObject.Properties.Match('composer') -and $spotify.composer) {
-                #     $providerComposer = $spotify.composer -join ', '
-                #     Write-Host ("`t`tcomposer: {0}" -f $providerComposer)
-                # }
-            }
-            else {
-                Write-Host "↓ No Spotify track data available"
-            }
+                else {
+                    Write-Host "↓ No Spotify track data available"
+                }
 
-            if ($audio) {
-                $s=if($Reverse){'↑'}else{'_'}
-                $color = if ($spotify -and $audio.Title -eq $spotify.name) { 'Green' } else { 'Yellow' }
-                Write-Host ("$($s)`t{0:D2}.{1:D2}: {2}" -f $audio.DiscNumber, $audio.TrackNumber, $audio.Title) -ForegroundColor $color
+                if ($audio) {
+                    $arrow = if ($Reverse) { '↑' } else { '_' }
+                    $color = if ($spotify -and $audio.Title -eq $spotify.name) { 'Green' } else { 'Yellow' }
+                    Write-Host ("$arrow`t{0:D2}.{1:D2}: {2}" -f $audio.DiscNumber, $audio.TrackNumber, $audio.Title) -ForegroundColor $color
 
-                $audioArtist = if ($value = Get-IfExists  $audio  'Artist') { $value } else { 'Unknown' }
-                $artistColor = if ($spotify -and $audioArtist -eq $artistDisplay) { 'Green' } else { 'Yellow' }
-                Write-Host ("`t`tartist: {0}" -f $audioArtist) -ForegroundColor $artistColor
-                $audioGenres = if ($value = Get-IfExists  $audio.TagFile.tag  'Genres') { $value -join ', ' } else { 'Unknown' }
-                $genresColor = if ($value = Get-IfExists $SpotifyArtist 'genres' -and ($audioGenres -eq ($value -join ', '))) { 'Green' } else { 'Yellow' }
-                Write-Host ("`t`tgenres: {0}" -f $audioGenres) -ForegroundColor $genresColor
+                    $audioArtist = if ($value = Get-IfExists $audio 'Artist') { $value } else { 'Unknown' }
+                    $artistColor = if ($spotify -and $audioArtist -eq $artistDisplay) { 'Green' } else { 'Yellow' }
+                    Write-Host ("`t`tartist: {0}" -f $audioArtist) -ForegroundColor $artistColor
 
-                $audioComposer = if ($value = Get-IfExists  $audio  'Composer' -and $value) { $value -join ', ' } else { 'Unknown' }
-                $composerColor = if ($value = Get-IfExists  $spotify 'Composer' -and ($audioComposer -eq ($value -join ', '))) { 'Green' } else { 'Yellow' }
-                #$composerColor = if ($spotify -and $spotify.composer -and ($audioComposer -eq ($spotify.composer -join ', '))) { 'Green' } else { 'Yellow' }
-                Write-Host ("`t`tcomposer: {0}" -f $audioComposer) -ForegroundColor $composerColor
+                    $audioGenres = if ($value = Get-IfExists $audio.TagFile.tag 'Genres') { $value -join ', ' } else { 'Unknown' }
+                    $genresColor = if ($value = Get-IfExists $SpotifyArtist 'genres' -and ($audioGenres -eq ($value -join ', '))) { 'Green' } else { 'Yellow' }
+                    Write-Host ("`t`tgenres: {0}" -f $audioGenres) -ForegroundColor $genresColor
 
-                Write-Host "filename: $($audio.Name)"
-            }
-            else {
-                Write-Host "_ No matching audio file" -ForegroundColor Red
+                    $audioComposer = if ($value = Get-IfExists $audio 'Composer' -and $value) { $value -join ', ' } else { 'Unknown' }
+                    $composerColor = if ($value = Get-IfExists $spotify 'Composer' -and ($audioComposer -eq ($value -join ', '))) { 'Green' } else { 'Yellow' }
+                    Write-Host ("`t`tcomposer: {0}" -f $audioComposer) -ForegroundColor $composerColor
+
+                    Write-Host "filename: $($audio.Name)"
+                }
+                else {
+                    Write-Host "_ No matching audio file" -ForegroundColor Red
+                }
+
+                Write-Host ""
             }
 
-            Write-Host ""  # Add spacing between tracks
+            $lastIndex = [math]::Min($end + 1, $PairedTracks.Count)
+            Write-Host "`nPage $($page + 1) of $totalPages (Tracks $($start + 1) to $lastIndex of $($PairedTracks.Count))"
         }
 
-        Write-Host "`nPage $($page + 1) of $totalPages (Tracks $($start + 1) to $($end + 1) of $($PairedTracks.Count))"
-        $inputH = Read-Host "Press Enter for next page, 'p' for previous, 'q' to quit viewing"
-
-        switch ($inputH) {
-            'q' { return }
-            'p' { if ($page -gt 0) { $page-- } }
-            '' { 
-                $page++
-                if ($page -ge $totalPages) { $page = $totalPages - 1 }
-            }
-            'n' {
-                $page++
-                if ($page -ge $totalPages) { $page = $totalPages - 1 }
-            }
-            default {
-                Write-Host "Unrecognized input: '$inputH'. Please press Enter, 'p', or 'q'."
-                Start-Sleep -Seconds 1
-            }
+        if ($supportsCommands -and $OptionsText) {
+            Write-Host $OptionsText -ForegroundColor $PromptColor
         }
 
-        #if ($page * $pageSize -ge $($PairedTracks.Count)) { $page-- }  # Don't go beyond last page
+        $promptMessage = if ($supportsCommands) { "Enter command (Enter=next, p=previous, q=classic options)" } else { "Press Enter for next page, 'p' for previous, 'q' to quit viewing" }
+        $inputRaw = & $reader $promptMessage
+        $inputText = if ($null -ne $inputRaw) { $inputRaw.Trim() } else { '' }
+        $inputLower = $inputText.ToLowerInvariant()
+
+        if ($inputLower -eq '' -or $inputLower -eq 'n') {
+            if ($PairedTracks.Count -eq 0) { return $null }
+            $page++
+            if ($page -ge $totalPages) { $page = [math]::Max($totalPages - 1, 0) }
+            continue
+        }
+
+        if ($inputLower -eq 'p') {
+            if ($PairedTracks.Count -eq 0) { return $null }
+            if ($page -gt 0) { $page-- }
+            continue
+        }
+
+        if ($inputLower -eq 'q') {
+            if ($supportsCommands) { return 'q' }
+            return
+        }
+
+        if ($supportsCommands -and $commandLookup.ContainsKey($inputLower)) {
+            return $inputLower
+        }
+
+        Write-Host "Unrecognized input: '$inputText'." -ForegroundColor Yellow
+        Start-Sleep -Seconds 1
     }
 }
 

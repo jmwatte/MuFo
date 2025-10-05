@@ -252,7 +252,7 @@ function Invoke-MuFoManual {
                     }
                     "C" {
                         Clear-Host
-                        if($useWhatIf){$HostColor='Cyan'}else{$HostColor='Gray'}
+                        if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Gray' }
                         Write-Host "Searching tracks for album: $($ProviderAlbum.name) (id: $($ProviderAlbum.id))"
                         # If the caller asked for non-interactive behavior, do not try to drive the
                         # interactive track-selection UI. This prevents Read-Host from blocking the
@@ -408,13 +408,12 @@ function Invoke-MuFoManual {
                             Write-Verbose "Failed to print debug provider tracks: $($_.Exception.Message)"
                         }
                         $exitdo = $false
-                        $needDisplay = $true
+                        $pairedTracks = $null
+                        $refreshTracks = $true
+                        $goCDisplayShown = $false
                         do {
-                            if ($needDisplay) {
-                                if($useWhatIf){$HostColor='Cyan'}else{$HostColor='Gray'}
-                                # Write-Host "DEBUG Invoke-MuFoManual: Called Set-Tracks with SortMethod=$sortMethod, Reverse=$reverseSource, AudioFiles count=$($audioFiles.Count), SpotifyTracks count=$($tracksForAlbum.Count)"
-                                # write-host $ReverseSource
-                                # Around line 325 in Invoke-MuFoManual.ps1
+                            if ($refreshTracks -or -not $pairedTracks) {
+                                if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Gray' }
                                 $param = @{
                                     SortMethod    = $sortMethod
                                     AudioFiles    = $audioFiles
@@ -422,53 +421,60 @@ function Invoke-MuFoManual {
                                 }
                                 if ($reverseSource) { $param.Reverse = $true }
                                 $pairedTracks = Set-Tracks @param
+                                $refreshTracks = $false
 
-                                $paramshow = @{
-                                    PairedTracks  = $pairedTracks
-                                    AlbumName     = $ProviderAlbum.name
-                                    SortMethod    = $sortMethod
-                                    AudioFiles    = $audioFiles
-                                    SpotifyTracks = $tracksForAlbum
+                                if ($goC -and -not $goCDisplayShown) {
+                                    $autoReader = { param($prompt) 'q' }
+                                    $autoShowParams = @{
+                                        PairedTracks  = $pairedTracks
+                                        AlbumName     = $ProviderAlbum.name
+                                        SpotifyArtist = $ProviderArtist
+                                    }
+                                    if ($reverseSource) { $autoShowParams.Reverse = $true }
+                                    Show-Tracks @autoShowParams -InputReader $autoReader | Out-Null
+                                    $goCDisplayShown = $true
                                 }
-                                if ($reverseSource) { $paramshow.Reverse = $true }
+                            }
 
-
-                                # $audioFiles = $pairedTracks.Audio
-                                # $tracksForAlbum = $pairedTracks.Spotify
-
-                                Show-Tracks - @paramshow
-                                $needDisplay = $false
-                            }                            # Pause briefly so the user can read the displayed track alignment
-                            # Avoid blocking in non-interactive or auto-apply modes
-                            <# if (-not $NonInteractive -and -not $goC) {
-                                Write-Host "`nPress Enter to continue (or Ctrl+C to abort)..." -ForegroundColor Cyan
-                                Read-Host | Out-Null
-                            } #>
-
-                            # If goC is set, auto-run save-all and skip interactive prompts (honor -WhatIf)
                             if ($goC) {
                                 Write-Host "goC: auto-applying Save-All for album '$($ProviderAlbum.name)'." -ForegroundColor Yellow
                                 $inputF = 'sa'
                             }
                             else {
-                               # if($useWhatIf){$HostColor='Cyan'}else{$HostColor='Gray'}
+                                if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Gray' }
                                 $whatIfStatus = if ($useWhatIf) { "ON" } else { "OFF" }
-                                Write-Host "`nOptions:SortByTit(l)e,(d)uration,(t)rackNumber,(n)ame,(h)ybrid,(r)everse,(s)ave Tags(st),(sf)older,(sa)ll,(b)ack,(w)hatif $whatIfStatus (s)kip" -ForegroundColor $HostColor
-                                $inputF = Read-Host "Select tracks or command"
+                                $optionsLine = "`nOptions:SortByTit(l)e,(d)uration,(t)rackNumber,(n)ame,(h)ybrid,(m)anual,(r)everse,(s)ave Tags(st),(sf)older,(sa)ll,(b)ack,(w)hatif $whatIfStatus (s)kip"
+                                $commandList = @('d','t','n','l','h','m','r','st','sf','sa','b','w','whatif','skip')
+                                $paramshow = @{
+                                    PairedTracks   = $pairedTracks
+                                    AlbumName      = $ProviderAlbum.name
+                                    SpotifyArtist  = $ProviderArtist
+                                    OptionsText    = $optionsLine
+                                    ValidCommands  = $commandList
+                                    PromptColor    = $HostColor
+                                }
+                                if ($reverseSource) { $paramshow.Reverse = $true }
+                                $inputF = Show-Tracks @paramshow
+
+                                if ($null -eq $inputF) { continue }
+                                if ($inputF -eq 'q') {
+                                    Write-Host $optionsLine -ForegroundColor $HostColor
+                                    $inputF = Read-Host "Select tracks or command"
+                                }
                             }
-    
+
                             switch -Regex ($inputF) {
-                                '^d$' { $sortMethod = 'byDuration'; $needDisplay = $true; continue }
-                                '^t$' { $sortMethod = 'byTrackNumber'; $needDisplay = $true; continue }
-                                '^n$' { $sortMethod = 'byName'; $needDisplay = $true; continue }
-                                '^l$' { $sortMethod = 'byTitle'; $needDisplay = $true; continue }
-                                '^h$' { $sortMethod = 'Hybrid'; $needDisplay = $true; continue }
-                                '^m$' { $sortMethod = 'Manual'; $needDisplay = $true; continue }
-                                '^r$' { $ReverseSource = -not $ReverseSource; $needDisplay = $true; continue }
+                                '^d$' { $sortMethod = 'byDuration'; $refreshTracks = $true; continue }
+                                '^t$' { $sortMethod = 'byTrackNumber'; $refreshTracks = $true; continue }
+                                '^n$' { $sortMethod = 'byName'; $refreshTracks = $true; continue }
+                                '^l$' { $sortMethod = 'byTitle'; $refreshTracks = $true; continue }
+                                '^h$' { $sortMethod = 'Hybrid'; $refreshTracks = $true; continue }
+                                '^m$' { $sortMethod = 'Manual'; $refreshTracks = $true; continue }
+                                '^r$' { $ReverseSource = -not $ReverseSource; $refreshTracks = $true; continue }
                                 '^b$' { $stage = 'B'; $exitdo = $true; break }
                                 '^whatif$|^w$' {
                                     $useWhatIf = -not $useWhatIf
-                                    $needDisplay = $true
+                                    $refreshTracks = $true
                                     continue
                                 }
                                 '^skip$' { break 3 }
