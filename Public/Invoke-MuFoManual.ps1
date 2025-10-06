@@ -139,6 +139,7 @@ function Invoke-MuFoManual {
                         # Try smart API search FIRST (fast, targeted results)
                         Write-Host "Searching for albums matching: $albumName..." -ForegroundColor Cyan
                         Write-Verbose "Trying smart search for: $albumName"
+                        Write-Verbose "Parameters: Provider=$Provider, ArtistId=$($ProviderArtist.id), ArtistName=$($ProviderArtist.name), AlbumName=$albumName, MastersOnly=$($Provider -eq 'Discogs'), CacheProvided=$($null -ne $cachedAlbums)"
                         try { 
                             $albumsForArtist = Invoke-ProviderSearchAlbums `
                                 -Provider $Provider `
@@ -150,11 +151,15 @@ function Invoke-MuFoManual {
                             
                             $albumsForArtist = @($albumsForArtist)  # Ensure array
                             
+                            Write-Verbose "Smart search returned: $($albumsForArtist.Count) albums"
                             if ($albumsForArtist.Count -gt 0) {
                                 Write-Host "✓ Found $($albumsForArtist.Count) albums via smart search" -ForegroundColor Green
+                            } else {
+                                Write-Verbose "Smart search returned 0 albums - will fall back to fetching all"
                             }
                         } catch { 
-                            Write-Warning "Smart search failed: $_"
+                            Write-Warning "Smart search exception: $_"
+                            Write-Verbose "Exception details: $($_.Exception.Message)"
                             $albumsForArtist = @() 
                         }
                         

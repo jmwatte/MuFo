@@ -49,9 +49,11 @@ function Search-DAlbumsByName {
     )
 
     Write-Verbose "Searching Discogs for artist '$ArtistName' albums matching '$AlbumName'"
+    Write-Host "[DEBUG] Search-DAlbumsByName called: Artist='$ArtistName', Album='$AlbumName', MastersOnly=$MastersOnly, CacheProvided=$($null -ne $AllAlbumsCache)" -ForegroundColor Yellow
 
     # If cache provided, use cache-based filtering (fast, no API calls)
     if ($AllAlbumsCache) {
+        Write-Host "[DEBUG] Using cache path" -ForegroundColor Yellow
         Write-Verbose "Using cached album list ($($AllAlbumsCache.Count) albums)"
         $allAlbums = $AllAlbumsCache
         
@@ -76,22 +78,19 @@ function Search-DAlbumsByName {
     }
 
     # No cache - use Discogs API search
+    Write-Host "[DEBUG] Using API search path" -ForegroundColor Yellow
     Write-Verbose "Searching Discogs API with title='$AlbumName' and artist='$ArtistName'"
     
     try {
         $searchParams = @{
             artist = $ArtistName
             title = $AlbumName
+            type = 'release'  # Always search for releases (broader results)
         }
         
-        # Add type filter if MastersOnly requested
-        if ($MastersOnly) {
-            $searchParams['type'] = 'master'
-        } else {
-            $searchParams['type'] = 'release'
-        }
-        
+        Write-Host "[DEBUG] Calling Invoke-DiscogsRequest..." -ForegroundColor Yellow
         $searchResult = Invoke-DiscogsRequest -Uri 'https://api.discogs.com/database/search' -Body $searchParams
+        Write-Host "[DEBUG] API call completed, processing results..." -ForegroundColor Yellow
         
         if (-not $searchResult.results -or $searchResult.results.Count -eq 0) {
             Write-Verbose "No albums found via API search"
@@ -99,10 +98,19 @@ function Search-DAlbumsByName {
         }
         
         Write-Verbose "Found $($searchResult.results.Count) albums via API search"
+        Write-Verbose "Converting $($searchResult.results.Count) search results to album objects..."
         
         # Convert Discogs search results to album objects (Spotify-compatible format)
         $albums = @()
         foreach ($result in $searchResult.results) {
+            Write-Verbose "Processing result: id=$($result.id), title=$($result.title), type=$($result.type)"
+            
+            # Filter by type if MastersOnly requested
+            if ($MastersOnly -and $result.type -ne 'master') {
+                Write-Verbose "Skipping non-master release: $($result.title)"
+                continue
+            }
+            
             # Extract album name from title (format: "Artist - Album Name")
             $albumTitle = $result.title
             if ($albumTitle -match '^\s*(.+?)\s*[-–]\s*(.+?)\s*$') {
@@ -128,8 +136,10 @@ function Search-DAlbumsByName {
             }
             
             $albums += $album
+            Write-Verbose "Added album: $albumTitle (id: $($album.id))"
         }
         
+        Write-Verbose "Returning $($albums.Count) albums"
         return $albums
         
     } catch {
