@@ -75,6 +75,7 @@ function Invoke-MuFoManual {
             $page = 1
             $pageSize = 25
             $albumDone = $false
+            $mastersOnlyMode = $true  # Track Discogs filter state: true=masters only, false=all releases
             while ($true) {
                 switch ($stage) {
                     
@@ -217,6 +218,17 @@ function Invoke-MuFoManual {
                         $exitdo = $false
                         while ($true) {
                             # Clear-Host
+                            
+                            # Show filter mode indicator for Discogs
+                            if ($Provider -eq 'Discogs') {
+                                $modeIndicator = if ($mastersOnlyMode) { 
+                                    "[Filter: MASTERS ONLY - type '*' to include all releases]" 
+                                } else { 
+                                    "[Filter: ALL RELEASES - type '*' for masters only]" 
+                                }
+                                Write-Host $modeIndicator -ForegroundColor Yellow
+                            }
+                            
                             Write-Host "Albums for artist $($ProviderArtist.name):"
                             Write-Host "for local album: $($albumName) (year: $year)"
                             $totalPages = [math]::Ceiling($albumsForArtist.Count / $pageSize)
@@ -264,15 +276,40 @@ function Invoke-MuFoManual {
                                     break
                                 }
                                 '^\*$' {
-                                    # User wants to see ALL albums for artist
-                                    Write-Host "Fetching all albums for artist..." -ForegroundColor Cyan
+                                    # Toggle between Masters-only and All-releases for Discogs
+                                    if ($Provider -eq 'Discogs') {
+                                        $mastersOnlyMode = -not $mastersOnlyMode
+                                        $modeText = if ($mastersOnlyMode) { "MASTER releases only" } else { "ALL release types" }
+                                        Write-Host "`nToggling to: $modeText" -ForegroundColor Yellow
+                                        Write-Host "Fetching albums..." -ForegroundColor Cyan
+                                    } else {
+                                        Write-Host "Fetching all albums for artist..." -ForegroundColor Cyan
+                                    }
+                                    
                                     try {
-                                        $albumsForArtist = Invoke-ProviderGetAlbums -Provider $Provider -ArtistId $ProviderArtist.id -AlbumType 'Album'
+                                        $fetchParams = @{
+                                            Provider = $Provider
+                                            ArtistId = $ProviderArtist.id
+                                            AlbumType = 'Album'
+                                        }
+                                        
+                                        # Add MastersOnly parameter for Discogs
+                                        if ($Provider -eq 'Discogs') {
+                                            $fetchParams['MastersOnly'] = $mastersOnlyMode
+                                        }
+                                        
+                                        $albumsForArtist = Invoke-ProviderGetAlbums @fetchParams
                                         $albumsForArtist = @($albumsForArtist)
                                         $albumsForArtist = $albumsForArtist | Sort-Object { - (Get-StringSimilarity-Jaccard -String1 $albumName -String2 $_.Name) }
                                         $cachedAlbums = $albumsForArtist
                                         $page = 1
-                                        Write-Host "Loaded $($albumsForArtist.Count) albums" -ForegroundColor Green
+                                        
+                                        $statusMsg = if ($Provider -eq 'Discogs') {
+                                            "✓ Loaded $($albumsForArtist.Count) albums [$modeText]"
+                                        } else {
+                                            "✓ Loaded $($albumsForArtist.Count) albums"
+                                        }
+                                        Write-Host $statusMsg -ForegroundColor Green
                                     } catch {
                                         Write-Warning "Failed to fetch all albums: $_"
                                     }
