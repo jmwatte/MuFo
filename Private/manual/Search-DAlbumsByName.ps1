@@ -59,8 +59,11 @@ function Search-DAlbumsByName {
         # Better approach: get all albums for artist and filter locally
         try {
             $allAlbums = Get-DArtistAlbums -Id $ArtistId -MastersOnly:$MastersOnly
+            $allAlbums = @($allAlbums)  # Ensure array
+            
             # Case-insensitive filtering
             $filtered = $allAlbums | Where-Object { $_.name -match [regex]::Escape($AlbumName) -or $_.name -like "*$AlbumName*" }
+            $filtered = @($filtered)  # Ensure array
             
             # If no matches with contains, try fuzzy matching with Jaccard similarity
             if ($filtered.Count -eq 0 -and (Get-Command Get-StringSimilarity-Jaccard -ErrorAction SilentlyContinue)) {

@@ -56,13 +56,13 @@ function Get-DArtistAlbums {
                     $includeRelease = $true
                     
                     # Check role - skip appearances unless requested
-                    if ($release.role -and $release.role -ne 'Main' -and -not $IncludeAppearances) {
+                    if ($release.PSObject.Properties['role'] -and $release.role -ne 'Main' -and -not $IncludeAppearances) {
                         Write-Verbose "Skipping appearance: $($release.title)"
                         $includeRelease = $false
                     }
                     
                     # Check type - filter singles, compilations, etc.
-                    if ($release.type) {
+                    if ($release.PSObject.Properties['type'] -and $release.type) {
                         $releaseType = $release.type.ToLower()
                         
                         # Skip singles unless requested
@@ -88,11 +88,11 @@ function Get-DArtistAlbums {
                         # Transform to match Spotify-like structure
                         # Handle optional properties that may not be present
                         $albumObj = [PSCustomObject]@{
-                            name         = if ($release.title) { $release.title } else { "Unknown Album" }
+                            name         = if ($release.PSObject.Properties['title']) { $release.title } else { "Unknown Album" }
                             id           = $release.id
-                            release_date = if ($release.year) { $release.year } else { "" }
-                            type         = if ($release.type) { $release.type } else { "release" }
-                            artist       = if ($release.artist) { $release.artist } else { "" }
+                            release_date = if ($release.PSObject.Properties['year']) { $release.year } else { "" }
+                            type         = if ($release.PSObject.Properties['type']) { $release.type } else { "release" }
+                            artist       = if ($release.PSObject.Properties['artist']) { $release.artist } else { "" }
                             format       = if ($release.PSObject.Properties['format']) { $release.format } else { "" }
                             label        = if ($release.PSObject.Properties['label']) { $release.label } else { "" }
                             resource_url = if ($release.PSObject.Properties['resource_url']) { $release.resource_url } else { "" }
