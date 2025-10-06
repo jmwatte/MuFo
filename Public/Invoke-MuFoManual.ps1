@@ -136,20 +136,9 @@ function Invoke-MuFoManual {
                             $cachedArtistId = $ProviderArtist.id
                         }
                         
-                        # Fetch all albums ONCE and cache them (optimized for Discogs rate limits)
-                        if (-not $cachedAlbums) {
-                            Write-Verbose "Fetching all albums for artist (will be cached for subsequent searches)"
-                            try { 
-                                $cachedAlbums = Invoke-ProviderGetAlbums -Provider $Provider -ArtistId $ProviderArtist.id -AlbumType 'Album'
-                                $cachedAlbums = @($cachedAlbums)  # Ensure array
-                            } catch { 
-                                Write-Warning "Failed to fetch artist albums: $_"
-                                $cachedAlbums = @() 
-                            }
-                        }
-                        
-                        # Now do smart search using the cached albums (no additional API calls)
-                        Write-Verbose "Filtering cached albums for: $albumName"
+                        # Try smart API search FIRST (fast, targeted results)
+                        Write-Host "Searching for albums matching: $albumName..." -ForegroundColor Cyan
+                        Write-Verbose "Trying smart search for: $albumName"
                         try { 
                             $albumsForArtist = Invoke-ProviderSearchAlbums `
                                 -Provider $Provider `
@@ -158,14 +147,33 @@ function Invoke-MuFoManual {
                                 -AlbumName $albumName `
                                 -MastersOnly:($Provider -eq 'Discogs') `
                                 -AllAlbumsCache $cachedAlbums
+                            
+                            $albumsForArtist = @($albumsForArtist)  # Ensure array
+                            
+                            if ($albumsForArtist.Count -gt 0) {
+                                Write-Host "✓ Found $($albumsForArtist.Count) albums via smart search" -ForegroundColor Green
+                            }
                         } catch { 
-                            Write-Warning "Album filtering failed: $_"
+                            Write-Warning "Smart search failed: $_"
                             $albumsForArtist = @() 
                         }
                         
-                        # If no matches found after filtering, show all cached albums
+                        # If smart search returned nothing, fetch all albums as fallback
                         if (-not $albumsForArtist -or $albumsForArtist.Count -eq 0) {
-                            Write-Verbose "No albums matched '$albumName', showing all albums"
+                            if (-not $cachedAlbums) {
+                                Write-Host "Smart search returned no results, fetching all albums (this may take a while)..." -ForegroundColor Yellow
+                                Write-Verbose "Fetching all albums for artist..."
+                                try { 
+                                    $cachedAlbums = Invoke-ProviderGetAlbums -Provider $Provider -ArtistId $ProviderArtist.id -AlbumType 'Album'
+                                    $cachedAlbums = @($cachedAlbums)  # Ensure array
+                                    Write-Host "✓ Fetched $($cachedAlbums.Count) albums" -ForegroundColor Green
+                                } catch { 
+                                    Write-Warning "Failed to fetch artist albums: $_"
+                                    $cachedAlbums = @() 
+                                }
+                            }
+                            
+                            Write-Verbose "Using all cached albums ($($cachedAlbums.Count) albums)"
                             $albumsForArtist = $cachedAlbums
                         }
                         # Normalize to array so .Count works reliably
