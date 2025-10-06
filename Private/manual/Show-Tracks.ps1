@@ -193,6 +193,14 @@ function Show-Tracks {
             return $inputLower
         }
 
+        if ($supportsCommands) {
+            foreach ($cmdKey in $commandLookup.Keys) {
+                if ($inputLower.StartsWith("$cmdKey ")) {
+                    return $inputLower
+                }
+            }
+        }
+
         Write-Host "Unrecognized input: '$inputText'." -ForegroundColor Yellow
         Start-Sleep -Seconds 1
     }

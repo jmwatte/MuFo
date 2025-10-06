@@ -633,7 +633,7 @@ function Invoke-MuFoManual {
                         $pairedTracks = $null
                         $refreshTracks = $true
                         $goCDisplayShown = $false
-                        do {
+                        doTracks: do {
                             if ($refreshTracks -or -not $pairedTracks) {
                                 if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Red' }
                                 $param = @{
@@ -753,6 +753,73 @@ function Invoke-MuFoManual {
                                     else {
                                         Write-Warning "Move failed or was skipped. Move result: $moveResult"
                                     }
+                                }
+                                '^st\s+(?<range>.+)$' {
+                                    if (-not $pairedTracks -or $pairedTracks.Count -eq 0) {
+                                        Write-Warning "No track matches available to save."
+                                        continue doTracks
+                                    }
+
+                                    $rangeText = $matches['range'].Trim()
+                                    if (-not $rangeText) {
+                                        Write-Warning "No track numbers provided for 'st' command."
+                                        continue doTracks
+                                    }
+
+                                    try {
+                                        $selectedIndices = Expand-SelectionRange -RangeText $rangeText -MaxIndex $pairedTracks.Count
+                                    }
+                                    catch {
+                                        Write-Warning "Invalid track selection: $($_.Exception.Message)"
+                                        continue doTracks
+                                    }
+
+                                    if (-not $selectedIndices -or $selectedIndices.Count -eq 0) {
+                                        Write-Warning "No valid track numbers found in selection."
+                                        continue doTracks
+                                    }
+
+                                    try {
+                                        $saveResult = Save-MuFoTrackSelection -PairedTracks $pairedTracks -SelectedIndices $selectedIndices -ProviderArtist $ProviderArtist -ProviderAlbum $ProviderAlbum -UseWhatIf:$useWhatIf
+                                    }
+                                    catch {
+                                        Write-Warning "Failed to save selected tracks: $($_.Exception.Message)"
+                                        continue doTracks
+                                    }
+
+                                    foreach ($info in $saveResult.SavedDetails) {
+                                        $tags = $info.Tags
+                                        $filePath = $info.FilePath
+                                        $fileName = Split-Path -Leaf $filePath
+                                        Write-Host ("Saved tags: {0} -> {1:D2}.{2:D2}: {3}" -f $fileName, $tags.Disc, $tags.Track, $tags.Title) -ForegroundColor Green
+                                    }
+
+                                    foreach ($info in $saveResult.Skipped) {
+                                        $reasonText = switch ($info.Reason) {
+                                            'NoAudio' { 'no matching audio file' }
+                                            default { $info.Reason }
+                                        }
+                                        Write-Warning ("Skipping track {0}: {1}" -f $info.Index, $reasonText)
+                                    }
+
+                                    foreach ($info in $saveResult.Failed) {
+                                        $reasonText = if ($info.Reason) { $info.Reason } else { 'unknown error' }
+                                        Write-Warning ("Failed to save track {0}: {1}" -f $info.Index, $reasonText)
+                                    }
+
+                                    $pairedTracks = $saveResult.UpdatedPairs
+                                    $audioFiles = $saveResult.UpdatedAudioFiles
+                                    $tracksForAlbum = $saveResult.UpdatedSpotifyTracks
+
+                                    if ($saveResult.SavedDetails.Count -gt 0) {
+                                        Write-Host ("✓ Processed {0} track(s). Remaining: {1}" -f $saveResult.SavedDetails.Count, $pairedTracks.Count) -ForegroundColor Green
+                                    }
+                                    else {
+                                        Write-Host "No tracks were updated." -ForegroundColor Yellow
+                                    }
+
+                                    $refreshTracks = $false
+                                    continue doTracks
                                 }
                                 '^st$' {
                                     try {
