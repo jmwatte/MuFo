@@ -23,6 +23,10 @@ function Invoke-ProviderSearchAlbums {
     .PARAMETER MastersOnly
         (Discogs only) If specified, only return master releases.
     
+    .PARAMETER AllAlbumsCache
+        (Optional) Pre-fetched albums to search through instead of fetching from provider.
+        Used to optimize repeated searches without re-fetching.
+    
     .EXAMPLE
         Invoke-ProviderSearchAlbums -Provider Spotify -ArtistName "Pink Floyd" -AlbumName "Dark Side"
         Searches Spotify for albums matching "Pink Floyd" and "Dark Side".
@@ -47,7 +51,10 @@ function Invoke-ProviderSearchAlbums {
         [string]$AlbumName,
 
         [Parameter()]
-        [switch]$MastersOnly  # Discogs-specific
+        [switch]$MastersOnly,  # Discogs-specific
+
+        [Parameter()]
+        [array]$AllAlbumsCache  # Pre-fetched albums for cache-based filtering
     )
 
     Write-Verbose "Searching $Provider for albums: Artist='$ArtistName', Album='$AlbumName'"
@@ -73,6 +80,9 @@ function Invoke-ProviderSearchAlbums {
             }
             if ($MastersOnly) {
                 $searchParams.MastersOnly = $true
+            }
+            if ($AllAlbumsCache) {
+                $searchParams.AllAlbumsCache = $AllAlbumsCache
             }
             Search-DAlbumsByName @searchParams
         }

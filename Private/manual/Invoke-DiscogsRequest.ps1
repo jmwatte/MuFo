@@ -130,8 +130,14 @@ Attempting unauthenticated request (limited rate: 25 req/min)...
         }
         
         if ($Body) {
-            $requestParams['Body'] = ($Body | ConvertTo-Json -Depth 10)
-            $requestParams['ContentType'] = 'application/json'
+            # For GET requests, Body should be query parameters (not JSON)
+            # For POST/PUT, convert to JSON
+            if ($Method -eq 'Get') {
+                $requestParams['Body'] = $Body  # Invoke-RestMethod handles as query params
+            } else {
+                $requestParams['Body'] = ($Body | ConvertTo-Json -Depth 10)
+                $requestParams['ContentType'] = 'application/json'
+            }
         }
 
         $response = Invoke-RestMethod @requestParams

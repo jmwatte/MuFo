@@ -4,8 +4,8 @@ function Search-DAlbumsByName {
         Search Discogs for albums by artist and album name.
     
     .DESCRIPTION
-        Uses Discogs /database/search endpoint to find albums matching both artist and album name.
-        Returns targeted results instead of full artist discography.
+        Uses Discogs /database/search API with title and artist parameters to find matching albums.
+        Falls back to cache-based filtering if API search fails or cache is provided.
     
     .PARAMETER ArtistName
         The artist name to search for.
@@ -14,14 +14,21 @@ function Search-DAlbumsByName {
         The album name to search for.
     
     .PARAMETER ArtistId
-        Optional Discogs artist ID to filter results.
+        Discogs artist ID (optional, used for cache-based fallback).
     
     .PARAMETER MastersOnly
         If specified, only return master releases (canonical album versions).
     
+    .PARAMETER AllAlbumsCache
+        Optional: Pre-fetched list of all albums. If provided, skips API search and filters locally.
+    
     .EXAMPLE
-        Search-DAlbumsByName -ArtistName "Fats Waller" -AlbumName "Handful of Keys"
-        Searches Discogs for albums matching "Fats Waller Handful of Keys".
+        Search-DAlbumsByName -ArtistName "Fats Waller" -AlbumName "Complete Recorded Works"
+        Searches Discogs API for albums matching the title.
+    
+    .EXAMPLE
+        Search-DAlbumsByName -ArtistName "Fats Waller" -AlbumName "Keys" -AllAlbumsCache $cached
+        Filters pre-cached albums locally (no API call).
     #>
     [CmdletBinding()]
     param(
@@ -35,139 +42,115 @@ function Search-DAlbumsByName {
         [string]$ArtistId,
 
         [Parameter()]
-        [switch]$MastersOnly
+        [switch]$MastersOnly,
+
+        [Parameter()]
+        [array]$AllAlbumsCache
     )
 
-    Write-Verbose "Searching Discogs for artist '$ArtistName' and album '$AlbumName'"
+    Write-Verbose "Searching Discogs for artist '$ArtistName' albums matching '$AlbumName'"
 
-    # Discogs search is best done by getting all albums for artist and filtering locally
-    # The search API tends to return artist matches rather than release matches
-    # If we don't have an artist ID, this won't work well
-    if (-not $ArtistId) {
-        Write-Verbose "No ArtistId provided - searching by name (less accurate)"
-        # Fallback: try a plain search and hope for the best
-        $searchQuery = "$ArtistName $AlbumName"
-        $searchParams = @{
-            Uri = 'https://api.discogs.com/database/search'
-            Body = @{
-                q = $searchQuery
-                per_page = 50
-            }
+    # If cache provided, use cache-based filtering (fast, no API calls)
+    if ($AllAlbumsCache) {
+        Write-Verbose "Using cached album list ($($AllAlbumsCache.Count) albums)"
+        $allAlbums = $AllAlbumsCache
+        
+        # Filter albums by name using case-insensitive matching
+        $filtered = @($allAlbums | Where-Object { 
+            $_.name -like "*$AlbumName*" 
+        })
+
+        # If no direct matches, try fuzzy matching with Jaccard similarity
+        if ($filtered.Count -eq 0 -and (Get-Command Get-StringSimilarity-Jaccard -ErrorAction SilentlyContinue)) {
+            Write-Verbose "No direct matches, trying fuzzy matching with Jaccard similarity"
+            $filtered = @($allAlbums | ForEach-Object {
+                $similarity = Get-StringSimilarity-Jaccard -String1 $AlbumName -String2 $_.name
+                if ($similarity -gt 0.3) {
+                    $_ | Add-Member -NotePropertyName '_similarity' -NotePropertyValue $similarity -Force -PassThru
+                }
+            } | Sort-Object { -$_._similarity })
         }
-    } else {
-        Write-Verbose "Using artist ID $ArtistId to fetch albums"
-        # Better approach: get all albums for artist and filter locally
-        try {
-            $allAlbums = Get-DArtistAlbums -Id $ArtistId -MastersOnly:$MastersOnly
-            $allAlbums = @($allAlbums)  # Ensure array
-            
-            # Case-insensitive filtering
-            $filtered = $allAlbums | Where-Object { $_.name -match [regex]::Escape($AlbumName) -or $_.name -like "*$AlbumName*" }
-            $filtered = @($filtered)  # Ensure array
-            
-            # If no matches with contains, try fuzzy matching with Jaccard similarity
-            if ($filtered.Count -eq 0 -and (Get-Command Get-StringSimilarity-Jaccard -ErrorAction SilentlyContinue)) {
-                Write-Verbose "No direct matches, trying fuzzy matching"
-                $filtered = $allAlbums | ForEach-Object {
-                    $similarity = Get-StringSimilarity-Jaccard -String1 $AlbumName -String2 $_.name
-                    if ($similarity -gt 0.3) {
-                        $_ | Add-Member -NotePropertyName '_similarity' -NotePropertyValue $similarity -Force
-                        $_
-                    }
-                } | Sort-Object { -$_._similarity }
-            }
-            
-            Write-Verbose "Found $($filtered.Count) matching albums out of $($allAlbums.Count) total"
-            return $filtered
-        } catch {
-            Write-Warning "Failed to fetch artist albums: $_"
+
+        Write-Verbose "Found $($filtered.Count) matching albums from cache"
+        return $filtered
+    }
+
+    # No cache - use Discogs API search
+    Write-Verbose "Searching Discogs API with title='$AlbumName' and artist='$ArtistName'"
+    
+    try {
+        $searchParams = @{
+            artist = $ArtistName
+            title = $AlbumName
+        }
+        
+        # Add type filter if MastersOnly requested
+        if ($MastersOnly) {
+            $searchParams['type'] = 'master'
+        } else {
+            $searchParams['type'] = 'release'
+        }
+        
+        $searchResult = Invoke-DiscogsRequest -Uri 'https://api.discogs.com/database/search' -Body $searchParams
+        
+        if (-not $searchResult.results -or $searchResult.results.Count -eq 0) {
+            Write-Verbose "No albums found via API search"
             return @()
         }
-    }
-
-    # Fallback search path (when no artist ID)
-    $searchParams = @{
-        Uri = 'https://api.discogs.com/database/search'
-        Body = @{
-            q = "$ArtistName $AlbumName"
-            per_page = 50
+        
+        Write-Verbose "Found $($searchResult.results.Count) albums via API search"
+        
+        # Convert Discogs search results to album objects (Spotify-compatible format)
+        $albums = @()
+        foreach ($result in $searchResult.results) {
+            # Extract album name from title (format: "Artist - Album Name")
+            $albumTitle = $result.title
+            if ($albumTitle -match '^\s*(.+?)\s*[-–]\s*(.+?)\s*$') {
+                $albumTitle = $matches[2].Trim()
+            }
+            
+            $album = [PSCustomObject]@{
+                id = $result.id
+                name = $albumTitle
+                release_date = if ($result.PSObject.Properties['year']) { $result.year } else { '' }
+                type = $result.type
+                format = if ($result.PSObject.Properties['format']) { $result.format -join ', ' } else { '' }
+                label = if ($result.PSObject.Properties['label']) { $result.label -join ', ' } else { '' }
+                country = if ($result.PSObject.Properties['country']) { $result.country } else { '' }
+                thumb = if ($result.PSObject.Properties['thumb']) { $result.thumb } else { '' }
+                artist = if ($result.PSObject.Properties['user_data']) { 
+                    # Extract artist from title
+                    if ($result.title -match '^\s*(.+?)\s*[-–]\s*') { $matches[1].Trim() } else { $ArtistName }
+                } else { 
+                    $ArtistName 
+                }
+                resource_url = if ($result.PSObject.Properties['resource_url']) { $result.resource_url } else { '' }
+            }
+            
+            $albums += $album
         }
-    }
-
-    try {
-        $searchResults = Invoke-DiscogsRequest @searchParams
-    }
-    catch {
-        Write-Warning "Discogs album search failed: $_"
-        return @()
-    }
-
-    if (-not $searchResults.results -or $searchResults.results.Count -eq 0) {
-        Write-Verbose "No albums found for: $searchQuery"
-        return @()
-    }
-
-    $albums = @()
-    foreach ($result in $searchResults.results) {
-        # Filter by type - only include releases (albums)
-        if ($result.type -ne 'release' -and $result.type -ne 'master') {
-            continue
-        }
-
-        # If MastersOnly, skip non-master releases
-        if ($MastersOnly -and $result.type -ne 'master') {
-            continue
-        }
-
-        # If ArtistId provided, filter by artist
+        
+        return $albums
+        
+    } catch {
+        Write-Warning "Discogs API search failed: $_"
+        
+        # Fallback to fetching all albums if ArtistId provided
         if ($ArtistId) {
-            $matchesArtist = $false
-            
-            # Check if this release is by the specified artist
-            # Discogs search results don't always include full artist info,
-            # so we do a fuzzy match on the artist name in the title
-            if ($result.PSObject.Properties['title'] -and $result.title -like "*$ArtistName*") {
-                $matchesArtist = $true
-            }
-            
-            if (-not $matchesArtist) {
-                continue
-            }
-        }
-
-        # Extract album name from title (format: "Artist - Album Name")
-        $albumTitle = $result.title
-        if ($albumTitle -match '^\s*(.+?)\s*-\s*(.+?)\s*$') {
-            $albumTitle = $matches[2].Trim()
-        }
-
-        # Build album object in Spotify-compatible format
-        $album = [PSCustomObject]@{
-            id = $result.id
-            name = $albumTitle
-            release_date = if ($result.PSObject.Properties['year']) { $result.year } else { '' }
-            type = $result.type
-            format = if ($result.PSObject.Properties['format']) { $result.format -join ', ' } else { '' }
-            label = if ($result.PSObject.Properties['label']) { $result.label -join ', ' } else { '' }
-            country = if ($result.PSObject.Properties['country']) { $result.country } else { '' }
-            thumb = if ($result.PSObject.Properties['thumb']) { $result.thumb } else { '' }
-            _searchScore = if ($result.PSObject.Properties['community']) { 
-                # Discogs provides community stats (have/want) which can indicate popularity
-                $have = if ($result.community.PSObject.Properties['have']) { $result.community.have } else { 0 }
-                $want = if ($result.community.PSObject.Properties['want']) { $result.community.want } else { 0 }
-                $have + $want
-            } else { 
-                0 
+            Write-Verbose "Falling back to fetching all albums for artist ID: $ArtistId"
+            try {
+                $allAlbums = Get-DArtistAlbums -Id $ArtistId -MastersOnly:$MastersOnly
+                $allAlbums = @($allAlbums)
+                
+                $filtered = @($allAlbums | Where-Object { $_.name -like "*$AlbumName*" })
+                Write-Verbose "Found $($filtered.Count) albums via fallback method"
+                return $filtered
+            } catch {
+                Write-Warning "Fallback album fetch failed: $_"
+                return @()
             }
         }
-
-        $albums += $album
+        
+        return @()
     }
-
-    # Sort by search score (popularity) descending
-    $albums = $albums | Sort-Object { -$_._searchScore }
-
-    Write-Verbose "Found $($albums.Count) albums for: $searchQuery"
-    
-    return $albums
 }
