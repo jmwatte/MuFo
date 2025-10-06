@@ -105,11 +105,9 @@ function Search-DAlbumsByName {
         foreach ($result in $searchResult.results) {
             Write-Verbose "Processing result: id=$($result.id), title=$($result.title), type=$($result.type)"
             
-            # Filter by type if MastersOnly requested
-            if ($MastersOnly -and $result.type -ne 'master') {
-                Write-Verbose "Skipping non-master release: $($result.title)"
-                continue
-            }
+            # NOTE: Don't filter by MastersOnly here when searching by name
+            # User explicitly named the album, so return matching releases even if not masters
+            # The MastersOnly filter is for fetching ALL albums (Get-DArtistAlbums), not targeted search
             
             # Extract album name from title (format: "Artist - Album Name")
             $albumTitle = $result.title
