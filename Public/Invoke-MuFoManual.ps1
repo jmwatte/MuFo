@@ -453,7 +453,7 @@ function Invoke-MuFoManual {
                         if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Red' }
                         
                         # Display appropriate header for single or combined albums
-                        if ($ProviderAlbum._isCombined) {
+                        if (Get-IfExists $ProviderAlbum '_isCombined') {
                             Write-Host "Processing COMBINED album set:" -ForegroundColor Yellow
                             Write-Host "  Albums: $($ProviderAlbum._albumCount)" -ForegroundColor Cyan
                             Write-Host "  Tracks: $($ProviderAlbum._tracks.Count)" -ForegroundColor Cyan
@@ -498,7 +498,7 @@ function Invoke-MuFoManual {
                         }
     
                         # Check if this is a combined album (tracks already fetched) or single album (need to fetch)
-                        if ($ProviderAlbum._isCombined) {
+                        if (Get-IfExists $ProviderAlbum '_isCombined') {
                             Write-Verbose "Using pre-fetched tracks from combined album"
                             $tracksForAlbum = $ProviderAlbum._tracks
                         } else {
