@@ -142,14 +142,17 @@ function Invoke-MuFoManual {
                         Write-Verbose "Trying smart search for: $albumName"
                         Write-Verbose "Parameters: Provider=$Provider, ArtistId=$($ProviderArtist.id), ArtistName=$($ProviderArtist.name), AlbumName=$albumName, MastersOnly=$($Provider -eq 'Discogs'), CacheProvided=$($null -ne $cachedAlbums)"
                         try { 
-                            $albumsForArtist = Invoke-ProviderSearchAlbums `
-                                -Provider $Provider `
-                                -ArtistId $ProviderArtist.id `
-                                -ArtistName $ProviderArtist.name `
-                                -AlbumName $albumName `
-                                -MastersOnly:($Provider -eq 'Discogs') `
-                                -AllAlbumsCache $cachedAlbums
-                            
+                            $searchAlbumsParams = @{
+                                Provider       = $Provider
+                                ArtistId       = $ProviderArtist.id
+                                ArtistName     = $ProviderArtist.name
+                                AlbumName      = $albumName
+                                MastersOnly    = ($Provider -eq 'Discogs')
+                                AllAlbumsCache = $cachedAlbums
+                            }
+
+                            $albumsForArtist = Invoke-ProviderSearchAlbums @searchAlbumsParams
+
                             $albumsForArtist = @($albumsForArtist)  # Ensure array
                             
                             Write-Verbose "Smart search returned: $($albumsForArtist.Count) albums"
@@ -333,7 +336,12 @@ function Invoke-MuFoManual {
                                     }
                                     
                                     # Validate all indices
-                                    $validIndices = $selectedIndices | Where-Object { $_ -ge 1 -and $_ -le $albumsForArtist.Count } | Select-Object -Unique | Sort-Object
+                                    $validIndices = @(
+                                        $selectedIndices |
+                                            Where-Object { $_ -ge 1 -and $_ -le $albumsForArtist.Count } |
+                                            Select-Object -Unique |
+                                            Sort-Object
+                                    )
                                     
                                     if ($validIndices.Count -eq 0) {
                                         Write-Warning "No valid album numbers selected"
@@ -412,12 +420,15 @@ function Invoke-MuFoManual {
                                     # User entered text - try as a new search term first
                                     Write-Host "Searching for albums matching: '$inputF'..." -ForegroundColor Cyan
                                     try {
-                                        $searchResults = Invoke-ProviderSearchAlbums `
-                                            -Provider $Provider `
-                                            -ArtistId $ProviderArtist.id `
-                                            -ArtistName $ProviderArtist.name `
-                                            -AlbumName $inputF `
-                                            -MastersOnly:($Provider -eq 'Discogs')
+                                        $searchParams = @{
+                                            Provider    = $Provider
+                                            ArtistId    = $ProviderArtist.id
+                                            ArtistName  = $ProviderArtist.name
+                                            AlbumName   = $inputF
+                                            MastersOnly = ($Provider -eq 'Discogs')
+                                        }
+
+                                        $searchResults = Invoke-ProviderSearchAlbums @searchParams
                                         
                                         if ($searchResults -and $searchResults.Count -gt 0) {
                                             $albumsForArtist = @($searchResults)
@@ -633,7 +644,7 @@ function Invoke-MuFoManual {
                         $pairedTracks = $null
                         $refreshTracks = $true
                         $goCDisplayShown = $false
-                        doTracks: do {
+                        :doTracks do {
                             if ($refreshTracks -or -not $pairedTracks) {
                                 if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Red' }
                                 $param = @{
@@ -699,7 +710,7 @@ function Invoke-MuFoManual {
                                     $refreshTracks = $true
                                     continue
                                 }
-                                '^skip$' { break 3 }
+                                '^s$' { break 3 }
                                 '^sf$' {
                                     $year = Get-ReleaseYear -ReleaseDate $ProviderAlbum.release_date
                                     $oldpath = $album.FullName

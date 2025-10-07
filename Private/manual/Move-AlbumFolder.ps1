@@ -44,7 +44,7 @@ function Move-AlbumFolder {
         $createArtist = -not (Test-Path -LiteralPath $targetArtistPath -PathType Container)
         if ($createArtist) {
             if ($PSCmdlet.ShouldProcess($targetArtistPath, "Create artist folder")) {
-                New-Item -LiteralPath $targetArtistPath -ItemType Directory -ErrorAction Stop | Out-Null
+                New-Item -Path $targetArtistPath -ItemType Directory -ErrorAction Stop | Out-Null
             }
         }
 
@@ -72,7 +72,7 @@ function Move-AlbumFolder {
                     $destParent = Split-Path -Parent $destAlbumPath
                     if (-not (Test-Path -LiteralPath $destParent -PathType Container)) {
                         if ($PSCmdlet.ShouldProcess($destParent, "Create destination parent folder")) {
-                            New-Item -LiteralPath $destParent -ItemType Directory -ErrorAction Stop | Out-Null
+                            New-Item -Path $destParent -ItemType Directory -ErrorAction Stop | Out-Null
                         }
                     }
 
