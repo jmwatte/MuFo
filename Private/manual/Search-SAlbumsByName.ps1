@@ -32,21 +32,43 @@ function Search-SAlbumsByName {
         [string]$ArtistId
     )
 
-    # Build search query: artist + album name
-    $searchQuery = "artist:$ArtistName album:$AlbumName"
-    
-    Write-Verbose "Searching Spotify for: $searchQuery"
+    # Build search query: start with strict artist+album search, then try broader keywords
+    $escapedArtist = $ArtistName.Replace('"', '\"')
+    $escapedAlbum = $AlbumName.Replace('"', '\"')
 
-    try {
-        $searchResults = Search-Item -Query $searchQuery -Type Album
-    }
-    catch {
-        Write-Warning "Spotify album search failed: $_"
-        return @()
+    $queryAttempts = @(
+        @{ Query = "artist:`"$escapedArtist`" album:`"$escapedAlbum`""; Description = 'strict artist+album' },
+        @{ Query = ("$ArtistName $AlbumName").Trim(); Description = 'broad keyword' }
+    )
+
+    $searchResults = $null
+
+    foreach ($attempt in $queryAttempts) {
+        $queryText = $attempt.Query
+        $description = $attempt.Description
+
+        if ($searchResults) { break }
+
+        Write-Verbose "Searching Spotify ($description) for: $queryText"
+
+        try {
+            $candidateResults = Search-Item -Query $queryText -Type Album
+        }
+        catch {
+            Write-Warning "Spotify album search failed for query '$queryText': $_"
+            continue
+        }
+
+        if ($candidateResults -and $candidateResults.albums -and $candidateResults.albums.items -and $candidateResults.albums.items.Count -gt 0) {
+            $searchResults = $candidateResults
+            break
+        }
+
+        Write-Verbose "No albums found for query: $queryText; trying next fallback if available."
     }
 
     if (-not $searchResults -or -not $searchResults.albums -or -not $searchResults.albums.items) {
-        Write-Verbose "No albums found for: $searchQuery"
+        Write-Verbose "No albums found after all query attempts for artist '$ArtistName' and album '$AlbumName'"
         return @()
     }
 
@@ -73,7 +95,7 @@ function Search-SAlbumsByName {
         }
     }
 
-    Write-Verbose "Found $($albums.Count) albums for: $searchQuery"
+    Write-Verbose "Found $($albums.Count) albums for: $attempt.Query"
     
     return $albums
 }

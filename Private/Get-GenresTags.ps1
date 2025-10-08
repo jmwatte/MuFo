@@ -1,18 +1,23 @@
 function get-GenresTags($ProviderArtist, $ProviderAlbum) {
-    $artistGenres = @()
-    if ($ProviderArtist -and $ProviderArtist.genres.Count -gt 0) {
-        try {
-            if ($ProviderArtist -is [System.Collections.IDictionary]) { $artistGenres = $ProviderArtist['genres'] }
-            elseif ($ProviderArtist.PSObject.Properties.Match('genres')) { $artistGenres = $ProviderArtist.genres }
-        }
-        catch { $artistGenres = @() }
+    $genreValue = $null
+
+    # Try artist genres first
+    if ($ProviderArtist) {
+        $genreValue = Get-IfExists $ProviderArtist 'genres'
     }
-    elseif ($null -ne $ProviderAlbum -and $null -ne $ProviderAlbum.genre) {
-        try {
-            if ($ProviderAlbum -is [System.Collections.IDictionary]) { $artistGenres = $ProviderAlbum['genre'] }
-            elseif ($ProviderAlbum.PSObject.Properties.Match('genre')) { $artistGenres = $ProviderAlbum.genre }
+
+    # Fall back to album genres or genre (singular)
+    if (-not $genreValue -and $ProviderAlbum) {
+        $genreValue = Get-IfExists $ProviderAlbum 'genres'
+        if (-not $genreValue) {
+            $genreValue = Get-IfExists $ProviderAlbum 'genre'
         }
-        catch { $artistGenres = @() }
     }
-    return $artistGenres
+
+    # Ensure we return an array
+    if ($genreValue) {
+        return @($genreValue)
+    }
+    
+    return @()
 }

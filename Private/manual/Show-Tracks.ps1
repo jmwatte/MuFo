@@ -7,7 +7,8 @@ function Show-Tracks {
         [string]$OptionsText,
         [string[]]$ValidCommands,
         [string]$PromptColor = 'Gray',
-        [scriptblock]$InputReader
+        [scriptblock]$InputReader,
+        [string]$ProviderName = 'Spotify'
     )
 
     $supportsCommands = $ValidCommands -and $ValidCommands.Count -gt 0
@@ -88,7 +89,7 @@ function Show-Tracks {
                     }
                 }
                 else {
-                    Write-Host "↓ No Spotify track data available"
+                    Write-Host "↓ No $ProviderName track data available"
                 }
 
                 if ($audio) {

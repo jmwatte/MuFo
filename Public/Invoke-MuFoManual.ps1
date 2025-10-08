@@ -676,8 +676,8 @@ function Invoke-MuFoManual {
                             else {
                                 if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Red' }
                                 $whatIfStatus = if ($useWhatIf) { "ON" } else { "OFF" }
-                                $optionsLine = "`nOptions:SortByTit(l)e,(d)uration,(t)rackNumber,(n)ame,(h)ybrid,(m)anual,(r)everse,(s)ave Tags(st),(sf)older,(sa)ll,(b)ack,(w)hatif $whatIfStatus (s)kip"
-                                $commandList = @('d','t','n','l','h','m','r','st','sf','sa','b','w','whatif','skip')
+                                $optionsLine = "`nOptions:SortByTit(l)e,(d)uration,(t)rackNumber,(n)ame,(h)ybrid,(m)anual,(r)everse,(s)ave Tags(st),(sf)older,(sa)ll,(b)ack,(cp) change provider,(w)hatif $whatIfStatus (s)kip"
+                                $commandList = @('d','t','n','l','h','m','r','st','sf','sa','b','cp','w','whatif','s')
                                 $paramshow = @{
                                     PairedTracks   = $pairedTracks
                                     AlbumName      = $ProviderAlbum.name
@@ -685,8 +685,10 @@ function Invoke-MuFoManual {
                                     OptionsText    = $optionsLine
                                     ValidCommands  = $commandList
                                     PromptColor    = $HostColor
+                                    ProviderName   = $Provider
                                 }
                                 if ($reverseSource) { $paramshow.Reverse = $true }
+                                
                                 $inputF = Show-Tracks @paramshow
 
                                 if ($null -eq $inputF) { continue }
@@ -705,6 +707,23 @@ function Invoke-MuFoManual {
                                 '^m$' { $sortMethod = 'Manual'; $refreshTracks = $true; continue }
                                 '^r$' { $ReverseSource = -not $ReverseSource; $refreshTracks = $true; continue }
                                 '^b$' { $stage = 'B'; $exitdo = $true; break }
+                                '^cp$' {
+                                    Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
+                                    Write-Host "Available providers: Spotify, Qobuz, Discogs" -ForegroundColor Gray
+                                    $newProvider = Read-Host "Enter new provider name"
+                                    if ($newProvider -in @('Spotify', 'Qobuz', 'Discogs')) {
+                                        $Provider = $newProvider
+                                        Write-Host "Switched to provider: $Provider" -ForegroundColor Green
+                                        $cachedAlbums = $null
+                                        $cachedArtistId = $null
+                                        $stage = 'A'
+                                        $exitdo = $true
+                                        break
+                                    } else {
+                                        Write-Warning "Invalid provider: $newProvider. Staying with $Provider."
+                                        continue
+                                    }
+                                }
                                 '^whatif$|^w$' {
                                     $useWhatIf = -not $useWhatIf
                                     $refreshTracks = $true

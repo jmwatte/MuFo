@@ -124,6 +124,7 @@ function Search-DAlbumsByName {
                 label = if ($result.PSObject.Properties['label']) { $result.label -join ', ' } else { '' }
                 country = if ($result.PSObject.Properties['country']) { $result.country } else { '' }
                 thumb = if ($result.PSObject.Properties['thumb']) { $result.thumb } else { '' }
+                genres = if ($result.PSObject.Properties['genre']) { @($result.genre) } else { @() }
                 artist = if ($result.PSObject.Properties['user_data']) { 
                     # Extract artist from title
                     if ($result.title -match '^\s*(.+?)\s*[-–]\s*') { $matches[1].Trim() } else { $ArtistName }

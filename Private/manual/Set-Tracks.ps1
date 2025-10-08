@@ -377,8 +377,14 @@ function Set-Tracks {
             }
         }
         "manual" {
-            # Manual remains the same (interactive)
-            $pairedTracks = Select-matches -AudioFiles $AudioFiles -SpotifyTracks $SpotifyTracks
+            if ($Reverse) {
+                # Reverse mode: iterate over audio files, let user pick from Spotify tracks
+                $pairedTracks = Select-matches -AudioFiles $AudioFiles -SpotifyTracks $SpotifyTracks -Reverse
+            }
+            else {
+                # Normal mode: iterate over Spotify tracks, let user pick from audio files
+                $pairedTracks = Select-matches -AudioFiles $AudioFiles -SpotifyTracks $SpotifyTracks
+            }
         }
     }
 
