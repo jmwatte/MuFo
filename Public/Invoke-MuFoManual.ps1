@@ -56,85 +56,118 @@ function Invoke-MuFoManual {
     process {
         $artist = Split-Path -Leaf $Path
         $albums = Get-ChildItem -LiteralPath $Path -Directory
+
         foreach ($album in $albums) {
-            $useWhatIf = $isWhatIf
-            if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Red' }
-            # derive album name and year
-                       # Try to extract year from the start of the folder name (e.g., "2023 - Album Name")
-            if ($album.Name -match '^(\d{4})\s*[-]?\s*(.+)') {
-                $year = $matches[1]
-                $albumName = $matches[2].Trim()
-            } else {
-                $year = $null
-                $albumName = $album.Name.Trim()
+            # Parse album name and year
+            $albumInfo = Get-AlbumInfoFromFolder -Folder $album
+
+            # Initialize state
+            $state = @{
+                Stage = 'A'
+                ArtistQuery = $artist
+                ProviderArtist = $null
+                ProviderAlbum = $null
+                CachedAlbums = $null
+                CachedArtistId = $null
+                Page = 1
+                MastersOnlyMode = $true
+                UseWhatIf = $isWhatIf
             }
-            $artistQuery = $artist
-            $stage = "A"
-            $cachedAlbums = $null
-            $cachedArtistId = $null
-            $page = 1
-            $pageSize = 25
+
+            # State machine: A → B → C
             $albumDone = $false
-            $mastersOnlyMode = $true  # Track Discogs filter state: true=masters only, false=all releases
-            $ProviderArtist = $null
-            while ($true) {
-                $stageParams = @{
-                    Provider = $Provider
-                    ArtistQuery = $artistQuery
-                    AlbumName = $albumName
-                    Year = $year
-                    ProviderArtist = $ProviderArtist
-                    ProviderAlbum = $ProviderAlbum
-                    CachedAlbums = $cachedAlbums
-                    CachedArtistId = $cachedArtistId
-                    Page = $page
-                    MastersOnlyMode = $mastersOnlyMode
-                    ReverseSource = $reverseSource
-                    UseWhatIf = $useWhatIf
-                    NonInteractive = $NonInteractive
-                    GoA = $goA
-                    GoB = $goB
-                    GoC = $goC
-                    ArtistId = $ArtistId
-                    AlbumId = $AlbumId
-                    Album = $album
-                }
+            while (-not $albumDone) {
+                switch ($state.Stage) {
+                    'A' {
+                        $result = Invoke-MuFoStageA `
+                            -ArtistQuery $state.ArtistQuery `
+                            -Provider $Provider `
+                            -ArtistId $ArtistId `
+                            -AutoSelect:$AutoSelect `
+                            -NonInteractive:$NonInteractive `
+                            -goA:$goA
 
-                $stageResult = switch ($stage) {
-                    "A" { Invoke-MuFoStageA @stageParams }
-                    "B" { Invoke-MuFoStageB @stageParams }
-                    "C" { Invoke-MuFoStageC @stageParams }
-                }
+                        switch ($result.Action) {
+                            'Selected' {
+                                $state.ProviderArtist = $result.Artist
+                                $state.Stage = 'B'
+                            }
+                            'NewSearch' {
+                                $state.ArtistQuery = $result.Query
+                            }
+                            'Skip' {
+                                $albumDone = $true
+                            }
+                        }
+                    }
 
-                # Update variables from stage result
-                if ($stageResult.Provider) { $Provider = $stageResult.Provider }
-                if ($stageResult.ProviderArtist) { $ProviderArtist = $stageResult.ProviderArtist }
-                if ($stageResult.ProviderAlbum) { $ProviderAlbum = $stageResult.ProviderAlbum }
-                if ($stageResult.CachedAlbums) { $cachedAlbums = $stageResult.CachedAlbums }
-                if ($stageResult.CachedArtistId) { $cachedArtistId = $stageResult.CachedArtistId }
-                if ($stageResult.Page) { $page = $stageResult.Page }
-                if ($stageResult.MastersOnlyMode) { $mastersOnlyMode = $stageResult.MastersOnlyMode }
+                    'B' {
+                        $result = Invoke-MuFoStageB `
+                            -ProviderArtist $state.ProviderArtist `
+                            -AlbumName $albumInfo.Name `
+                            -Year $albumInfo.Year `
+                            -Provider $Provider `
+                            -AlbumId $AlbumId `
+                            -CachedAlbums $state.CachedAlbums `
+                            -MastersOnlyMode $state.MastersOnlyMode `
+                            -Page $state.Page `
+                            -AutoSelect:$AutoSelect `
+                            -NonInteractive:$NonInteractive `
+                            -goB:$goB
 
-                # Handle stage progression based on action
-                if ($stageResult.Action -eq 'ProviderChanged') {
-                    $stage = 'A'  # Go back to Stage A when provider changes
-                    $cachedAlbums = $null  # Clear cache when provider changes
-                    $cachedArtistId = $null
-                    continue
-                } elseif ($stageResult.Action -eq 'Back') {
-                    $stage = 'A'  # Go back to Stage A
-                    continue
-                } elseif ($stageResult.NextStage) {
-                    $stage = $stageResult.NextStage
-                } elseif ($stageResult.AlbumDone) {
-                    break
-                } else {
-                    continue
+                        switch ($result.Action) {
+                            'Selected' {
+                                $state.ProviderAlbum = $result.Album
+                                $state.CachedAlbums = $result.CachedAlbums
+                                $state.MastersOnlyMode = $result.MastersOnlyMode
+                                $state.Page = $result.Page
+                                $state.Stage = 'C'
+                            }
+                            'Back' {
+                                $state.Stage = 'A'
+                                $state.CachedAlbums = $null
+                                $state.CachedArtistId = $null
+                            }
+                            'ProviderChanged' {
+                                $Provider = $result.Provider
+                                $state.Stage = 'A'
+                                $state.CachedAlbums = $null
+                                $state.CachedArtistId = $null
+                            }
+                        }
+                    }
+
+                    'C' {
+                        $result = Invoke-MuFoStageC `
+                            -ProviderArtist $state.ProviderArtist `
+                            -ProviderAlbum $state.ProviderAlbum `
+                            -Provider $Provider `
+                            -Album $album `
+                            -NonInteractive:$NonInteractive `
+                            -goC:$goC `
+                            -UseWhatIf:$state.UseWhatIf `
+                            -ReverseSource:$ReverseSource
+
+                        switch ($result.Action) {
+                            'Completed' {
+                                $albumDone = $true
+                                # Update album folder if moved
+                                if ($result.AlbumFolder) {
+                                    $album = $result.AlbumFolder
+                                }
+                            }
+                            'Back' {
+                                $state.Stage = 'B'
+                            }
+                            'Skip' {
+                                $albumDone = $true
+                            }
+                        }
+                    }
                 }
-            } # end while
-            if ($albumDone) { break } else { continue }
-        } # end foreach albums
-    } # end process
+            }
+        }
+    }
 
     end {
         return [PSCustomObject]@{

@@ -69,7 +69,7 @@ RequiredModules = @('Spotishell')
 # NestedModules = @()
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = @('Add-DiscNumber','Convert-UserInput','Expand-SelectionRange','Get-AudioFileTags','Get-MuFoArtistReport','Get-MuFoConfig','Get-TracksFromHtml','Invoke-ManualTrackMapping','Invoke-MuFo','Invoke-MuFoManual','Invoke-MuFoStageA','Invoke-MuFoStageB','Invoke-MuFoStageC','Set-MuFoConfig','Show-PaginatedList','Test-MuFoConfig')
+FunctionsToExport = @('Add-DiscNumber','Convert-UserInput','Expand-SelectionRange','Get-AlbumInfoFromFolder','Get-AudioFileTags','Get-MuFoArtistReport','Get-MuFoConfig','Get-TracksFromHtml','Invoke-ManualTrackMapping','Invoke-MuFo','Invoke-MuFoManual','Invoke-MuFoStageA','Invoke-MuFoStageB','Invoke-MuFoStageC','Set-MuFoConfig','Show-PaginatedList','Test-MuFoConfig')
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = @()
