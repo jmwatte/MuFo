@@ -150,7 +150,8 @@ function Show-Tracks {
                         }
                     }
 
-                    Write-Host "filename: $($audio.Name)"
+                    $fileName = Split-Path -Leaf $audio.FilePath
+                    Write-Host "filename: $fileName"
                 }
                 else {
                     Write-Host "_ No matching audio file" -ForegroundColor Red

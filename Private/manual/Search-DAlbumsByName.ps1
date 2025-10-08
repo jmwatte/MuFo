@@ -118,20 +118,20 @@ function Search-DAlbumsByName {
             $album = [PSCustomObject]@{
                 id = $result.id
                 name = $albumTitle
-                release_date = if ($result.PSObject.Properties['year']) { $result.year } else { '' }
+                release_date = if ($value = Get-IfExists $result 'year') { $value } else { '' }
                 type = $result.type
-                format = if ($result.PSObject.Properties['format']) { $result.format -join ', ' } else { '' }
-                label = if ($result.PSObject.Properties['label']) { $result.label -join ', ' } else { '' }
-                country = if ($result.PSObject.Properties['country']) { $result.country } else { '' }
-                thumb = if ($result.PSObject.Properties['thumb']) { $result.thumb } else { '' }
-                genres = if ($result.PSObject.Properties['genre']) { @($result.genre) } else { @() }
-                artist = if ($result.PSObject.Properties['user_data']) { 
+                format = if ($value = Get-IfExists $result 'format') { $value -join ', ' } else { '' }
+                label = if ($value = Get-IfExists $result 'label') { $value -join ', ' } else { '' }
+                country = if ($value = Get-IfExists $result 'country') { $value } else { '' }
+                thumb = if ($value = Get-IfExists $result 'thumb') { $value } else { '' }
+                genres = if ($value = Get-IfExists $result 'genre') { @($value) } else { @() }
+                artist = if (Get-IfExists $result 'user_data') { 
                     # Extract artist from title
                     if ($result.title -match '^\s*(.+?)\s*[-–]\s*') { $matches[1].Trim() } else { $ArtistName }
                 } else { 
                     $ArtistName 
                 }
-                resource_url = if ($result.PSObject.Properties['resource_url']) { $result.resource_url } else { '' }
+                resource_url = if ($value = Get-IfExists $result 'resource_url') { $value } else { '' }
             }
             
             $albums += $album

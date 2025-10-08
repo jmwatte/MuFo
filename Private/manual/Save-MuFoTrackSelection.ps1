@@ -68,10 +68,10 @@ function Save-MuFoTrackSelection {
 
             $success = $true
             $reason = $null
-            if ($null -ne $result -and $result.PSObject.Properties.Match('Success')) {
-                $success = [bool]$result.Success
-                if ($result.PSObject.Properties.Match('Reason')) {
-                    $reason = $result.Reason
+            if ($null -ne $result -and ($successValue = Get-IfExists $result 'Success')) {
+                $success = [bool]$successValue
+                if ($reasonValue = Get-IfExists $result 'Reason') {
+                    $reason = $reasonValue
                 }
             }
 
