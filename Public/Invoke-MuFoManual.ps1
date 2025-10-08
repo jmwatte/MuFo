@@ -177,25 +177,78 @@ function Invoke-MuFoManual {
                         Write-Host "Searching for albums matching: $albumName..." -ForegroundColor Cyan
                         Write-Verbose "Trying smart search for: $albumName"
                         Write-Verbose "Parameters: Provider=$Provider, ArtistId=$($ProviderArtist.id), ArtistName=$($ProviderArtist.name), AlbumName=$albumName, MastersOnly=$($Provider -eq 'Discogs'), CacheProvided=$($null -ne $cachedAlbums)"
-                        $searchAlbumsParams = @{
-                            Provider            = $Provider
-                            ArtistId            = $ProviderArtist.id
-                            ArtistName          = $ProviderArtist.name
-                            AlbumName           = $albumName
-                            MastersOnly         = ($Provider -eq 'Discogs')
-                            AllAlbumsCache      = $cachedAlbums
-                            FallbackToAllAlbums = $true
+                        try { 
+                            $searchAlbumsParams = @{
+                                Provider       = $Provider
+                                ArtistId       = $ProviderArtist.id
+                                ArtistName     = $ProviderArtist.name
+                                AlbumName      = $albumName
+                                MastersOnly    = ($Provider -eq 'Discogs')
+                                AllAlbumsCache = $cachedAlbums
+                            }
+
+                            $albumsForArtist = Invoke-ProviderSearchAlbums @searchAlbumsParams
+
+                            $albumsForArtist = @($albumsForArtist)  # Ensure array
+                            
+                            Write-Verbose "Smart search returned: $($albumsForArtist.Count) albums"
+                            if ($albumsForArtist.Count -gt 0) {
+                                Write-Host "✓ Found $($albumsForArtist.Count) albums via smart search" -ForegroundColor Green
+                            } else {
+                                Write-Verbose "Smart search returned 0 albums - will fall back to fetching all"
+                            }
+                        } catch { 
+                            Write-Warning "Smart search exception: $_"
+                            Write-Verbose "Exception details: $($_.Exception.Message)"
+                            $albumsForArtist = @() 
                         }
-
-                        $albumsForArtist = Invoke-ProviderSearchAlbums @searchAlbumsParams
-
-                        $albumsForArtist = @($albumsForArtist)  # Ensure array
                         
-                        Write-Verbose "Search returned: $($albumsForArtist.Count) albums"
-                        if ($albumsForArtist.Count -gt 0) {
-                            Write-Host "✓ Found $($albumsForArtist.Count) albums" -ForegroundColor Green
-                        } else {
+                        # If smart search returned nothing, fetch all albums as fallback
+                        if (-not $albumsForArtist -or $albumsForArtist.Count -eq 0) {
+                            if (-not $cachedAlbums) {
+                                Write-Host "Smart search returned no results, fetching all albums (this may take a while)..." -ForegroundColor Yellow
+                                Write-Verbose "Fetching all albums for artist..."
+                                try { 
+                                    $cachedAlbums = Invoke-ProviderGetAlbums -Provider $Provider -ArtistId $ProviderArtist.id -AlbumType 'Album'
+                                    $cachedAlbums = @($cachedAlbums)  # Ensure array
+                                    Write-Host "✓ Fetched $($cachedAlbums.Count) albums" -ForegroundColor Green
+                                } catch { 
+                                    Write-Warning "Failed to fetch artist albums: $_"
+                                    $cachedAlbums = @() 
+                                }
+                            }
+                            
+                            Write-Verbose "Using all cached albums ($($cachedAlbums.Count) albums)"
+                            $albumsForArtist = $cachedAlbums
+                        }
+                        # Normalize to array so .Count works reliably
+                        $albumsForArtist = @($albumsForArtist)
+                        if (-not $albumsForArtist -or $albumsForArtist.Count -eq 0) {
                             Write-Host "No albums found for artist id $($ProviderArtist.id)."
+                            if ($NonInteractive) {
+                                Write-Warning "NonInteractive: skipping album because no albums found for artist id $($ProviderArtist.id)."
+                                break
+                            }
+                        
+                            $inputF = Read-Host "Enter '(b)ack', '(s)kip', 'id:<id>' or album name to filter"
+                            switch -Regex ($inputF) {
+                                '^b$' {
+                                    $stage = 'A'; continue
+                                }
+                                '^s$' {
+                                    break
+                                }
+                                '^id:.*' {
+                                    $id = $inputF.Substring(3); $ProviderAlbum = @{ id = $id; name = $id }; $stage = 'C'; continue
+                                }
+                                default {
+                                    if ($inputF) { $artistQuery = $inputF; $stage = 'A'; continue } else { continue }
+                                }
+                                # if ($inputF -ieq 'back') { $stage = 'A'; continue }
+                                # if ($inputF -eq 'skip') { break }
+                                #  if ($inputF -like 'id:*') { $id = $inputF.Substring(3); $ProviderAlbum = @{ id = $id; name = $id }; $stage = 'C'; continue }
+                                # if ($inputF) { $artistQuery = $inputF; $stage = 'A'; continue } else { continue }
+                            }
                         }
                         Clear-Host
                         # sort by Jaccard similarity descending
