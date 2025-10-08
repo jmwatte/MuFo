@@ -23,17 +23,13 @@ function Invoke-ProviderSearchAlbums {
     .PARAMETER MastersOnly
         (Discogs only) If specified, only return master releases.
     
-    .PARAMETER AllAlbumsCache
-        (Optional) Pre-fetched albums to search through instead of fetching from provider.
-        Used to optimize repeated searches without re-fetching.
+    .PARAMETER FallbackToAllAlbums
+        If specified and smart search returns no results, automatically fetch all albums for the artist.
+        Requires ArtistId to be provided.
     
     .EXAMPLE
-        Invoke-ProviderSearchAlbums -Provider Spotify -ArtistName "Pink Floyd" -AlbumName "Dark Side"
-        Searches Spotify for albums matching "Pink Floyd" and "Dark Side".
-    
-    .EXAMPLE
-        Invoke-ProviderSearchAlbums -Provider Discogs -ArtistName "Fats Waller" -AlbumName "Handful of Keys" -MastersOnly
-        Searches Discogs for master releases matching "Fats Waller" and "Handful of Keys".
+        Invoke-ProviderSearchAlbums -Provider Spotify -ArtistName "Pink Floyd" -AlbumName "Dark Side" -FallbackToAllAlbums
+        Searches for matching albums, falls back to all albums if no matches found.
     #>
     [CmdletBinding()]
     param(
@@ -54,12 +50,12 @@ function Invoke-ProviderSearchAlbums {
         [switch]$MastersOnly,  # Discogs-specific
 
         [Parameter()]
-        [array]$AllAlbumsCache  # Pre-fetched albums for cache-based filtering
+        [switch]$FallbackToAllAlbums
     )
 
     Write-Verbose "Searching $Provider for albums: Artist='$ArtistName', Album='$AlbumName'"
 
-    switch ($Provider) {
+    $results = switch ($Provider) {
         'Spotify' {
             Search-SAlbumsByName -ArtistName $ArtistName -AlbumName $AlbumName -ArtistId $ArtistId
         }
@@ -87,4 +83,32 @@ function Invoke-ProviderSearchAlbums {
             Search-DAlbumsByName @searchParams
         }
     }
+
+    # Fallback to all albums if smart search returned no results
+    if ($FallbackToAllAlbums -and $results.Count -eq 0 -and $ArtistId) {
+        Write-Verbose "Smart search returned no results, falling back to all albums for artist"
+        
+        $allAlbums = Invoke-ProviderGetAlbums -Provider $Provider -ArtistId $ArtistId
+        
+        # Filter all albums by album name similarity
+        $results = $allAlbums | Where-Object {
+            $album = $_
+            $albumName = Get-IfExists $album 'title' ''
+            if (-not $albumName) { return $false }
+            
+            # Use string similarity for matching
+            $similarity = Get-StringSimilarity $AlbumName $albumName
+            $similarity -gt 0.6  # 60% similarity threshold
+        } | ForEach-Object {
+            # Add similarity score for sorting
+            $album = $_
+            $albumName = Get-IfExists $album 'title' ''
+            $similarity = Get-StringSimilarity $AlbumName $albumName
+            $album | Add-Member -NotePropertyName 'SimilarityScore' -NotePropertyValue $similarity -PassThru -Force
+        } | Sort-Object -Property SimilarityScore -Descending
+        
+        Write-Verbose "Fallback search found $($results.Count) matching albums"
+    }
+
+    return $results
 }
