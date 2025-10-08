@@ -115,8 +115,16 @@ function Invoke-MuFoManual {
                 if ($stageResult.Page) { $page = $stageResult.Page }
                 if ($stageResult.MastersOnlyMode) { $mastersOnlyMode = $stageResult.MastersOnlyMode }
 
-                # Handle stage progression
-                if ($stageResult.NextStage) {
+                # Handle stage progression based on action
+                if ($stageResult.Action -eq 'ProviderChanged') {
+                    $stage = 'A'  # Go back to Stage A when provider changes
+                    $cachedAlbums = $null  # Clear cache when provider changes
+                    $cachedArtistId = $null
+                    continue
+                } elseif ($stageResult.Action -eq 'Back') {
+                    $stage = 'A'  # Go back to Stage A
+                    continue
+                } elseif ($stageResult.NextStage) {
                     $stage = $stageResult.NextStage
                 } elseif ($stageResult.AlbumDone) {
                     break

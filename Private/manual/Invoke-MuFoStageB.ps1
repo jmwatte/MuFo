@@ -1,144 +1,76 @@
 function Invoke-MuFoStageB {
-    <#
-    .SYNOPSIS
-        Handles Stage B of the MuFo manual workflow: album search and selection.
-
-    .DESCRIPTION
-        Searches for albums by the selected artist, displays candidates with pagination,
-        and allows user selection or automatic selection based on parameters.
-
-    .PARAMETER ProviderArtist
-        The selected artist object from Stage A.
-
-    .PARAMETER AlbumName
-        The local album name to match against.
-
-    .PARAMETER Year
-        The release year of the local album.
-
-    .PARAMETER Provider
-        The music provider to use (Spotify, Qobuz, Discogs).
-
-    .PARAMETER AlbumId
-        Optional explicit album ID to select directly.
-
-    .PARAMETER GoB
-        If specified, automatically select the first album candidate.
-
-    .PARAMETER AutoSelect
-        If specified, automatically select the first album candidate.
-
-    .PARAMETER NonInteractive
-        If specified, run in non-interactive mode (no user prompts).
-
-    .PARAMETER CachedAlbums
-        Reference to cached albums (will be updated).
-
-    .PARAMETER CachedArtistId
-        Reference to cached artist ID (will be updated).
-
-    .PARAMETER Page
-        Reference to current page number for pagination.
-
-    .PARAMETER PageSize
-        Number of albums to display per page.
-
-    .PARAMETER MastersOnlyMode
-        Reference to masters-only mode for Discogs (will be toggled).
-
-    .OUTPUTS
-        PSCustomObject with properties:
-        - ProviderAlbum: Selected album object, or $null if going back
-        - Stage: Next stage to proceed to ('C' or 'A' for back)
-        - Provider: Updated provider (may change if user switches)
-        - ShouldBreak: $true if album should be skipped
-    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [object]$ProviderArtist,
+        [PSCustomObject]$ProviderArtist,
 
         [Parameter(Mandatory)]
         [string]$AlbumName,
 
-        [Parameter(Mandatory)]
-        [string]$Year,
-
-        [Parameter(Mandatory)]
-        [ValidateSet('Spotify', 'Qobuz', 'Discogs')]
         [string]$Provider,
-
-        [Parameter()]
         [string]$AlbumId,
-
-        [Parameter()]
-        [switch]$GoB,
-
-        [Parameter()]
+        [int]$Year,
         [switch]$AutoSelect,
-
-        [Parameter()]
         [switch]$NonInteractive,
+        [switch]$goB,
 
-        [Parameter()]
-        [ref]$CachedAlbums,
-
-        [Parameter()]
-        [ref]$CachedArtistId,
-
-        [Parameter()]
-        [ref]$Page,
-
-        [Parameter()]
-        [int]$PageSize = 10,
-
-        [Parameter()]
-        [ref]$MastersOnlyMode
+        # State management
+        [array]$CachedAlbums,
+        [bool]$MastersOnlyMode = $true,
+        [int]$Page = 1,
+        [int]$PageSize = 25
     )
 
-    Clear-Host
-    $artistName = Get-IfExists $ProviderArtist 'name'
-    $artistId = Get-IfExists $ProviderArtist 'id'
-    Write-Host "Searching for albums for artist: $artistName (id: $artistId)"
+    # Initialize state
+    $albumsForArtist = $CachedAlbums
+    $cachedArtistId = $ProviderArtist.id
+    $page = $Page
+    $mastersOnlyMode = $MastersOnlyMode
+    $pageSize = $PageSize
 
     # Clear cache if artist changed
-    if ($CachedArtistId.Value -ne $ProviderArtist.id) {
-        $CachedAlbums.Value = $null
-        $CachedArtistId.Value = $ProviderArtist.id
+    if ($cachedArtistId -ne $ProviderArtist.id) {
+        $albumsForArtist = $null
+        $cachedArtistId = $ProviderArtist.id
     }
 
     # Try smart API search FIRST (fast, targeted results)
-    Write-Host "Searching for albums matching: $AlbumName..." -ForegroundColor Cyan
-    Write-Verbose "Trying smart search for: $AlbumName"
-    Write-Verbose "Parameters: Provider=$Provider, ArtistId=$($ProviderArtist.id), ArtistName=$($ProviderArtist.name), AlbumName=$AlbumName, MastersOnly=$($Provider -eq 'Discogs'), CacheProvided=$($null -ne $CachedAlbums.Value)"
-    $searchAlbumsParams = @{
-        Provider            = $Provider
-        ArtistId            = $ProviderArtist.id
-        ArtistName          = $ProviderArtist.name
-        AlbumName           = $AlbumName
-        MastersOnly         = ($Provider -eq 'Discogs')
-        AllAlbumsCache      = $CachedAlbums.Value
-        FallbackToAllAlbums = $true
+    if (-not $albumsForArtist) {
+        Write-Host "Searching for albums matching: $AlbumName..." -ForegroundColor Cyan
+        Write-Verbose "Trying smart search for: $AlbumName"
+        Write-Verbose "Parameters: Provider=$Provider, ArtistId=$($ProviderArtist.id), ArtistName=$($ProviderArtist.name), AlbumName=$AlbumName, MastersOnly=$($Provider -eq 'Discogs'), CacheProvided=$($null -ne $CachedAlbums)"
+        $searchAlbumsParams = @{
+            Provider            = $Provider
+            ArtistId            = $ProviderArtist.id
+            ArtistName          = $ProviderArtist.name
+            AlbumName           = $AlbumName
+            MastersOnly         = ($Provider -eq 'Discogs')
+            AllAlbumsCache      = $CachedAlbums
+            FallbackToAllAlbums = $true
+        }
+
+        $albumsForArtist = Invoke-ProviderSearchAlbums @searchAlbumsParams
+        $albumsForArtist = @($albumsForArtist)  # Ensure array
+
+        Write-Verbose "Search returned: $($albumsForArtist.Count) albums"
+        if ($albumsForArtist.Count -gt 0) {
+            Write-Host "✓ Found $($albumsForArtist.Count) albums" -ForegroundColor Green
+        } else {
+            Write-Host "No albums found for artist id $($ProviderArtist.id)."
+        }
     }
 
-    $albumsForArtist = Invoke-ProviderSearchAlbums @searchAlbumsParams
-
-    $albumsForArtist = @($albumsForArtist)  # Ensure array
-
-    Write-Verbose "Search returned: $($albumsForArtist.Count) albums"
-    if ($albumsForArtist.Count -gt 0) {
-        Write-Host "✓ Found $($albumsForArtist.Count) albums" -ForegroundColor Green
-    } else {
-        Write-Host "No albums found for artist id $($ProviderArtist.id)."
-    }
     Clear-Host
     # sort by Jaccard similarity descending
     $albumsForArtist = $albumsForArtist | Sort-Object { - (Get-StringSimilarity-Jaccard -String1 $AlbumName -String2 $_.Name) }
 
+    $exitdo = $false
     while ($true) {
+        # Clear-Host
+
         # Show filter mode indicator for Discogs
         if ($Provider -eq 'Discogs') {
-            $modeIndicator = if ($MastersOnlyMode.Value) {
+            $modeIndicator = if ($mastersOnlyMode) {
                 "[Filter: MASTERS ONLY - type '*' to include all releases]"
             } else {
                 "[Filter: ALL RELEASES - type '*' for masters only]"
@@ -149,43 +81,49 @@ function Invoke-MuFoStageB {
         $providerArtistName = Get-IfExists $ProviderArtist 'name'
         Write-Host "Albums for artist $providerArtistName :"
         Write-Host "for local album: $($AlbumName) (year: $Year)"
-        $totalPages = [math]::Ceiling($albumsForArtist.Count / $PageSize)
-        $startIdx = ($Page.Value - 1) * $PageSize
-        $endIdx = [math]::Min($startIdx + $PageSize - 1, $albumsForArtist.Count - 1)
+        $totalPages = [math]::Ceiling($albumsForArtist.Count / $pageSize)
+        $startIdx = ($page - 1) * $pageSize
+        $endIdx = [math]::Min($startIdx + $pageSize - 1, $albumsForArtist.Count - 1)
 
         for ($i = $startIdx; $i -le $endIdx; $i++) {
-            $albumNameDisplay = Get-IfExists $albumsForArtist[$i] 'name'
+            $albumName = Get-IfExists $albumsForArtist[$i] 'name'
             $albumId = Get-IfExists $albumsForArtist[$i] 'id'
             $albumYear = Get-IfExists $albumsForArtist[$i] 'release_date'
-            Write-Host "[$($i+1)] $albumNameDisplay  (id: $albumId) (year: $albumYear)"
+            Write-Host "[$($i+1)] $albumName  (id: $albumId) (year: $albumYear)"
         }
 
         # Non-interactive album selection: prefer explicit AlbumId, then goB, then AutoSelect or NonInteractive
         if ($AlbumId) {
             $ProviderAlbum = @{ id = $AlbumId; name = $AlbumId }
-            return [PSCustomObject]@{
+            return @{
+                Action = 'Selected'
                 ProviderAlbum = $ProviderAlbum
-                Stage = 'C'
-                Provider = $Provider
-                ShouldBreak = $false
+                CachedAlbums = $albumsForArtist
+                MastersOnlyMode = $mastersOnlyMode
+                Page = $page
+                NextStage = 'C'
             }
         }
-        if ($GoB) {
+        if ($goB) {
             $ProviderAlbum = $albumsForArtist[0]
-            return [PSCustomObject]@{
+            return @{
+                Action = 'Selected'
                 ProviderAlbum = $ProviderAlbum
-                Stage = 'C'
-                Provider = $Provider
-                ShouldBreak = $false
+                CachedAlbums = $albumsForArtist
+                MastersOnlyMode = $mastersOnlyMode
+                Page = $page
+                NextStage = 'C'
             }
         }
         if ($AutoSelect -or $NonInteractive) {
             $ProviderAlbum = $albumsForArtist[0]
-            return [PSCustomObject]@{
+            return @{
+                Action = 'Selected'
                 ProviderAlbum = $ProviderAlbum
-                Stage = 'C'
-                Provider = $Provider
-                ShouldBreak = $false
+                CachedAlbums = $albumsForArtist
+                MastersOnlyMode = $mastersOnlyMode
+                Page = $page
+                NextStage = 'C'
             }
         }
 
@@ -193,21 +131,20 @@ function Invoke-MuFoStageB {
 
         switch -Regex ($inputF) {
             '^n$' {
-                if ($Page.Value -lt $totalPages) { $Page.Value++ }
+                if ($page -lt $totalPages) { $page++ }
                 continue
             }
             '^p$' {
-                if ($Page.Value -gt 1) { $Page.Value-- }
+                if ($page -gt 1) { $page-- }
                 continue
             }
             '^b$' {
-                $CachedAlbums.Value = $null
-                $CachedArtistId.Value = $null
-                return [PSCustomObject]@{
-                    ProviderAlbum = $null
-                    Stage = 'A'
-                    Provider = $Provider
-                    ShouldBreak = $false
+                return @{
+                    Action = 'Back'
+                    CachedAlbums = $null
+                    MastersOnlyMode = $mastersOnlyMode
+                    Page = $page
+                    NextStage = 'A'
                 }
             }
             '^cp$' {
@@ -215,15 +152,13 @@ function Invoke-MuFoStageB {
                 Write-Host "Available providers: Spotify, Qobuz, Discogs" -ForegroundColor Gray
                 $newProvider = Read-Host "Enter new provider name"
                 if ($newProvider -in @('Spotify', 'Qobuz', 'Discogs')) {
-                    $Provider = $newProvider
-                    Write-Host "Switched to provider: $Provider" -ForegroundColor Green
-                    $CachedAlbums.Value = $null
-                    $CachedArtistId.Value = $null
-                    return [PSCustomObject]@{
-                        ProviderAlbum = $null
-                        Stage = 'A'
-                        Provider = $Provider
-                        ShouldBreak = $false
+                    return @{
+                        Action = 'ProviderChanged'
+                        Provider = $newProvider
+                        CachedAlbums = $null
+                        MastersOnlyMode = $mastersOnlyMode
+                        Page = $page
+                        NextStage = 'A'
                     }
                 } else {
                     Write-Warning "Invalid provider: $newProvider. Staying with $Provider."
@@ -232,28 +167,32 @@ function Invoke-MuFoStageB {
             }
             '^$' {
                 $ProviderAlbum = $albumsForArtist[0]
-                return [PSCustomObject]@{
+                return @{
+                    Action = 'Selected'
                     ProviderAlbum = $ProviderAlbum
-                    Stage = 'C'
-                    Provider = $Provider
-                    ShouldBreak = $false
+                    CachedAlbums = $albumsForArtist
+                    MastersOnlyMode = $mastersOnlyMode
+                    Page = $page
+                    NextStage = 'C'
                 }
             }
             '^id:(.+)$' {
                 $id = $matches[1]
                 $ProviderAlbum = @{ id = $id; name = $id }
-                return [PSCustomObject]@{
+                return @{
+                    Action = 'Selected'
                     ProviderAlbum = $ProviderAlbum
-                    Stage = 'C'
-                    Provider = $Provider
-                    ShouldBreak = $false
+                    CachedAlbums = $albumsForArtist
+                    MastersOnlyMode = $mastersOnlyMode
+                    Page = $page
+                    NextStage = 'C'
                 }
             }
             '^\*$' {
                 # Toggle between Masters-only and All-releases for Discogs
                 if ($Provider -eq 'Discogs') {
-                    $MastersOnlyMode.Value = -not $MastersOnlyMode.Value
-                    $modeText = if ($MastersOnlyMode.Value) { "MASTER releases only" } else { "ALL release types" }
+                    $mastersOnlyMode = -not $mastersOnlyMode
+                    $modeText = if ($mastersOnlyMode) { "MASTER releases only" } else { "ALL release types" }
                     Write-Host "`nToggling to: $modeText" -ForegroundColor Yellow
                     Write-Host "Fetching albums..." -ForegroundColor Cyan
                 } else {
@@ -269,14 +208,13 @@ function Invoke-MuFoStageB {
 
                     # Add MastersOnly parameter for Discogs
                     if ($Provider -eq 'Discogs') {
-                        $fetchParams['MastersOnly'] = $MastersOnlyMode.Value
+                        $fetchParams['MastersOnly'] = $mastersOnlyMode
                     }
 
                     $albumsForArtist = Invoke-ProviderGetAlbums @fetchParams
                     $albumsForArtist = @($albumsForArtist)
                     $albumsForArtist = $albumsForArtist | Sort-Object { - (Get-StringSimilarity-Jaccard -String1 $AlbumName -String2 $_.Name) }
-                    $CachedAlbums.Value = $albumsForArtist
-                    $Page.Value = 1
+                    $page = 1
 
                     $statusMsg = if ($Provider -eq 'Discogs') {
                         "✓ Loaded $($albumsForArtist.Count) albums [$modeText]"
@@ -322,11 +260,13 @@ function Invoke-MuFoStageB {
                 # If single selection, go directly to Stage C
                 if ($validIndices.Count -eq 1) {
                     $ProviderAlbum = $albumsForArtist[$validIndices[0] - 1]
-                    return [PSCustomObject]@{
+                    return @{
+                        Action = 'Selected'
                         ProviderAlbum = $ProviderAlbum
-                        Stage = 'C'
-                        Provider = $Provider
-                        ShouldBreak = $false
+                        CachedAlbums = $albumsForArtist
+                        MastersOnlyMode = $mastersOnlyMode
+                        Page = $page
+                        NextStage = 'C'
                     }
                 }
 
@@ -386,11 +326,13 @@ function Invoke-MuFoStageB {
                     Write-Warning "  Note: $failedAlbums album(s) failed to load"
                 }
 
-                return [PSCustomObject]@{
+                return @{
+                    Action = 'Selected'
                     ProviderAlbum = $ProviderAlbum
-                    Stage = 'C'
-                    Provider = $Provider
-                    ShouldBreak = $false
+                    CachedAlbums = $albumsForArtist
+                    MastersOnlyMode = $mastersOnlyMode
+                    Page = $page
+                    NextStage = 'C'
                 }
             }
             default {
@@ -410,8 +352,7 @@ function Invoke-MuFoStageB {
                     if ($searchResults -and $searchResults.Count -gt 0) {
                         $albumsForArtist = @($searchResults)
                         $albumsForArtist = $albumsForArtist | Sort-Object { - (Get-StringSimilarity-Jaccard -String1 $inputF -String2 $_.Name) }
-                        $CachedAlbums.Value = $albumsForArtist
-                        $Page.Value = 1
+                        $page = 1
                         Write-Host "Found $($albumsForArtist.Count) albums matching '$inputF'" -ForegroundColor Green
                         continue
                     }
@@ -423,7 +364,7 @@ function Invoke-MuFoStageB {
                 $filtered = $albumsForArtist | Where-Object { $_.name -like "*$inputF*" }
                 if ($filtered.Count -gt 0) {
                     $albumsForArtist = $filtered
-                    $Page.Value = 1
+                    $page = 1
                     Write-Host "Filtered to $($filtered.Count) albums" -ForegroundColor Green
                     continue
                 }
@@ -433,5 +374,6 @@ function Invoke-MuFoStageB {
                 }
             }
         }
+        if ($exitdo) { break }
     }
 }
