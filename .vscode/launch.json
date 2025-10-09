@@ -2,12 +2,12 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Launch Invoke-MuFo",
             "type": "PowerShell",
             "request": "launch",
+            "name": "Debug Invoke-MuFoManual (WhatIf)",
             "script": "${workspaceFolder}/.vscode/launch-invoke-mufo.ps1",
-            "cwd": "${workspaceFolder}",
-            "createTemporaryIntegratedConsole": true
+            "args": [],
+            "cwd": "${workspaceFolder}"
         },
         {
             "name": "Debug MuFo WhatIf",
