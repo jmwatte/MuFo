@@ -1043,18 +1043,14 @@ function Invoke-MuFoManual {
                                             else {
                                                 Write-Verbose "NonInteractive/goC/WhatIf or no-path-change: skipping pause after move."
                                             }
-                                            $stage = 'C'
-                                            $exitDo = $true
-                                            $albumDone = $true
-                                            break
+                                            Write-Host "Album saved. Choose 's' to skip to next album, or select another option." -ForegroundColor Yellow
+                                            continue
                                         }
                                         else {
                                             if ($moveResult.NewAlbumPath -eq $oldpath) {
                                                 Write-Verbose "Move result indicates no change to album path; continuing."
-                                                $stage = 'C'
-                                                $exitDo = $true
-                                                $albumDone = $true
-                                                break
+                                                Write-Host "Album saved. Choose 's' to skip to next album, or select another option." -ForegroundColor Yellow
+                                                continue
                                             }
                                             # Folder was moved - update $album and reload audio files from new location
                                             $album = Get-Item -LiteralPath $moveResult.NewAlbumPath
@@ -1082,10 +1078,8 @@ function Invoke-MuFoManual {
                                                 }
                                             }
                                             $refreshTracks = $true
-                                            
-                                            $stage = "C"
-                                            $exitDo = $true
-                                            break 
+                                            Write-Host "Album saved and folder moved. Choose 's' to skip to next album, or select another option." -ForegroundColor Yellow
+                                            continue 
                                         }
                                     }
                                     else {
