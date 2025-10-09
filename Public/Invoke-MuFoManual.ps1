@@ -81,6 +81,8 @@ function Invoke-MuFoManual {
                     
                     "A" {
                         Clear-Host
+                        Write-Host "Original Artist: $artist" -ForegroundColor Cyan
+                        Write-Host ""
                         try { $r = Invoke-ProviderSearch -Provider $Provider -query $artistQuery -Type artist } catch { Write-Warning "Search failed: $_"; $r = $null }
                         $candidates = @()
                         if ($value = Get-IfExists $r.artists "items") { $candidates = $value }
@@ -129,6 +131,8 @@ function Invoke-MuFoManual {
     
                     "B" {
                         Clear-Host
+                        Write-Host "Original Artist: $artist" -ForegroundColor Cyan
+                        Write-Host ""
                         Write-Host "Searching for albums for artist: $($ProviderArtist.name) (id: $($ProviderArtist.id))"
                         
                         # Clear cache if artist changed
