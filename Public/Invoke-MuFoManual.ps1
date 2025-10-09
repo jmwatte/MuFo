@@ -81,7 +81,6 @@ function Invoke-MuFoManual {
                     
                     "A" {
                         Clear-Host
-                        Write-Host "Original artist: $artist" -ForegroundColor Cyan
                         try { $r = Invoke-ProviderSearch -Provider $Provider -query $artistQuery -Type artist } catch { Write-Warning "Search failed: $_"; $r = $null }
                         $candidates = @()
                         if ($value = Get-IfExists $r.artists "items") { $candidates = $value }
@@ -95,33 +94,15 @@ function Invoke-MuFoManual {
                                 Write-Warning "NonInteractive: skipping album because no artist candidates were found for '$artistQuery'."
                                 break
                             }
-                            $inputF = Read-Host "Enter new search, 'skip' to skip album, 'cp' to change provider, or 'id:<id>' to select by id"
+                            $inputF = Read-Host "Enter new search, 'skip' to skip album, or 'id:<id>' to select by id"
                             if ($inputF -eq 'skip') { break }
-                            if ($inputF -eq 'cp') {
-                                Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
-                                Write-Host "Available providers: Spotify, Qobuz, Discogs" -ForegroundColor Gray
-                                $newProvider = Read-Host "Enter new provider name"
-                                if ($newProvider -in @('Spotify', 'Qobuz', 'Discogs')) {
-                                    $Provider = $newProvider
-                                    Write-Host "Switched to provider: $Provider" -ForegroundColor Green
-                                    $cachedAlbums = $null
-                                    $cachedArtistId = $null
-                                    continue
-                                } else {
-                                    Write-Warning "Invalid provider: $newProvider. Staying with $Provider."
-                                    continue
-                                }
-                            }
                             if ($inputF -like 'id:*') { $id = $inputF.Substring(3); $ProviderArtist = @{ id = $id; name = $id }; $stage = 'B'; continue }
                             if ($inputF) { $artistQuery = $inputF; continue } else { continue }
                         }
     
                         Write-Host "Artist candidates for '$artistQuery':"
                         for ($i = 0; $i -lt $candidates.Count; $i++) {
-                            $candidateName = Get-IfExists $candidates[$i] 'name'
-                            $candidateGenres = Get-IfExists $candidates[$i] 'genres'
-                            $candidateId = Get-IfExists $candidates[$i] 'id'
-                            Write-Host "[$($i+1)] $candidateName - $($candidateGenres -join ', ') (id: $candidateId)"
+                            Write-Host "[$($i+1)] $($candidates[$i].name) - $($candidates[$i].genres -join ', ') (id: $($candidates[$i].id))"
                         }
     
                         # Non-interactive selection: prefer explicit ArtistId, then goA, then AutoSelect/NonInteractive
@@ -138,23 +119,8 @@ function Invoke-MuFoManual {
                             $stage = 'B'; continue
                         }
 
-                        $inputF = Read-Host "Select artist [1] (Enter=first), number, 'skip', 'cp' to change provider, 'id:<id>', or new search term:"
+                        $inputF = Read-Host "Select artist [1] (Enter=first), number, 'skip', 'id:<id>', or new search term:"
                         if ($inputF -eq '') { $ProviderArtist = $candidates[0]; $stage = 'B'; continue }
-                        if ($inputF -eq 'cp') {
-                            Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
-                            Write-Host "Available providers: Spotify, Qobuz, Discogs" -ForegroundColor Gray
-                            $newProvider = Read-Host "Enter new provider name"
-                            if ($newProvider -in @('Spotify', 'Qobuz', 'Discogs')) {
-                                $Provider = $newProvider
-                                Write-Host "Switched to provider: $Provider" -ForegroundColor Green
-                                $cachedAlbums = $null
-                                $cachedArtistId = $null
-                                continue
-                            } else {
-                                Write-Warning "Invalid provider: $newProvider. Staying with $Provider."
-                                continue
-                            }
-                        }
                         if ($inputF -like 'id:*') { $id = $inputF.Substring(3); $ProviderArtist = @{ id = $id; name = $id }; $stage = 'B'; continue }
                         if ($inputF -match '^\d+$') { $idx = [int]$inputF; if ($idx -ge 1 -and $idx -le $candidates.Count) { $ProviderArtist = $candidates[$idx - 1]; $stage = 'B'; continue } else { Write-Warning "Invalid"; continue } }
                         if ($inputF -eq 'skip') { break }
@@ -163,9 +129,7 @@ function Invoke-MuFoManual {
     
                     "B" {
                         Clear-Host
-                        $artistName = Get-IfExists $ProviderArtist 'name'
-                        $artistId = Get-IfExists $ProviderArtist 'id'
-                        Write-Host "Searching for albums for artist: $artistName (id: $artistId)"
+                        Write-Host "Searching for albums for artist: $($ProviderArtist.name) (id: $($ProviderArtist.id))"
                         
                         # Clear cache if artist changed
                         if ($cachedArtistId -ne $ProviderArtist.id) {
@@ -268,18 +232,14 @@ function Invoke-MuFoManual {
                                 Write-Host $modeIndicator -ForegroundColor Yellow
                             }
                             
-                            $providerArtistName = Get-IfExists $ProviderArtist 'name'
-                            Write-Host "Albums for artist $providerArtistName :"
+                            Write-Host "Albums for artist $($ProviderArtist.name):"
                             Write-Host "for local album: $($albumName) (year: $year)"
                             $totalPages = [math]::Ceiling($albumsForArtist.Count / $pageSize)
                             $startIdx = ($page - 1) * $pageSize
                             $endIdx = [math]::Min($startIdx + $pageSize - 1, $albumsForArtist.Count - 1)
     
                             for ($i = $startIdx; $i -le $endIdx; $i++) {
-                                $albumName = Get-IfExists $albumsForArtist[$i] 'name'
-                                $albumId = Get-IfExists $albumsForArtist[$i] 'id'
-                                $albumYear = Get-IfExists $albumsForArtist[$i] 'release_date'
-                                Write-Host "[$($i+1)] $albumName  (id: $albumId) (year: $albumYear)"
+                                Write-Host "[$($i+1)] $($albumsForArtist[$i].name)  (id: $($albumsForArtist[$i].id)) (year: $($albumsForArtist[$i].release_date))"
                             }
     
                             # Non-interactive album selection: prefer explicit AlbumId, then goB, then AutoSelect or NonInteractive
@@ -287,7 +247,7 @@ function Invoke-MuFoManual {
                             if ($goB) { $ProviderAlbum = $albumsForArtist[0]; $stage = 'C'; break }
                             if ($AutoSelect -or $NonInteractive) { $ProviderAlbum = $albumsForArtist[0]; $stage = 'C'; break }
 
-                            $inputF = Read-Host "Select album(s) [1] (Enter=first), number(s) (e.g., 1,3,5-8), '(b)ack', '(n)ext', '(p)rev', '(s)kip', '(cp)' change provider, 'id:<id>', '*' (all albums), or text to search:"
+                            $inputF = Read-Host "Select album(s) [1] (Enter=first), number(s) (e.g., 1,3,5-8), '(b)ack', '(n)ext', '(p)rev', '(s)kip', 'id:<id>', '*' (all albums), or text to search:"
                             
                             switch -Regex ($inputF) {
                                 '^n$' {
@@ -304,23 +264,6 @@ function Invoke-MuFoManual {
                                     $stage = 'A'
                                     $exitdo = $true
                                     break
-                                }
-                                '^cp$' {
-                                    Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
-                                    Write-Host "Available providers: Spotify, Qobuz, Discogs" -ForegroundColor Gray
-                                    $newProvider = Read-Host "Enter new provider name"
-                                    if ($newProvider -in @('Spotify', 'Qobuz', 'Discogs')) {
-                                        $Provider = $newProvider
-                                        Write-Host "Switched to provider: $Provider" -ForegroundColor Green
-                                        $cachedAlbums = $null
-                                        $cachedArtistId = $null
-                                        $stage = 'A'
-                                        $exitdo = $true
-                                        break
-                                    } else {
-                                        Write-Warning "Invalid provider: $newProvider. Staying with $Provider."
-                                        continue
-                                    }
                                 }
                                 '^$' {
                                     $ProviderAlbum = $albumsForArtist[0]
@@ -523,19 +466,14 @@ function Invoke-MuFoManual {
                         # Display appropriate header for single or combined albums
                         if (Get-IfExists $ProviderAlbum '_isCombined') {
                             Write-Host "Processing COMBINED album set:" -ForegroundColor Yellow
-                            $albumCount = Get-IfExists $ProviderAlbum '_albumCount'
-                            $tracks = Get-IfExists $ProviderAlbum '_tracks'
-                            $albumNames = Get-IfExists $ProviderAlbum '_albumNames'
-                            Write-Host "  Albums: $albumCount" -ForegroundColor Cyan
-                            Write-Host "  Tracks: $($tracks.Count)" -ForegroundColor Cyan
-                            foreach ($albumName in $albumNames) {
+                            Write-Host "  Albums: $($ProviderAlbum._albumCount)" -ForegroundColor Cyan
+                            Write-Host "  Tracks: $($ProviderAlbum._tracks.Count)" -ForegroundColor Cyan
+                            foreach ($albumName in $ProviderAlbum._albumNames) {
                                 Write-Host "    - $albumName" -ForegroundColor Gray
                             }
                             Write-Host ""
                         } else {
-                            $albumName = Get-IfExists $ProviderAlbum 'name'
-                            $albumId = Get-IfExists $ProviderAlbum 'id'
-                            Write-Host "Searching tracks for album: $albumName (id: $albumId)"
+                            Write-Host "Searching tracks for album: $($ProviderAlbum.name) (id: $($ProviderAlbum.id))"
                         }
                         
                         # If the caller asked for non-interactive behavior, do not try to drive the
@@ -543,8 +481,7 @@ function Invoke-MuFoManual {
                         # process in unattended runs. The caller can run interactively to inspect and
                         # approve mappings, or add a future explicit flag to auto-apply changes.
                         if ($NonInteractive) {
-                            $albumNameNonInt = Get-IfExists $ProviderAlbum 'name'
-                            Write-Warning "NonInteractive: skipping interactive track selection for album '$albumNameNonInt'."
+                            Write-Warning "NonInteractive: skipping interactive track selection for album '$($ProviderAlbum.name)'."
                             # break out of the switch AND the enclosing stage while-loop to continue with next album
                             break 2
                         }
