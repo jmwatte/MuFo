@@ -10,6 +10,12 @@ param(
 
 Write-Host "`n=== Direct Discogs Artist Extraction Test ===" -ForegroundColor Cyan
 
+# Strip square brackets if present (copied from Discogs site: [r2388472] or [m1764178])
+$ReleaseId = $ReleaseId -replace '^\[|\]$', ''
+
+# Strip 'r' prefix if present (Discogs format: r2388472)
+$ReleaseId = $ReleaseId -replace '^r', ''
+
 # Determine if this is a master release (m prefix) or regular release
 $isMaster = $ReleaseId -match '^m(\d+)$'
 if ($isMaster) {
