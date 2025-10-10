@@ -54,6 +54,42 @@ function Invoke-MuFoManual {
     # ... (begin block unchanged)
     
     process {
+        # Helper function to normalize Discogs IDs (strip brackets, resolve masters)
+        $normalizeDiscogsId = {
+            param([string]$InputId)
+            
+            $id = $InputId.Trim()
+            
+            # Remove brackets if present: [r2388472] → r2388472, [m1764178] → m1764178
+            $id = $id -replace '^\[|\]$', ''
+            
+            # Check if it's a master release (m prefix)
+            if ($id -match '^m(\d+)$') {
+                Write-Host "Detected Discogs master release: $id" -ForegroundColor Yellow
+                Write-Host "Fetching master to resolve main release..." -ForegroundColor Cyan
+                try {
+                    $masterId = $matches[1]
+                    $master = Invoke-DiscogsRequest -Uri "/masters/$masterId"
+                    if ($master -and $master.main_release) {
+                        $id = [string]$master.main_release
+                        Write-Host "✓ Resolved to main release: $id" -ForegroundColor Green
+                    } else {
+                        Write-Warning "Could not resolve master $masterId to main release, using master ID"
+                        $id = $masterId
+                    }
+                } catch {
+                    Write-Warning "Failed to fetch master release: $_"
+                    $id = $masterId
+                }
+            }
+            # Strip 'r' prefix if present: r2388472 → 2388472
+            elseif ($id -match '^r(\d+)$') {
+                $id = $matches[1]
+            }
+            
+            return $id
+        }
+        
         $artist = Split-Path -Leaf $Path
         $albums = Get-ChildItem -LiteralPath $Path -Directory
         foreach ($album in $albums) {
@@ -101,7 +137,11 @@ function Invoke-MuFoManual {
                             }
                             $inputF = Read-Host "Enter new search, 'skip' to skip album, or 'id:<id>' to select by id"
                             if ($inputF -eq 'skip') { break }
-                            if ($inputF -like 'id:*') { $id = $inputF.Substring(3); $ProviderArtist = @{ id = $id; name = $id }; $stage = 'B'; continue }
+                            if ($inputF -like 'id:*') { 
+                                $id = $inputF.Substring(3)
+                                if ($Provider -eq 'Discogs') { $id = & $normalizeDiscogsId $id }
+                                $ProviderArtist = @{ id = $id; name = $id }; $stage = 'B'; continue 
+                            }
                             if ($inputF) { $artistQuery = $inputF; continue } else { continue }
                         }
     
@@ -126,7 +166,11 @@ function Invoke-MuFoManual {
 
                         $inputF = Read-Host "Select artist [1] (Enter=first), number, 'skip', 'id:<id>', or new search term:"
                         if ($inputF -eq '') { $ProviderArtist = $candidates[0]; $stage = 'B'; continue }
-                        if ($inputF -like 'id:*') { $id = $inputF.Substring(3); $ProviderArtist = @{ id = $id; name = $id }; $stage = 'B'; continue }
+                        if ($inputF -like 'id:*') { 
+                            $id = $inputF.Substring(3)
+                            if ($Provider -eq 'Discogs') { $id = & $normalizeDiscogsId $id }
+                            $ProviderArtist = @{ id = $id; name = $id }; $stage = 'B'; continue 
+                        }
                         if ($inputF -match '^\d+$') { $idx = [int]$inputF; if ($idx -ge 1 -and $idx -le $candidates.Count) { $ProviderArtist = $candidates[$idx - 1]; $stage = 'B'; continue } else { Write-Warning "Invalid"; continue } }
                         if ($inputF -eq 'skip') { break }
                         $artistQuery = $inputF; continue
@@ -222,7 +266,9 @@ function Invoke-MuFoManual {
                                     break
                                 }
                                 '^id:.*' {
-                                    $id = $inputF.Substring(3); $ProviderAlbum = @{ id = $id; name = $id }; $stage = 'C'; continue
+                                    $id = $inputF.Substring(3)
+                                    if ($Provider -eq 'Discogs') { $id = & $normalizeDiscogsId $id }
+                                    $ProviderAlbum = @{ id = $id; name = $id }; $stage = 'C'; continue
                                 }
                                 default {
                                     if ($inputF) { $artistQuery = $inputF; $stage = 'A'; continue } else { continue }
@@ -291,7 +337,8 @@ function Invoke-MuFoManual {
                                     break
                                 }
                                 '^id:(.+)$' {
-                                    $id = $matches[1]
+                                    $id = $matches[1].Trim()
+                                    if ($Provider -eq 'Discogs') { $id = & $normalizeDiscogsId $id }
                                     $ProviderAlbum = @{ id = $id; name = $id }
                                     $exitdo = $true
                                     $stage = 'C'
