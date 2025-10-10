@@ -171,6 +171,52 @@ function Get-QAlbumTracks {
             Write-Warning ("Failed to parse HTML: {0}" -f $_.Exception.Message)
             return @()
         }
+        
+        # Extract album metadata from JSON-LD structured data
+        $releaseDate = $null
+        $albumName = $null
+        $albumArtistName = $null
+        
+        try {
+            # Look for script tags with type="application/ld+json"
+            # Use -AllMatches to get both Product and MusicAlbum schemas
+            $jsonLdMatches = [regex]::Matches($html, '<script type="application/ld\+json">\s*(\{[^<]+\})\s*</script>')
+            
+            foreach ($match in $jsonLdMatches) {
+                $jsonLdText = $match.Groups[1].Value
+                $jsonLd = $jsonLdText | ConvertFrom-Json
+                
+                # Extract from Product schema (primary source)
+                if ($jsonLd.'@type' -eq 'Product') {
+                    if ($jsonLd.releaseDate) {
+                        $releaseDate = $jsonLd.releaseDate
+                        Write-Verbose "Extracted release date from Product JSON-LD: $releaseDate"
+                    }
+                    if ($jsonLd.name) {
+                        $albumName = $jsonLd.name
+                        Write-Verbose "Extracted album name from Product JSON-LD: $albumName"
+                    }
+                    if ($jsonLd.brand -and $jsonLd.brand.name) {
+                        $albumArtistName = $jsonLd.brand.name
+                        Write-Verbose "Extracted album artist from Product JSON-LD brand: $albumArtistName"
+                    }
+                }
+                # Also check MusicAlbum schema as fallback
+                elseif ($jsonLd.'@type' -eq 'MusicAlbum') {
+                    if (-not $releaseDate -and $jsonLd.datePublished) {
+                        $releaseDate = $jsonLd.datePublished
+                        Write-Verbose "Extracted release date from MusicAlbum JSON-LD: $releaseDate"
+                    }
+                    if (-not $albumName -and $jsonLd.name) {
+                        $albumName = $jsonLd.name
+                        Write-Verbose "Extracted album name from MusicAlbum JSON-LD: $albumName"
+                    }
+                }
+            }
+        }
+        catch {
+            Write-Verbose "Could not extract metadata from JSON-LD: $_"
+        }
 
         #     # Primary candidate nodes
         #     $allTrackNodes = $doc.SelectNodes('//*[@data-track]') 
@@ -197,7 +243,10 @@ function Get-QAlbumTracks {
         $currentWorkTitle = ""
         $currentDisc = "01"
         function ParsePerformer($inputb) {
+            Write-Verbose "ParsePerformer called with: [$inputb]"
+            
             if (-not $inputb -or $inputb -eq "Unknown Performer") {
+                Write-Verbose "  -> Empty or Unknown Performer, returning empty result"
                 return @{ 
                     Composers = @()
                     Performers = @()
@@ -215,6 +264,7 @@ function Get-QAlbumTracks {
             
             # Parse format: "Name, Role, Role - Name, Role - Name, Role"
             $entries = $inputb -split " - "
+            Write-Verbose "  -> Split into $($entries.Count) entries: $($entries -join ' | ')"
             $composers = @()
             $performers = @()
             $mainArtists = @()
@@ -355,7 +405,21 @@ function Get-QAlbumTracks {
                 #$trackNumber = if ($trackNumberNode) { $trackNumberNode.InnerText.Trim() } else { "Unknown Number" }
                 $infoNode = $node.SelectSingleNode(".//div[@class='track__infos']/p[@class='track__info']")
                 $performerInfo = if ($infoNode) { $infoNode.InnerText.Trim() } else { "" }
+                
+                # DEBUG: Track artist extraction
+                Write-Host "`n=== TRACK $trackNumber DEBUG ===" -ForegroundColor Yellow
+                Write-Host "Title: $title" -ForegroundColor Cyan
+                Write-Host "Raw performerInfo: [$performerInfo]" -ForegroundColor Gray
+                Write-Host "performerInfo length: $($performerInfo.Length) chars" -ForegroundColor Gray
+                
                 $parsed = ParsePerformer $performerInfo
+                
+                Write-Host "Parsed results:" -ForegroundColor Cyan
+                Write-Host "  Performers: $($parsed.Performers.Count) - [$($parsed.Performers -join '; ')]" -ForegroundColor Gray
+                Write-Host "  MainArtists: $($parsed.MainArtists.Count) - [$($parsed.MainArtists -join '; ')]" -ForegroundColor Gray
+                Write-Host "  Composers: $($parsed.Composers.Count) - [$($parsed.Composers -join '; ')]" -ForegroundColor Gray
+                Write-Host "  Conductor: [$($parsed.Conductor)]" -ForegroundColor Gray
+                Write-Host "  Ensemble: [$($parsed.Ensemble)]" -ForegroundColor Gray
 
                 # Build artists array from parsed performers and main artists
                 $artists = @()
@@ -364,16 +428,27 @@ function Get-QAlbumTracks {
                     $artists += [PSCustomObject]@{ name = $performer; type = $artistType }
                 }
                 
+                Write-Host "Built artists array: $($artists.Count) items" -ForegroundColor Cyan
+                if ($artists.Count -gt 0) {
+                    foreach ($a in $artists) {
+                        Write-Host "  - $($a.name) (type: $($a.type))" -ForegroundColor Green
+                    }
+                }
+                
                 # Fallback: If no artist found, try to extract from data-gtm "item_brand" field (album artist)
                 if ($artists.Count -eq 0) {
+                    Write-Host "No artists found, trying GTM fallback..." -ForegroundColor Yellow
                     try {
                         $albumArtist = Get-GtmProductField -GtmRaw $dataGtm -FieldName 'item_brand'
+                        Write-Host "  GTM item_brand: [$albumArtist]" -ForegroundColor Gray
                         if ($albumArtist -and $albumArtist -ne '') {
                             $artists += [PSCustomObject]@{ name = $albumArtist; type = "album_artist" }
-                            Write-Verbose "Using album artist fallback: $albumArtist"
+                            Write-Host "  ✓ Using album artist fallback: $albumArtist" -ForegroundColor Green
+                        } else {
+                            Write-Host "  ✗ GTM item_brand is empty" -ForegroundColor Red
                         }
                     } catch {
-                        Write-Verbose "Could not extract album artist from GTM data"
+                        Write-Host "  ✗ Could not extract album artist from GTM data: $_" -ForegroundColor Red
                     }
                 }
 
@@ -402,11 +477,14 @@ function Get-QAlbumTracks {
                     # Provider-normalized artist fields (Qobuz track entries often lack explicit performers)
                     artists      = $artists
                     Artist       = if ($artists.Count -gt 0) { ($artists | ForEach-Object { $_.name }) -join '; ' } else { 'Unknown Artist' }
-                    # Genres: include both category and subCategory if available
-                    genres       = @($categoryGenre, $subCategoryGenre) | Where-Object { $_ -ne $null -and $_ -ne '' }
-                    # Additional metadata from Qobuz (label, quality)
+                    # Genres: include both category and subCategory if available (deduplicated)
+                    genres       = @($categoryGenre, $subCategoryGenre) | Where-Object { $_ -ne $null -and $_ -ne '' } | Select-Object -Unique
+                    # Additional metadata from Qobuz (label, quality, release date)
                     label        = $label
                     quality      = $quality
+                    release_date = $releaseDate
+                    album_name   = $albumName
+                    album_artist = $albumArtistName
                     # Full production credits for Comment field
                     Comment      = $parsed.FullCredits
                     # Detailed role breakdown for Show-Tracks display

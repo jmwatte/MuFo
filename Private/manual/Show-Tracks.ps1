@@ -150,7 +150,7 @@ function Show-Tracks {
                         }
                     }
 
-                    Write-Host "filename: $($audio.Name)"
+                    Write-Host "filename: $(Split-Path -Leaf $audio.FilePath)"
                 }
                 else {
                     Write-Host "_ No matching audio file" -ForegroundColor Red
@@ -398,7 +398,7 @@ function Show-Tracks {
         if ($audioGenres) {
             Write-Host ("`t`tgenres: {0}" -f ($audioGenres)) -ForegroundColor $genresColor
         }
-        Write-Host ("`t`tcomposer: {0}" -f ($audioComposer)) -ForegroundColor $composerColor
-        Write-Host "filename: $($audio.Name)"
+        Write-Host ("\t\tcomposer: {0}" -f ($audioComposer)) -ForegroundColor $composerColor
+        Write-Host "filename: $(Split-Path -Leaf $audio.FilePath)"
     }
 } #>
