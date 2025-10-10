@@ -57,6 +57,9 @@ function Invoke-MuFoManual {
         $artist = Split-Path -Leaf $Path
         $albums = Get-ChildItem -LiteralPath $Path -Directory
         foreach ($album in $albums) {
+            # Initialize album artist override for this album
+            $script:ManualAlbumArtist = $null
+            
             $useWhatIf = $isWhatIf
             if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Red' }
             # derive album name and year
@@ -536,6 +539,28 @@ function Invoke-MuFoManual {
                                 $tracksForAlbum = @() 
                             }
                         }
+                        
+                        # Auto-prompt for ambiguous album artist (classical music with multiple artists)
+                        if (-not $NonInteractive -and $tracksForAlbum -and $tracksForAlbum.Count -gt 0) {
+                            $isAmbiguous = Test-AlbumArtistAmbiguity -Album $ProviderAlbum -Tracks $tracksForAlbum
+                            if ($isAmbiguous) {
+                                Write-Host "`n⚠️  This classical album has ambiguous album artist assignment." -ForegroundColor Yellow
+                                Write-Host "   Album artist from API: $($ProviderAlbum.album_artist)" -ForegroundColor Gray
+                                Write-Host "   Multiple artists found in tracks" -ForegroundColor Gray
+                                Write-Host ""
+                                $response = Read-Host "Press 'a' to build custom album artist, or Enter to use automatic detection"
+                                if ($response -eq 'a') {
+                                    $script:ManualAlbumArtist = Invoke-AlbumArtistBuilder -Tracks $tracksForAlbum
+                                    if ($script:ManualAlbumArtist) {
+                                        Write-Host "✓ Album artist set to: $script:ManualAlbumArtist" -ForegroundColor Green
+                                    } else {
+                                        Write-Host "Skipped - will use automatic detection" -ForegroundColor Gray
+                                    }
+                                    Write-Host ""
+                                }
+                            }
+                        }
+                        
                         # Normalize to array and defensively map properties (different providers may return different shapes)
                         <#   $tracksForAlbum = @($tracksForAlbum) | ForEach-Object {
                             # Defensive handling: some providers or earlier pipeline steps can emit ErrorRecord
@@ -692,8 +717,8 @@ function Invoke-MuFoManual {
                             else {
                                 if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Red' }
                                 $whatIfStatus = if ($useWhatIf) { "ON" } else { "OFF" }
-                                $optionsLine = "`nOptions:SortByTit(l)e,(d)uration,(t)rackNumber,(n)ame,(h)ybrid,(m)anual,(r)everse,(s)ave Tags(st),(sf)older,(sa)ll,(b)ack,(cp) change provider,(w)hatif $whatIfStatus (s)kip"
-                                $commandList = @('d','t','n','l','h','m','r','st','sf','sa','b','cp','w','whatif','s')
+                                $optionsLine = "`nOptions:SortByTit(l)e,(d)uration,(t)rackNumber,(n)ame,(h)ybrid,(m)anual,(r)everse,(s)ave Tags(st),(sf)older,(sa)ll,(aa)lbumArtist,(b)ack,(cp) change provider,(w)hatif $whatIfStatus (s)kip"
+                                $commandList = @('d','t','n','l','h','m','r','st','sf','sa','aa','b','cp','w','whatif','s')
                                 $paramshow = @{
                                     PairedTracks   = $pairedTracks
                                     AlbumName      = $ProviderAlbum.name
@@ -722,7 +747,27 @@ function Invoke-MuFoManual {
                                 '^h$' { $sortMethod = 'Hybrid'; $refreshTracks = $true; continue }
                                 '^m$' { $sortMethod = 'Manual'; $refreshTracks = $true; continue }
                                 '^r$' { $ReverseSource = -not $ReverseSource; $refreshTracks = $true; continue }
-                                '^b$' { $stage = 'B'; $exitdo = $true; break }
+                                '^aa$' {
+                                    # Manual album artist builder
+                                    if ($tracksForAlbum -and $tracksForAlbum.Count -gt 0) {
+                                        $script:ManualAlbumArtist = Invoke-AlbumArtistBuilder -Tracks $tracksForAlbum
+                                        if ($script:ManualAlbumArtist) {
+                                            Write-Host "`n✓ Album artist set to: $script:ManualAlbumArtist" -ForegroundColor Green
+                                            $refreshTracks = $true
+                                        } else {
+                                            Write-Host "`nSkipped - album artist unchanged" -ForegroundColor Gray
+                                        }
+                                    } else {
+                                        Write-Warning "No tracks available for album artist builder"
+                                    }
+                                    continue
+                                }
+                                '^b$' { 
+                                    $script:ManualAlbumArtist = $null
+                                    $stage = 'B'
+                                    $exitdo = $true
+                                    break 
+                                }
                                 '^cp$' {
                                     Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
                                     Write-Host "Available providers: Spotify, Qobuz, Discogs" -ForegroundColor Gray
@@ -874,7 +919,15 @@ function Invoke-MuFoManual {
                                         foreach ($pair in $pairedTracks) {
                                             if ($null -ne $pair.AudioFile) {
                                                 $filePath = $pair.AudioFile.FilePath
-                                                $tags = get-Tags -Artist $ProviderArtist -Album $ProviderAlbum -SpotifyTrack $pair.SpotifyTrack                        
+                                                $tagsParams = @{
+                                                    Artist = $ProviderArtist
+                                                    Album = $ProviderAlbum
+                                                    SpotifyTrack = $pair.SpotifyTrack
+                                                }
+                                                if ($script:ManualAlbumArtist) {
+                                                    $tagsParams['ManualAlbumArtist'] = $script:ManualAlbumArtist
+                                                }
+                                                $tags = Get-Tags @tagsParams
                                                 Write-Verbose ("Saving tags to: {0}" -f $filePath)
                                                 Write-Verbose ("Tag values:\n{0}" -f ($tags | Out-String))
                                                 $res = Save-TagsForFile -FilePath $filePath -TagValues $tags -WhatIf:$useWhatIf
@@ -956,7 +1009,15 @@ function Invoke-MuFoManual {
                                     foreach ($pair in $pairedTracks) {
                                         if ($null -ne $pair.AudioFile) {
                                             $filePath = $pair.AudioFile.FilePath
-                                            $tags = get-Tags -Artist $ProviderArtist -Album $ProviderAlbum -SpotifyTrack $pair.SpotifyTrack                        
+                                            $tagsParams = @{
+                                                Artist = $ProviderArtist
+                                                Album = $ProviderAlbum
+                                                SpotifyTrack = $pair.SpotifyTrack
+                                            }
+                                            if ($script:ManualAlbumArtist) {
+                                                $tagsParams['ManualAlbumArtist'] = $script:ManualAlbumArtist
+                                            }
+                                            $tags = Get-Tags @tagsParams
                                             Write-Verbose ("Saving tags to: {0}" -f $filePath)
                                             Write-Verbose ("Tag values:\n{0}" -f ($tags | Out-String))
                                             $res = Save-TagsForFile -FilePath $filePath -TagValues $tags -WhatIf:$useWhatIf

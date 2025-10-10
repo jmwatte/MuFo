@@ -11,7 +11,7 @@ $scriptRoot = $PSScriptRoot
 Write-Host "`n=== Testing Album Artist Builder ===" -ForegroundColor Cyan
 
 # Test with Händel/Koopman album (ambiguous case)
-$releaseId = "33996765"
+$releaseId = "35060666"
 
 Write-Host "`nFetching Händel/Koopman album from Discogs..." -ForegroundColor Yellow
 $release = Invoke-DiscogsRequest -Uri "/releases/$releaseId"
