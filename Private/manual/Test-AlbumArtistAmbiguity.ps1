@@ -7,6 +7,9 @@ function Test-AlbumArtistAmbiguity {
         For classical music, album artist is often ambiguous when multiple artists are listed
         without clear role information (composer vs. performer). This function detects such cases.
     
+    .PARAMETER Artist
+        Artist object with genre information (optional, used as fallback).
+    
     .PARAMETER Album
         Album object with genre information.
     
@@ -14,10 +17,13 @@ function Test-AlbumArtistAmbiguity {
         Array of track objects with artist information.
     
     .EXAMPLE
-        $isAmbiguous = Test-AlbumArtistAmbiguity -Album $album -Tracks $tracks
+        $isAmbiguous = Test-AlbumArtistAmbiguity -Artist $artist -Album $album -Tracks $tracks
     #>
     [CmdletBinding()]
     param(
+        [Parameter(Mandatory = $false)]
+        [object]$Artist,
+        
         [Parameter(Mandatory = $true)]
         [object]$Album,
         
@@ -25,12 +31,29 @@ function Test-AlbumArtistAmbiguity {
         [array]$Tracks
     )
 
-    # Check if this is classical music
+    # Check if this is classical music - use Get-IfExists for safe property access
+    # Try artist genres first (more reliable), then album
     $isClassical = $false
-    if ($Album.genre -and $Album.genre -match '(?i)classical') {
-        $isClassical = $true
-    } elseif ($Album.genres -and ($Album.genres -join ', ') -match '(?i)classical') {
-        $isClassical = $true
+    
+    if ($Artist) {
+        $artistGenres = Get-IfExists $Artist 'genres'
+        if ($artistGenres -and ($artistGenres -join ', ') -match '(?i)classical') {
+            $isClassical = $true
+            Write-Verbose "Classical music detected from artist genres"
+        }
+    }
+    
+    if (-not $isClassical) {
+        $albumGenre = Get-IfExists $Album 'genre'
+        $albumGenres = Get-IfExists $Album 'genres'
+        
+        if ($albumGenre -and $albumGenre -match '(?i)classical') {
+            $isClassical = $true
+            Write-Verbose "Classical music detected from album genre"
+        } elseif ($albumGenres -and ($albumGenres -join ', ') -match '(?i)classical') {
+            $isClassical = $true
+            Write-Verbose "Classical music detected from album genres"
+        }
     }
 
     if (-not $isClassical) {

@@ -542,7 +542,7 @@ function Invoke-MuFoManual {
                         
                         # Auto-prompt for ambiguous album artist (classical music with multiple artists)
                         if (-not $NonInteractive -and $tracksForAlbum -and $tracksForAlbum.Count -gt 0) {
-                            $isAmbiguous = Test-AlbumArtistAmbiguity -Album $ProviderAlbum -Tracks $tracksForAlbum
+                            $isAmbiguous = Test-AlbumArtistAmbiguity -Artist $ProviderArtist -Album $ProviderAlbum -Tracks $tracksForAlbum
                             if ($isAmbiguous) {
                                 Write-Host "`n⚠️  This classical album has ambiguous album artist assignment." -ForegroundColor Yellow
                                 Write-Host "   Album artist from API: $($ProviderAlbum.album_artist)" -ForegroundColor Gray
