@@ -131,6 +131,18 @@ function Invoke-MuFoManual {
     
                     "B" {
                         Clear-Host
+                        
+                        # Enhance artist with full details (including genres) if needed
+                        if ($Provider -eq 'Spotify' -and $ProviderArtist -and $ProviderArtist.id) {
+                            if (-not $ProviderArtist.genres -or $ProviderArtist.genres.Count -eq 0) {
+                                Write-Verbose "Fetching full artist details with genres for $($ProviderArtist.name)..."
+                                $fullArtist = Invoke-ProviderGetArtist -Provider $Provider -ArtistId $ProviderArtist.id
+                                if ($fullArtist) {
+                                    $ProviderArtist = $fullArtist
+                                }
+                            }
+                        }
+                        
                         Write-Host "Original Artist: $artist" -ForegroundColor Cyan
                         Write-Host ""
                         Write-Host "Searching for albums for artist: $($ProviderArtist.name) (id: $($ProviderArtist.id))"

@@ -44,7 +44,25 @@ try {
         } else { "Unknown Album Artist" }
         
         $year = if ($album.release_date -match '(\d{4})') { $matches[1] } else { "Unknown" }
-        $genres = if ($album.genres -and $album.genres.Count -gt 0) { $album.genres -join ', ' } else { "Unknown" }
+        
+        # Try to get genres from album first, then from artist
+        $genres = "Unknown"
+        if ($album.genres -and $album.genres.Count -gt 0) {
+            $genres = $album.genres -join ', '
+        } elseif ($album.artists -and $album.artists.Count -gt 0) {
+            # Fetch artist details to get genres
+            Write-Host "Fetching artist genres from Spotify..." -ForegroundColor Yellow
+            try {
+                $artistId = $album.artists[0].id
+                $artistDetails = Get-Artist -Id $artistId
+                if ($artistDetails.genres -and $artistDetails.genres.Count -gt 0) {
+                    $genres = $artistDetails.genres -join ', '
+                }
+            } catch {
+                Write-Verbose "Could not fetch artist genres: $_"
+            }
+        }
+        
         $label = if ($album.label) { $album.label } else { "Unknown" }
         
         Write-Host "Album: $($album.name)" -ForegroundColor Cyan
