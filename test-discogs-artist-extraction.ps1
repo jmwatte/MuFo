@@ -1,5 +1,6 @@
 # Direct test of Discogs artist extraction - no loops, no Clear-Host
-# Usage: .\test-discogs-artist-extraction.ps1 -ReleaseId "12345"
+# Usage: .\test-discogs-artist-extraction.ps1 -ReleaseId "12345" (release)
+#    or: .\test-discogs-artist-extraction.ps1 -ReleaseId "m12345" (master release)
 
 [CmdletBinding()]
 param(
@@ -8,7 +9,17 @@ param(
 )
 
 Write-Host "`n=== Direct Discogs Artist Extraction Test ===" -ForegroundColor Cyan
-Write-Host "Release ID: $ReleaseId`n" -ForegroundColor Gray
+
+# Determine if this is a master release (m prefix) or regular release
+$isMaster = $ReleaseId -match '^m(\d+)$'
+if ($isMaster) {
+    $numericId = $matches[1]
+    Write-Host "Type: Master Release" -ForegroundColor Yellow
+    Write-Host "Master ID: m$numericId`n" -ForegroundColor Gray
+} else {
+    Write-Host "Type: Release" -ForegroundColor Yellow
+    Write-Host "Release ID: $ReleaseId`n" -ForegroundColor Gray
+}
 
 # Directly call the private function by dot-sourcing it
 $scriptRoot = $PSScriptRoot
@@ -17,11 +28,24 @@ $scriptRoot = $PSScriptRoot
 . "$scriptRoot\Private\Get-IfExists.ps1"
 
 try {
-    Write-Host "Fetching release details from Discogs..." -ForegroundColor Yellow
-    $release = Invoke-DiscogsRequest -Uri "/releases/$ReleaseId"
+    if ($isMaster) {
+        Write-Host "Fetching master release details from Discogs..." -ForegroundColor Yellow
+        $master = Invoke-DiscogsRequest -Uri "/masters/$numericId"
+        
+        Write-Host "Master: $($master.title) by $($master.artists[0].name)" -ForegroundColor Cyan
+        Write-Host "Main Release ID: $($master.main_release)" -ForegroundColor Gray
+        Write-Host "`nFetching main release details..." -ForegroundColor Yellow
+        
+        $release = Invoke-DiscogsRequest -Uri "/releases/$($master.main_release)"
+        $actualReleaseId = $master.main_release
+    } else {
+        Write-Host "Fetching release details from Discogs..." -ForegroundColor Yellow
+        $release = Invoke-DiscogsRequest -Uri "/releases/$ReleaseId"
+        $actualReleaseId = $ReleaseId
+    }
     
     Write-Host "Fetching release tracks from Discogs..." -ForegroundColor Yellow
-    $tracks = Get-DAlbumTracks -Id $ReleaseId -Verbose
+    $tracks = Get-DAlbumTracks -Id $actualReleaseId -Verbose
     
     Write-Host "`n`n========================================" -ForegroundColor Cyan
     Write-Host "=== EXTRACTION SUMMARY ===" -ForegroundColor Cyan
