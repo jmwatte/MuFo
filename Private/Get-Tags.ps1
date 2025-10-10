@@ -16,8 +16,72 @@ function Get-Tags {
     $genreT = Get-GenresTags -ProviderArtist $Artist -ProviderAlbum $Album
     $year = $Album.release_date
     if ($year -match '^(?<year>\d{4})') { $Year = $matches.year } else { $Year = 0000 }
+    
     # Extract album artist value
+    # For classical music, prefer performers (conductor/orchestra) over composer
     $albumArtistValue = if ($value = Get-IfExists $Artist 'name') { $value } else { $Artist }
+    
+    # Check if this is classical music
+    $isClassical = $false
+    if ($Album.genre -and $Album.genre -match '(?i)classical') {
+        $isClassical = $true
+    } elseif ($Album.genres -and ($Album.genres -join ', ') -match '(?i)classical') {
+        $isClassical = $true
+    } elseif ($genreT -match '(?i)classical') {
+        $isClassical = $true
+    }
+    
+    # For classical music, use performers as album artist if available
+    if ($isClassical) {
+        Write-Verbose "Classical music detected, checking for performers as album artist"
+        
+        # Try to get conductor from track
+        $conductor = Get-IfExists $SpotifyTrack 'Conductor'
+        
+        # Try to get ensemble/orchestra from artists
+        # Collect all ensemble-type performers, not just the first one
+        $ensembles = @()
+        if ($value = Get-IfExists $SpotifyTrack 'artists') {
+            Write-Verbose "  Checking artists array (count: $(if ($value -is [array]) { $value.Count } else { 1 }))"
+            if ($value -is [array]) {
+                foreach ($a in $value) {
+                    $name = if ($a.name) { $a.name } else { $a.ToString() }
+                    Write-Verbose "    Artist: $name"
+                    # Skip composers (single person names without ensemble indicators)
+                    # Include English, French, German, Italian ensemble names
+                    if ($name -match '(?i)(orchestra|orchestre|orchester|philharmonic|philharmonique|symphony|symphonie|sinfonie|ensemble|choir|chorus|choeur|chor|quartet|quartett|quatuor|trio)') {
+                        if ($name -notin $ensembles) {
+                            $ensembles += $name
+                            Write-Verbose "      -> Identified as ensemble"
+                        }
+                    }
+                }
+            }
+        }
+        
+        # Build classical album artist from performers
+        $performerParts = @()
+        
+        # Add conductor first if available
+        if ($conductor) { 
+            $performerParts += $conductor 
+            Write-Verbose "  Found conductor: $conductor"
+        }
+        
+        # Add all ensembles
+        if ($ensembles.Count -gt 0) {
+            $performerParts += $ensembles
+            Write-Verbose "  Found ensemble(s): $($ensembles -join ', ')"
+        }
+        
+        # Use performers if we found any
+        if ($performerParts.Count -gt 0) {
+            $albumArtistValue = $performerParts -join ', '
+            Write-Verbose "Using performers as album artist: $albumArtistValue"
+        } else {
+            Write-Verbose "No performers found in track data, keeping original album artist: $albumArtistValue"
+        }
+    }
 
     # Extract track title (handle both Spotify 'name' and Qobuz 'title' properties)
     $trackTitle = if ($value = Get-IfExists $SpotifyTrack 'name') { $value } elseif ($value = Get-IfExists $SpotifyTrack 'title') { $value } else { 'Unknown Title' }
