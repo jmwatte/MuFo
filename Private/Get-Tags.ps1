@@ -49,7 +49,7 @@ function Get-Tags {
                     Write-Verbose "    Artist: $name"
                     # Skip composers (single person names without ensemble indicators)
                     # Include English, French, German, Italian ensemble names
-                    if ($name -match '(?i)(orchestra|orchestre|orchester|philharmonic|philharmonique|symphony|symphonie|sinfonie|ensemble|choir|chorus|choeur|chor|quartet|quartett|quatuor|trio)') {
+                    if ($name -match '(?i)(orchestra|orchestre|orchester|philharmonic|philharmonique|philharmoniker|symphony|symphonie|sinfonie|sinfonieorchester|ensemble|choir|chorus|choeur|chor|quartet|quartett|quatuor|trio)') {
                         if ($name -notin $ensembles) {
                             $ensembles += $name
                             Write-Verbose "      -> Identified as ensemble"

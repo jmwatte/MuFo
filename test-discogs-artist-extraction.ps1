@@ -32,6 +32,8 @@ $scriptRoot = $PSScriptRoot
 . "$scriptRoot\Private\manual\Invoke-DiscogsRequest.ps1"
 . "$scriptRoot\Private\manual\Get-DAlbumTracks.ps1"
 . "$scriptRoot\Private\Get-IfExists.ps1"
+. "$scriptRoot\Private\Get-Tags.ps1"
+. "$scriptRoot\Private\Get-GenresTags.ps1"
 
 try {
     if ($isMaster) {
@@ -83,7 +85,7 @@ try {
         } else { "Unknown" }
         
         Write-Host "Album: $($release.title)" -ForegroundColor Cyan
-        Write-Host "Album Artist: $albumArtist" -ForegroundColor Cyan
+        Write-Host "Album Artist (from API): $albumArtist" -ForegroundColor Cyan
         Write-Host "Year: $year" -ForegroundColor Cyan
         Write-Host "Genre: $genres" -ForegroundColor Cyan
         Write-Host "Style: $styles" -ForegroundColor Gray
@@ -91,6 +93,28 @@ try {
         Write-Host "Country: $country" -ForegroundColor Gray
         Write-Host "Format: $format" -ForegroundColor Gray
         Write-Host "Discogs ID: $($release.id)" -ForegroundColor Gray
+        
+        # Compute what album artist would be when tagging (shows classical music enhancement)
+        if ($tracks.Count -gt 0) {
+            try {
+                $artist = [PSCustomObject]@{ name = $albumArtist; genres = @() }
+                $albumObj = [PSCustomObject]@{ 
+                    name = $release.title
+                    genre = $genres
+                    genres = if ($release.genres) { $release.genres } else { @() }
+                    release_date = $year
+                }
+                $tags = Get-Tags -Artist $artist -Album $albumObj -SpotifyTrack $tracks[0] -Verbose
+                
+                $computedColor = if ($tags.AlbumArtist -ne $albumArtist) { 'Green' } else { 'Cyan' }
+                Write-Host "Album Artist (computed for tagging): $($tags.AlbumArtist)" -ForegroundColor $computedColor
+                if ($tags.AlbumArtist -ne $albumArtist) {
+                    Write-Host "  ℹ️  Classical music detected - using performers instead of composer" -ForegroundColor Yellow
+                }
+            } catch {
+                Write-Verbose "Could not compute album artist: $_"
+            }
+        }
         
         # Show first track details
         Write-Host "`n--- First Track Example ---" -ForegroundColor Yellow

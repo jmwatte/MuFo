@@ -16,6 +16,12 @@ if (-not (Get-Module -Name Spotishell)) {
     Import-Module Spotishell -ErrorAction Stop
 }
 
+# Load helper functions
+$scriptRoot = $PSScriptRoot
+. "$scriptRoot\Private\Get-Tags.ps1"
+. "$scriptRoot\Private\Get-GenresTags.ps1"
+. "$scriptRoot\Private\Get-IfExists.ps1"
+
 try {
     Write-Host "Fetching album details from Spotify..." -ForegroundColor Yellow
     $album = Get-Album -Id $AlbumId
@@ -66,12 +72,36 @@ try {
         $label = if ($album.label) { $album.label } else { "Unknown" }
         
         Write-Host "Album: $($album.name)" -ForegroundColor Cyan
-        Write-Host "Album Artist: $albumArtist" -ForegroundColor Cyan
+        Write-Host "Album Artist (from API): $albumArtist" -ForegroundColor Cyan
         Write-Host "Year: $year" -ForegroundColor Cyan
         Write-Host "Genre: $genres" -ForegroundColor Cyan
         Write-Host "Label: $label" -ForegroundColor Gray
         Write-Host "Total Tracks: $($album.total_tracks)" -ForegroundColor Gray
         Write-Host "Popularity: $($album.popularity)" -ForegroundColor Gray
+        
+        # Compute what album artist would be when tagging (shows classical music enhancement)
+        if ($tracks.Count -gt 0) {
+            try {
+                $artist = [PSCustomObject]@{ 
+                    name = $albumArtist
+                    genres = if ($album.genres) { $album.genres } else { @() }
+                }
+                $albumObj = [PSCustomObject]@{
+                    name = $album.name
+                    genres = if ($album.genres) { $album.genres } else { @() }
+                    release_date = $album.release_date
+                }
+                $tags = Get-Tags -Artist $artist -Album $albumObj -SpotifyTrack $tracks[0] -Verbose
+                
+                $computedColor = if ($tags.AlbumArtist -ne $albumArtist) { 'Green' } else { 'Cyan' }
+                Write-Host "Album Artist (computed for tagging): $($tags.AlbumArtist)" -ForegroundColor $computedColor
+                if ($tags.AlbumArtist -ne $albumArtist) {
+                    Write-Host "  ℹ️  Classical music detected - using performers instead of composer" -ForegroundColor Yellow
+                }
+            } catch {
+                Write-Verbose "Could not compute album artist: $_"
+            }
+        }
         
         # Show first track details
         Write-Host "`n--- First Track Example ---" -ForegroundColor Yellow

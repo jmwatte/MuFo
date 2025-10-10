@@ -15,6 +15,8 @@ $scriptRoot = $PSScriptRoot
 . "$scriptRoot\Private\manual\Get-QAlbumTracks.ps1"
 . "$scriptRoot\Private\manual\Invoke-DiscogsRequest.ps1"
 . "$scriptRoot\Private\Get-IfExists.ps1"
+. "$scriptRoot\Private\Get-Tags.ps1"
+. "$scriptRoot\Private\Get-GenresTags.ps1"
 
 # Load required dependencies
 if (-not (Get-Module -Name PowerHTML -ListAvailable)) {
@@ -82,12 +84,32 @@ try {
         $quality = if ($first.quality) { $first.quality } else { "Unknown" }
         
         Write-Host "Album: $albumName" -ForegroundColor Cyan
-        Write-Host "Album Artist: $albumArtist" -ForegroundColor Cyan
+        Write-Host "Album Artist (from API): $albumArtist" -ForegroundColor Cyan
         Write-Host "Release Date: $releaseDate" -ForegroundColor Cyan
         Write-Host "Year: $year" -ForegroundColor Cyan
         Write-Host "Genre: $genres" -ForegroundColor Cyan
         Write-Host "Label: $label" -ForegroundColor Gray
         Write-Host "Quality: $quality" -ForegroundColor Gray
+        
+        # Compute what album artist would be when tagging (shows classical music enhancement)
+        try {
+            $artist = [PSCustomObject]@{ name = $albumArtist; genres = @() }
+            $albumObj = [PSCustomObject]@{ 
+                name = $albumName
+                genre = $genres
+                genres = if ($first.genres) { $first.genres } else { @() }
+                release_date = $releaseDate
+            }
+            $tags = Get-Tags -Artist $artist -Album $albumObj -SpotifyTrack $first -Verbose
+            
+            $computedColor = if ($tags.AlbumArtist -ne $albumArtist) { 'Green' } else { 'Cyan' }
+            Write-Host "Album Artist (computed for tagging): $($tags.AlbumArtist)" -ForegroundColor $computedColor
+            if ($tags.AlbumArtist -ne $albumArtist) {
+                Write-Host "  ℹ️  Classical music detected - using performers instead of composer" -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Verbose "Could not compute album artist: $_"
+        }
         
         # Show first track details
         Write-Host "`n--- First Track Example ---" -ForegroundColor Yellow
