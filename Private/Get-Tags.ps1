@@ -9,7 +9,10 @@ function Get-Tags {
         [object]$Album,
 
         [Parameter(Mandatory = $true)]
-        [object]$SpotifyTrack
+        [object]$SpotifyTrack,
+        
+        [Parameter(Mandatory = $false)]
+        [string]$ManualAlbumArtist
     )
 
     # Get genres from the available Get-GenresTags function
@@ -18,8 +21,15 @@ function Get-Tags {
     if ($year -match '^(?<year>\d{4})') { $Year = $matches.year } else { $Year = 0000 }
     
     # Extract album artist value
-    # For classical music, prefer performers (conductor/orchestra) over composer
-    $albumArtistValue = if ($value = Get-IfExists $Artist 'name') { $value } else { $Artist }
+    # Priority: Manual override > Classical performer detection > Default artist name
+    $albumArtistValue = if ($ManualAlbumArtist) { 
+        Write-Verbose "Using manual album artist override: $ManualAlbumArtist"
+        $ManualAlbumArtist 
+    } elseif ($value = Get-IfExists $Artist 'name') { 
+        $value 
+    } else { 
+        $Artist 
+    }
     
     # Check if this is classical music
     $isClassical = $false
@@ -31,8 +41,8 @@ function Get-Tags {
         $isClassical = $true
     }
     
-    # For classical music, use performers as album artist if available
-    if ($isClassical) {
+    # For classical music, use performers as album artist if available (unless manually overridden)
+    if ($isClassical -and -not $ManualAlbumArtist) {
         Write-Verbose "Classical music detected, checking for performers as album artist"
         
         # Try to get conductor from track
