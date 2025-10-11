@@ -5,7 +5,7 @@ function Invoke-MuFoManual {
         [ValidateNotNullOrEmpty()]
         [string]$Path,
         [Parameter(Mandatory = $false)]
-        [ValidateSet('Spotify', 'Qobuz', 'Discogs')]  # Add more providers as needed
+        [ValidateSet('Spotify', 'Qobuz', 'Discogs', 'MusicBrainz')]
         [string]$Provider = 'Spotify',  # Default to Spotify for compatibility
         [Parameter(Mandatory = $false)]
         [string]$ArtistId,
@@ -151,9 +151,9 @@ function Invoke-MuFoManual {
                                 }
                                 '^cp$' {
                                     Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
-                                    Write-Host "Available providers: (S)potify, (Q)obuz, (D)iscogs" -ForegroundColor Gray
+                                    Write-Host "Available providers: (S)potify, (Q)obuz, (D)iscogs, (M)usicBrainz" -ForegroundColor Gray
                                     $newProvider = Read-Host "Enter provider (full name or first letter)"
-                                    $providerMap = @{ 's' = 'Spotify'; 'q' = 'Qobuz'; 'd' = 'Discogs'; 'spotify' = 'Spotify'; 'qobuz' = 'Qobuz'; 'discogs' = 'Discogs' }
+                                    $providerMap = @{ 's' = 'Spotify'; 'q' = 'Qobuz'; 'd' = 'Discogs'; 'm' = 'MusicBrainz'; 'spotify' = 'Spotify'; 'qobuz' = 'Qobuz'; 'discogs' = 'Discogs'; 'musicbrainz' = 'MusicBrainz' }
                                     $matched = $providerMap[$newProvider.ToLower()]
                                     if ($matched) {
                                         $Provider = $matched
@@ -216,9 +216,9 @@ function Invoke-MuFoManual {
                         if ($inputF -eq 'skip') { break }
                         if ($inputF -eq 'cp') {
                             Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
-                            Write-Host "Available providers: (S)potify, (Q)obuz, (D)iscogs" -ForegroundColor Gray
+                            Write-Host "Available providers: (S)potify, (Q)obuz, (D)iscogs, (M)usicBrainz" -ForegroundColor Gray
                             $newProvider = Read-Host "Enter provider (full name or first letter)"
-                            $providerMap = @{ 's' = 'Spotify'; 'q' = 'Qobuz'; 'd' = 'Discogs'; 'spotify' = 'Spotify'; 'qobuz' = 'Qobuz'; 'discogs' = 'Discogs' }
+                            $providerMap = @{ 's' = 'Spotify'; 'q' = 'Qobuz'; 'd' = 'Discogs'; 'm' = 'MusicBrainz'; 'spotify' = 'Spotify'; 'qobuz' = 'Qobuz'; 'discogs' = 'Discogs'; 'musicbrainz' = 'MusicBrainz' }
                             $matched = $providerMap[$newProvider.ToLower()]
                             if ($matched) {
                                 $Provider = $matched
@@ -426,9 +426,9 @@ function Invoke-MuFoManual {
                                         }
                                     } elseif ($skipChoice -eq 'cp') {
                                         Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
-                                        Write-Host "Available providers: (S)potify, (Q)obuz, (D)iscogs" -ForegroundColor Gray
+                                        Write-Host "Available providers: (S)potify, (Q)obuz, (D)iscogs, (M)usicBrainz" -ForegroundColor Gray
                                         $newProvider = Read-Host "Enter provider (full name or first letter)"
-                                        $providerMap = @{ 's' = 'Spotify'; 'q' = 'Qobuz'; 'd' = 'Discogs'; 'spotify' = 'Spotify'; 'qobuz' = 'Qobuz'; 'discogs' = 'Discogs' }
+                                        $providerMap = @{ 's' = 'Spotify'; 'q' = 'Qobuz'; 'd' = 'Discogs'; 'm' = 'MusicBrainz'; 'spotify' = 'Spotify'; 'qobuz' = 'Qobuz'; 'discogs' = 'Discogs'; 'musicbrainz' = 'MusicBrainz' }
                                         $matched = $providerMap[$newProvider.ToLower()]
                                         if ($matched) {
                                             $Provider = $matched
@@ -528,9 +528,9 @@ function Invoke-MuFoManual {
                                     }
                                 } elseif ($skipChoice -eq 'cp') {
                                     Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
-                                    Write-Host "Available providers: (S)potify, (Q)obuz, (D)iscogs" -ForegroundColor Gray
+                                    Write-Host "Available providers: (S)potify, (Q)obuz, (D)iscogs, (M)usicBrainz" -ForegroundColor Gray
                                     $newProvider = Read-Host "Enter provider (full name or first letter)"
-                                    $providerMap = @{ 's' = 'Spotify'; 'q' = 'Qobuz'; 'd' = 'Discogs'; 'spotify' = 'Spotify'; 'qobuz' = 'Qobuz'; 'discogs' = 'Discogs' }
+                                    $providerMap = @{ 's' = 'Spotify'; 'q' = 'Qobuz'; 'd' = 'Discogs'; 'm' = 'MusicBrainz'; 'spotify' = 'Spotify'; 'qobuz' = 'Qobuz'; 'discogs' = 'Discogs'; 'musicbrainz' = 'MusicBrainz' }
                                     $matched = $providerMap[$newProvider.ToLower()]
                                     if ($matched) {
                                         $Provider = $matched
@@ -782,9 +782,9 @@ function Invoke-MuFoManual {
                                 }
                                 '^cp$' {
                                     Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
-                                    Write-Host "Available providers: (S)potify, (Q)obuz, (D)iscogs" -ForegroundColor Gray
+                                    Write-Host "Available providers: (S)potify, (Q)obuz, (D)iscogs, (M)usicBrainz" -ForegroundColor Gray
                                     $newProvider = Read-Host "Enter provider (full name or first letter)"
-                                    $providerMap = @{ 's' = 'Spotify'; 'q' = 'Qobuz'; 'd' = 'Discogs'; 'spotify' = 'Spotify'; 'qobuz' = 'Qobuz'; 'discogs' = 'Discogs' }
+                                    $providerMap = @{ 's' = 'Spotify'; 'q' = 'Qobuz'; 'd' = 'Discogs'; 'm' = 'MusicBrainz'; 'spotify' = 'Spotify'; 'qobuz' = 'Qobuz'; 'discogs' = 'Discogs'; 'musicbrainz' = 'MusicBrainz' }
                                     $matched = $providerMap[$newProvider.ToLower()]
                                     if ($matched) {
                                         $Provider = $matched

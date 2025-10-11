@@ -2,11 +2,11 @@ function Invoke-ProviderGetAlbums {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [ValidateSet('Spotify', 'Qobuz', 'Discogs')]
+        [ValidateSet('Spotify', 'Qobuz', 'Discogs', 'MusicBrainz')]
         [string]$Provider,
 
         [Parameter(Mandatory)]
-        [string]$ArtistId,  # For Spotify: ID; for Qobuz: full href; for Discogs: numeric ID
+        [string]$ArtistId,  # For Spotify: ID; for Qobuz: full href; for Discogs: numeric ID; for MusicBrainz: MBID
 
         [Parameter()]
         [string]$AlbumType = 'Album',  # For Spotify compatibility
@@ -30,5 +30,6 @@ function Invoke-ProviderGetAlbums {
                 -IncludeSingles:$IncludeSingles `
                 -IncludeCompilations:$IncludeCompilations
         }
+        'MusicBrainz' { Get-MBArtistAlbums -ArtistId $ArtistId }
     }
 }

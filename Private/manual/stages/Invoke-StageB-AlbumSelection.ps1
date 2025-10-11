@@ -315,9 +315,9 @@ function Invoke-StageB-AlbumSelection {
             }
             'cp' {
                 Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
-                Write-Host "Available providers: (S)potify, (Q)obuz, (D)iscogs" -ForegroundColor Gray
+                Write-Host "Available providers: (S)potify, (Q)obuz, (D)iscogs, (M)usicBrainz" -ForegroundColor Gray
                 $newProvider = Read-Host "Enter provider (full name or first letter)"
-                $providerMap = @{ 's' = 'Spotify'; 'q' = 'Qobuz'; 'd' = 'Discogs'; 'spotify' = 'Spotify'; 'qobuz' = 'Qobuz'; 'discogs' = 'Discogs' }
+                $providerMap = @{ 's' = 'Spotify'; 'q' = 'Qobuz'; 'd' = 'Discogs'; 'm' = 'MusicBrainz'; 'spotify' = 'Spotify'; 'qobuz' = 'Qobuz'; 'discogs' = 'Discogs'; 'musicbrainz' = 'MusicBrainz' }
                 $matched = $providerMap[$newProvider.ToLower()]
                 if ($matched) {
                     $Provider = $matched
