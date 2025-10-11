@@ -25,7 +25,8 @@ function Get-MBAlbumTracks {
         
         # Request release with media (tracks), artist credits, and genres/tags
         # Include release-groups to get album-level genre information
-        $inc = 'recordings+artist-credits+media+release-groups+genres+tags'
+        # Include artist-rels to get detailed artist info with aliases (for Latin script names)
+        $inc = 'recordings+artist-credits+media+release-groups+genres+tags+artist-rels'
         
         $release = Invoke-MusicBrainzRequest -Endpoint 'release' -Id $Id -Inc $inc
         
@@ -116,9 +117,22 @@ function Get-MBAlbumTracks {
                 if (Get-IfExists $recording 'artist-credit') {
                     foreach ($credit in $recording.'artist-credit') {
                         if (Get-IfExists $credit 'artist' -and (Get-IfExists $credit.artist 'name')) {
+                            $artistName = $credit.artist.name
+                            $artistId = if (Get-IfExists $credit.artist 'id') { $credit.artist.id } else { $null }
+                            
+                            # If name contains non-Latin characters (Cyrillic, etc.), try to get Latin alias
+                            if ($artistId -and $artistName -match '[^\x00-\x7F]') {
+                                Write-Verbose "Artist name '$artistName' contains non-Latin characters, fetching Latin alias..."
+                                $latinName = Get-MBArtistLatinName -ArtistId $artistId -OriginalName $artistName
+                                if ($latinName -and $latinName -ne $artistName) {
+                                    Write-Verbose "Using Latin name: $latinName (original: $artistName)"
+                                    $artistName = $latinName
+                                }
+                            }
+                            
                             $artists += [PSCustomObject]@{
-                                name = $credit.artist.name
-                                id = if (Get-IfExists $credit.artist 'id') { $credit.artist.id } else { $null }
+                                name = $artistName
+                                id = $artistId
                             }
                         }
                     }
@@ -128,9 +142,22 @@ function Get-MBAlbumTracks {
                 if ($artists.Count -eq 0 -and (Get-IfExists $release 'artist-credit')) {
                     foreach ($credit in $release.'artist-credit') {
                         if (Get-IfExists $credit 'artist' -and (Get-IfExists $credit.artist 'name')) {
+                            $artistName = $credit.artist.name
+                            $artistId = if (Get-IfExists $credit.artist 'id') { $credit.artist.id } else { $null }
+                            
+                            # If name contains non-Latin characters, try to get Latin alias
+                            if ($artistId -and $artistName -match '[^\x00-\x7F]') {
+                                Write-Verbose "Artist name '$artistName' contains non-Latin characters, fetching Latin alias..."
+                                $latinName = Get-MBArtistLatinName -ArtistId $artistId -OriginalName $artistName
+                                if ($latinName -and $latinName -ne $artistName) {
+                                    Write-Verbose "Using Latin name: $latinName (original: $artistName)"
+                                    $artistName = $latinName
+                                }
+                            }
+                            
                             $artists += [PSCustomObject]@{
-                                name = $credit.artist.name
-                                id = if (Get-IfExists $credit.artist 'id') { $credit.artist.id } else { $null }
+                                name = $artistName
+                                id = $artistId
                             }
                         }
                     }
