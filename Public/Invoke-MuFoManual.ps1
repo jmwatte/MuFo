@@ -282,8 +282,25 @@ function Invoke-MuFoManual {
                             Write-Verbose "Using pre-fetched tracks from combined album"
                             $tracksForAlbum = $ProviderAlbum._tracks
                         } else {
+                            # For Discogs: if album is a master, resolve to main_release before fetching tracks
+                            $albumIdToFetch = $ProviderAlbum.id
+                            if ($Provider -eq 'Discogs' -and (Get-IfExists $ProviderAlbum 'type') -eq 'master') {
+                                Write-Verbose "Album is a Discogs master (id: $albumIdToFetch), resolving to main_release..."
+                                try {
+                                    $masterDetails = Invoke-DiscogsRequest -Endpoint "masters/$albumIdToFetch"
+                                    if ($masterDetails -and (Get-IfExists $masterDetails 'main_release')) {
+                                        $albumIdToFetch = [string]$masterDetails.main_release
+                                        Write-Verbose "Resolved master to main_release: $albumIdToFetch"
+                                    } else {
+                                        Write-Warning "Master $albumIdToFetch has no main_release, using master ID"
+                                    }
+                                } catch {
+                                    Write-Warning "Failed to resolve master to main_release: $_"
+                                }
+                            }
+                            
                             try { 
-                                $tracksForAlbum = Invoke-ProviderGetTracks -Provider $Provider -AlbumId $ProviderAlbum.id 
+                                $tracksForAlbum = Invoke-ProviderGetTracks -Provider $Provider -AlbumId $albumIdToFetch
                             } catch { 
                                 Write-Warning "Get-AlbumTracks failed: $_"
                                 $tracksForAlbum = @() 
