@@ -17,7 +17,7 @@ function Get-Tags {
 
     # Get genres from the available Get-GenresTags function
     $genreT = Get-GenresTags -ProviderArtist $Artist -ProviderAlbum $Album
-    $year = $Album.release_date
+    $year = Get-IfExists $Album 'release_date'
     if ($year -match '^(?<year>\d{4})') { $Year = $matches.year } else { $Year = 0000 }
     
     # Extract album artist value
@@ -33,9 +33,12 @@ function Get-Tags {
     
     # Check if this is classical music
     $isClassical = $false
-    if ($Album.genre -and $Album.genre -match '(?i)classical') {
+    $albumGenre = Get-IfExists $Album 'genre'
+    $albumGenres = Get-IfExists $Album 'genres'
+    
+    if ($albumGenre -and $albumGenre -match '(?i)classical') {
         $isClassical = $true
-    } elseif ($Album.genres -and ($Album.genres -join ', ') -match '(?i)classical') {
+    } elseif ($albumGenres -and ($albumGenres -join ', ') -match '(?i)classical') {
         $isClassical = $true
     } elseif ($genreT -match '(?i)classical') {
         $isClassical = $true
@@ -127,7 +130,7 @@ function Get-Tags {
         Genres      = $genreT
         AlbumArtist = $albumArtistValue
         Date        = $Year
-        Album       = $Album.name
+        Album       = Get-IfExists $Album 'name'
     }
 
     # Conditionally add composers if present in the Spotify track
