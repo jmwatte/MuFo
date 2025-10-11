@@ -168,6 +168,7 @@ function Invoke-MuFoManual {
                                 default {
                                     if ($inputF) { 
                                         $artistQuery = $inputF
+                                        Write-Verbose "Updated artistQuery to: '$artistQuery' (from no-candidates prompt)"
                                         continue 
                                     } else { 
                                         continue 
@@ -220,7 +221,9 @@ function Invoke-MuFoManual {
                                 continue
                             }
                         }
-                        $artistQuery = $inputF; continue
+                        $artistQuery = $inputF
+                        Write-Verbose "Updated artistQuery to: '$artistQuery' (from selection prompt)"
+                        continue
                     }
     
                     "B" {
