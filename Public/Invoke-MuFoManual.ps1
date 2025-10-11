@@ -845,22 +845,42 @@ function Invoke-MuFoManual {
                                             else {
                                                 Write-Verbose "NonInteractive/goC/WhatIf or no-path-change: skipping pause after move."
                                             }
-                                            $stage = 'C'
-                                            $exitDo = $true
-                                            break
+                                            # Stay in doTracks loop to avoid re-fetching tracks
+                                            continue doTracks
                                         }
                                         else {
                                             # If the new path is identical to the current one, avoid reloading
                                             if ($moveResult.NewAlbumPath -eq $oldpath) {
                                                 Write-Verbose "Move result indicates no change to album path; continuing."
-                                                $stage = 'C'
-                                                $exitDo = $true
-                                                break
+                                                # Stay in doTracks loop to avoid re-fetching tracks
+                                                continue doTracks
                                             }
                                             $album = Get-Item -LiteralPath $moveResult.NewAlbumPath
-                                            $stage = "C"
-                                            $exitDo = $true
-                                            break 
+                                            # Reload audio files from new location
+                                            $audioFiles = Get-ChildItem -LiteralPath $album.FullName -File -Recurse | Where-Object { $_.Extension -match '\.(mp3|flac|wav|m4a|aac|ogg|ape)' }
+                                            $audioFiles = foreach ($f in $audioFiles) {
+                                                try {
+                                                    $tagFile = [TagLib.File]::Create($f.FullName)
+                                                    [PSCustomObject]@{
+                                                        FilePath    = $f.FullName
+                                                        DiscNumber  = $tagFile.Tag.Disc
+                                                        TrackNumber = $tagFile.Tag.Track
+                                                        Title       = $tagFile.Tag.Title
+                                                        TagFile     = $tagFile
+                                                        Composer    = if ($tagFile.Tag.Composers) { $tagFile.Tag.Composers -join '; ' } else { 'Unknown Composer' }
+                                                        Artist      = if ($tagFile.Tag.Performers) { $tagFile.Tag.Performers -join '; ' } else { 'Unknown Artist' }
+                                                        Name        = if ($tagFile.Tag.Title) { $tagFile.Tag.Title } else { $f.BaseName }
+                                                        Duration    = $tagFile.Properties.Duration.TotalMilliseconds
+                                                    }
+                                                }
+                                                catch {
+                                                    Write-Warning "Skipping corrupted or invalid audio file: $($f.FullName) - Error: $($_.Exception.Message)"
+                                                    continue
+                                                }
+                                            }
+                                            $refreshTracks = $true
+                                            # Stay in doTracks loop to avoid re-fetching tracks
+                                            continue doTracks
                                         }
                                     }
                                     else {
