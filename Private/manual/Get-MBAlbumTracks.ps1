@@ -26,9 +26,9 @@ function Get-MBAlbumTracks {
         # Request release with media (tracks), artist credits, and genres/tags
         # Include release-groups to get album-level genre information
         # Include artist-rels to get detailed artist info with aliases (for Latin script names)
-        # Include recording-level-rels to get recording→work links (work IDs)
-        # Note: We'll fetch each work separately to get composer (work-level-rels doesn't work here)
-        $inc = 'recordings+artist-credits+media+release-groups+genres+tags+artist-rels+recording-level-rels'
+        # Include work-rels to get recording→work relationships (the work IDs are in the recording relations)
+        # Note: We'll fetch each work separately to get composer relationships
+        $inc = 'recordings+artist-credits+media+release-groups+genres+tags+artist-rels+work-rels'
         
         $release = Invoke-MusicBrainzRequest -Endpoint 'release' -Id $Id -Inc $inc
         
