@@ -15,8 +15,16 @@ function Get-Tags {
         [string]$ManualAlbumArtist
     )
 
-    # Get genres from the available Get-GenresTags function
-    $genreT = Get-GenresTags -ProviderArtist $Artist -ProviderAlbum $Album
+    # Get genres - prefer track-level genres (e.g., from MusicBrainz) over artist-level
+    $genreT = if ($trackGenres = Get-IfExists $SpotifyTrack 'genres') {
+        # Track has genres - use them directly
+        Write-Verbose "Using track-level genres: $($trackGenres -join ', ')"
+        $trackGenres -join ', '
+    } else {
+        # Fall back to artist/album genres
+        Write-Verbose "No track-level genres, using artist/album genres"
+        Get-GenresTags -ProviderArtist $Artist -ProviderAlbum $Album
+    }
     $year = Get-IfExists $Album 'release_date'
     if ($year -match '^(?<year>\d{4})') { $Year = $matches.year } else { $Year = 0000 }
     
