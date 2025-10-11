@@ -37,6 +37,7 @@ function Test-AlbumArtistAmbiguity {
     
     if ($Artist) {
         $artistGenres = Get-IfExists $Artist 'genres'
+        Write-Verbose "Artist genres: $($artistGenres -join ', ')"
         if ($artistGenres -and ($artistGenres -join ', ') -match '(?i)classical') {
             $isClassical = $true
             Write-Verbose "Classical music detected from artist genres"
@@ -46,6 +47,8 @@ function Test-AlbumArtistAmbiguity {
     if (-not $isClassical) {
         $albumGenre = Get-IfExists $Album 'genre'
         $albumGenres = Get-IfExists $Album 'genres'
+        Write-Verbose "Album genre (singular): $albumGenre"
+        Write-Verbose "Album genres (plural): $($albumGenres -join ', ')"
         
         if ($albumGenre -and $albumGenre -match '(?i)classical') {
             $isClassical = $true
@@ -53,6 +56,17 @@ function Test-AlbumArtistAmbiguity {
         } elseif ($albumGenres -and ($albumGenres -join ', ') -match '(?i)classical') {
             $isClassical = $true
             Write-Verbose "Classical music detected from album genres"
+        }
+    }
+    
+    # Also check track genres (MusicBrainz stores genres at track level)
+    if (-not $isClassical -and $Tracks -and $Tracks.Count -gt 0) {
+        $firstTrack = $Tracks[0]
+        $trackGenres = Get-IfExists $firstTrack 'genres'
+        Write-Verbose "Track genres: $($trackGenres -join ', ')"
+        if ($trackGenres -and ($trackGenres -join ', ') -match '(?i)classical') {
+            $isClassical = $true
+            Write-Verbose "Classical music detected from track genres"
         }
     }
 
