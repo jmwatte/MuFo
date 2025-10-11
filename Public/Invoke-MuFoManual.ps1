@@ -333,9 +333,55 @@ function Invoke-MuFoManual {
                             
                             try { 
                                 $tracksForAlbum = Invoke-ProviderGetTracks -Provider $Provider -AlbumId $albumIdToFetch
+                                if (-not $tracksForAlbum -or $tracksForAlbum.Count -eq 0) {
+                                    Write-Host "`n❌ No tracks returned from $Provider for album ID: $albumIdToFetch" -ForegroundColor Red
+                                    Write-Host "   This can happen if:" -ForegroundColor Yellow
+                                    Write-Host "   - The album/release has no track data in the provider's database" -ForegroundColor Gray
+                                    Write-Host "   - The ID is for a master release (try selecting a specific release)" -ForegroundColor Gray
+                                    Write-Host "   - The resource was deleted or moved" -ForegroundColor Gray
+                                    $skipChoice = Read-Host "`nPress Enter to skip this album, 'b' to go back to album selection, or 'cp' to change provider"
+                                    if ($skipChoice -eq 'b') {
+                                        $stage = 'B'
+                                        continue stageLoop
+                                    } elseif ($skipChoice -eq 'cp') {
+                                        Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
+                                        Write-Host "Available providers: Spotify, Qobuz, Discogs" -ForegroundColor Gray
+                                        $newProvider = Read-Host "Enter new provider name"
+                                        if ($newProvider -in @('Spotify', 'Qobuz', 'Discogs')) {
+                                            $Provider = $newProvider
+                                            Write-Host "Switched to provider: $Provider" -ForegroundColor Green
+                                            $stage = 'A'
+                                        } else {
+                                            Write-Warning "Invalid provider: $newProvider"
+                                        }
+                                        continue stageLoop
+                                    } else {
+                                        # Skip this album
+                                        break
+                                    }
+                                }
                             } catch { 
                                 Write-Warning "Get-AlbumTracks failed: $_"
-                                $tracksForAlbum = @() 
+                                $tracksForAlbum = @()
+                                $skipChoice = Read-Host "Press Enter to skip, 'b' for album selection, 'cp' to change provider"
+                                if ($skipChoice -eq 'b') {
+                                    $stage = 'B'
+                                    continue stageLoop
+                                } elseif ($skipChoice -eq 'cp') {
+                                    Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
+                                    Write-Host "Available providers: Spotify, Qobuz, Discogs" -ForegroundColor Gray
+                                    $newProvider = Read-Host "Enter new provider name"
+                                    if ($newProvider -in @('Spotify', 'Qobuz', 'Discogs')) {
+                                        $Provider = $newProvider
+                                        Write-Host "Switched to provider: $Provider" -ForegroundColor Green
+                                        $stage = 'A'
+                                    } else {
+                                        Write-Warning "Invalid provider: $newProvider"
+                                    }
+                                    continue stageLoop
+                                } else {
+                                    break
+                                }
                             }
                         }
                         

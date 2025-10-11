@@ -66,14 +66,16 @@ function Set-Tracks {
             }
             
             # Add unpaired Spotify tracks
-            $unpairedSpotify = $SpotifyTracks | Where-Object { 
-                $sid = if ($_.id) { $_.id } else { $_.name }
-                -not $usedSpotify.ContainsKey($sid)
-            }
-            foreach ($spotify in $unpairedSpotify) {
-                $pairedTracks += [PSCustomObject]@{
-                    SpotifyTrack = $spotify
-                    AudioFile    = $null
+            if ($SpotifyTracks -and $SpotifyTracks.Count -gt 0) {
+                $unpairedSpotify = $SpotifyTracks | Where-Object { 
+                    $sid = if ($_.id) { $_.id } else { $_.name }
+                    -not $usedSpotify.ContainsKey($sid)
+                }
+                foreach ($spotify in $unpairedSpotify) {
+                    $pairedTracks += [PSCustomObject]@{
+                        SpotifyTrack = $spotify
+                        AudioFile    = $null
+                    }
                 }
             }
             
@@ -140,14 +142,16 @@ function Set-Tracks {
             }
             
             # Add unpaired Spotify tracks
-            $unpairedSpotify = $SpotifyTracks | Where-Object { 
-                $sid = if ($_.id) { $_.id } else { $_.name }
-                -not $usedSpotify.ContainsKey($sid)
-            }
-            foreach ($spotify in $unpairedSpotify) {
-                $pairedTracks += [PSCustomObject]@{
-                    SpotifyTrack = $spotify
-                    AudioFile    = $null
+            if ($SpotifyTracks -and $SpotifyTracks.Count -gt 0) {
+                $unpairedSpotify = $SpotifyTracks | Where-Object { 
+                    $sid = if ($_.id) { $_.id } else { $_.name }
+                    -not $usedSpotify.ContainsKey($sid)
+                }
+                foreach ($spotify in $unpairedSpotify) {
+                    $pairedTracks += [PSCustomObject]@{
+                        SpotifyTrack = $spotify
+                        AudioFile    = $null
+                    }
                 }
             }
             
@@ -243,14 +247,16 @@ function Set-Tracks {
             }
             
             # Add unpaired Spotify tracks
-            $unpairedSpotify = $SpotifyTracks | Where-Object { 
-                $sid = if ($_.id) { $_.id } else { $_.name }
-                -not $usedSpotify.ContainsKey($sid)
-            }
-            foreach ($spotify in $unpairedSpotify) {
-                $pairedTracks += [PSCustomObject]@{
-                    SpotifyTrack = $spotify
-                    AudioFile    = $null
+            if ($SpotifyTracks -and $SpotifyTracks.Count -gt 0) {
+                $unpairedSpotify = $SpotifyTracks | Where-Object { 
+                    $sid = if ($_.id) { $_.id } else { $_.name }
+                    -not $usedSpotify.ContainsKey($sid)
+                }
+                foreach ($spotify in $unpairedSpotify) {
+                    $pairedTracks += [PSCustomObject]@{
+                        SpotifyTrack = $spotify
+                        AudioFile    = $null
+                    }
                 }
             }
             
