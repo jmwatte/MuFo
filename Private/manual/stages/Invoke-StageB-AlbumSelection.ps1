@@ -1,0 +1,550 @@
+function Invoke-StageB-AlbumSelection {
+    <#
+    .SYNOPSIS
+        Stage B: Album selection for Invoke-MuFoManual workflow.
+    
+    .DESCRIPTION
+        Handles album search, selection, and navigation. Supports:
+        - Smart search with fallback to full album list
+        - Pagination and filtering
+        - Multi-album selection and combination
+        - Provider switching
+        - Discogs masters-only toggle
+        - ID-based direct selection
+    
+    .PARAMETER Provider
+        Music metadata provider (Spotify, Qobuz, Discogs).
+    
+    .PARAMETER ProviderArtist
+        Artist object from provider API.
+    
+    .PARAMETER AlbumName
+        Local album folder name for matching.
+    
+    .PARAMETER Year
+        Year from local album folder (optional).
+    
+    .PARAMETER CachedAlbums
+        Previously fetched album list to avoid re-fetching.
+    
+    .PARAMETER CachedArtistId
+        ID of artist for cached albums.
+    
+    .PARAMETER NormalizeDiscogsId
+        Scriptblock to normalize Discogs IDs (strip brackets, resolve masters).
+    
+    .PARAMETER Artist
+        Original artist name from folder.
+    
+    .PARAMETER NonInteractive
+        Skip interactive prompts (auto-select first album).
+    
+    .PARAMETER AutoSelect
+        Automatically select first album without prompting.
+    
+    .PARAMETER AlbumId
+        Specific album ID to select directly.
+    
+    .PARAMETER GoB
+        Auto-select first album (from workflow flags).
+    
+    .OUTPUTS
+        Hashtable with:
+        - NextStage: 'A', 'C', or 'Skip'
+        - SelectedAlbum: Album object or $null
+        - UpdatedCache: Album list for caching
+        - UpdatedCachedArtistId: Artist ID for cache validation
+        - UpdatedProvider: Provider (if changed)
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Provider,
+        
+        [Parameter(Mandatory)]
+        [object]$ProviderArtist,
+        
+        [Parameter(Mandatory)]
+        [string]$AlbumName,
+        
+        [Parameter()]
+        [string]$Year,
+        
+        [Parameter()]
+        [array]$CachedAlbums,
+        
+        [Parameter()]
+        [string]$CachedArtistId,
+        
+        [Parameter(Mandatory)]
+        [scriptblock]$NormalizeDiscogsId,
+        
+        [Parameter()]
+        [string]$Artist,
+        
+        [Parameter()]
+        [switch]$NonInteractive,
+        
+        [Parameter()]
+        [switch]$AutoSelect,
+        
+        [Parameter()]
+        [string]$AlbumId,
+        
+        [Parameter()]
+        [switch]$GoB
+    )
+    
+    Clear-Host
+    
+    # Initialize pagination
+    $page = 1
+    $pageSize = 25
+    $mastersOnlyMode = $true  # Default for Discogs
+    
+    # Enhance artist with full details (including genres) if needed
+    if ($Provider -eq 'Spotify' -and $ProviderArtist -and $ProviderArtist.id) {
+        if (-not $ProviderArtist.genres -or $ProviderArtist.genres.Count -eq 0) {
+            Write-Verbose "Fetching full artist details with genres for $($ProviderArtist.name)..."
+            $fullArtist = Invoke-ProviderGetArtist -Provider $Provider -ArtistId $ProviderArtist.id
+            if ($fullArtist) {
+                $ProviderArtist = $fullArtist
+            }
+        }
+    }
+    
+    Write-Host "Original Artist: $Artist" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "Searching for albums for artist: $($ProviderArtist.name) (id: $($ProviderArtist.id))"
+    
+    # Clear cache if artist changed
+    if ($CachedArtistId -ne $ProviderArtist.id) {
+        $CachedAlbums = $null
+        $CachedArtistId = $ProviderArtist.id
+    }
+    
+    # Try smart API search FIRST (fast, targeted results)
+    Write-Host "Searching for albums matching: $AlbumName..." -ForegroundColor Cyan
+    Write-Verbose "Trying smart search for: $AlbumName"
+    Write-Verbose "Parameters: Provider=$Provider, ArtistId=$($ProviderArtist.id), ArtistName=$($ProviderArtist.name), AlbumName=$AlbumName, MastersOnly=$($Provider -eq 'Discogs'), CacheProvided=$($null -ne $CachedAlbums)"
+    
+    try { 
+        $searchAlbumsParams = @{
+            Provider       = $Provider
+            ArtistId       = $ProviderArtist.id
+            ArtistName     = $ProviderArtist.name
+            AlbumName      = $AlbumName
+            MastersOnly    = ($Provider -eq 'Discogs')
+            AllAlbumsCache = $CachedAlbums
+        }
+
+        $albumsForArtist = Invoke-ProviderSearchAlbums @searchAlbumsParams
+        $albumsForArtist = @($albumsForArtist)  # Ensure array
+        
+        Write-Verbose "Smart search returned: $($albumsForArtist.Count) albums"
+        if ($albumsForArtist.Count -gt 0) {
+            Write-Host "✓ Found $($albumsForArtist.Count) albums via smart search" -ForegroundColor Green
+        } else {
+            Write-Verbose "Smart search returned 0 albums - will fall back to fetching all"
+        }
+    } catch { 
+        Write-Warning "Smart search exception: $_"
+        Write-Verbose "Exception details: $($_.Exception.Message)"
+        $albumsForArtist = @() 
+    }
+    
+    # If smart search returned nothing, fetch all albums as fallback
+    if (-not $albumsForArtist -or $albumsForArtist.Count -eq 0) {
+        if (-not $CachedAlbums) {
+            Write-Host "Smart search returned no results, fetching all albums (this may take a while)..." -ForegroundColor Yellow
+            Write-Verbose "Fetching all albums for artist..."
+            try { 
+                $CachedAlbums = Invoke-ProviderGetAlbums -Provider $Provider -ArtistId $ProviderArtist.id -AlbumType 'Album'
+                $CachedAlbums = @($CachedAlbums)  # Ensure array
+                Write-Host "✓ Fetched $($CachedAlbums.Count) albums" -ForegroundColor Green
+            } catch { 
+                Write-Warning "Failed to fetch artist albums: $_"
+                $CachedAlbums = @() 
+            }
+        }
+        
+        Write-Verbose "Using all cached albums ($($CachedAlbums.Count) albums)"
+        $albumsForArtist = $CachedAlbums
+    }
+    
+    # Normalize to array so .Count works reliably
+    $albumsForArtist = @($albumsForArtist)
+    
+    # Handle no albums found
+    if (-not $albumsForArtist -or $albumsForArtist.Count -eq 0) {
+        Write-Host "No albums found for artist id $($ProviderArtist.id)."
+        
+        if ($NonInteractive) {
+            Write-Warning "NonInteractive: skipping album because no albums found for artist id $($ProviderArtist.id)."
+            return @{
+                NextStage = 'Skip'
+                SelectedAlbum = $null
+                UpdatedCache = $CachedAlbums
+                UpdatedCachedArtistId = $CachedArtistId
+                UpdatedProvider = $Provider
+            }
+        }
+    
+        $inputF = Read-Host "Enter '(b)ack', '(s)kip', 'id:<id>' or album name to filter"
+        switch -Regex ($inputF) {
+            '^b$' {
+                return @{
+                    NextStage = 'A'
+                    SelectedAlbum = $null
+                    UpdatedCache = $CachedAlbums
+                    UpdatedCachedArtistId = $CachedArtistId
+                    UpdatedProvider = $Provider
+                }
+            }
+            '^s$' {
+                return @{
+                    NextStage = 'Skip'
+                    SelectedAlbum = $null
+                    UpdatedCache = $CachedAlbums
+                    UpdatedCachedArtistId = $CachedArtistId
+                    UpdatedProvider = $Provider
+                }
+            }
+            '^id:.*' {
+                $id = $inputF.Substring(3)
+                if ($Provider -eq 'Discogs') { $id = & $NormalizeDiscogsId $id }
+                return @{
+                    NextStage = 'C'
+                    SelectedAlbum = @{ id = $id; name = $id }
+                    UpdatedCache = $CachedAlbums
+                    UpdatedCachedArtistId = $CachedArtistId
+                    UpdatedProvider = $Provider
+                }
+            }
+            default {
+                if ($inputF) {
+                    # New artist search
+                    return @{
+                        NextStage = 'A'
+                        SelectedAlbum = $null
+                        UpdatedCache = $CachedAlbums
+                        UpdatedCachedArtistId = $CachedArtistId
+                        UpdatedProvider = $Provider
+                        NewArtistQuery = $inputF
+                    }
+                }
+                # Empty input, stay in loop (should not reach here)
+                return @{
+                    NextStage = 'B'
+                    SelectedAlbum = $null
+                    UpdatedCache = $CachedAlbums
+                    UpdatedCachedArtistId = $CachedArtistId
+                    UpdatedProvider = $Provider
+                }
+            }
+        }
+    }
+    
+    Clear-Host
+    
+    # Sort by Jaccard similarity descending
+    $albumsForArtist = $albumsForArtist | Sort-Object { - (Get-StringSimilarity-Jaccard -String1 $AlbumName -String2 $_.Name) }
+
+    # Main album selection loop
+    while ($true) {
+        # Show filter mode indicator for Discogs
+        if ($Provider -eq 'Discogs') {
+            $modeIndicator = if ($mastersOnlyMode) { 
+                "[Filter: MASTERS ONLY - type '*' to include all releases]" 
+            } else { 
+                "[Filter: ALL RELEASES - type '*' for masters only]" 
+            }
+            Write-Host $modeIndicator -ForegroundColor Yellow
+        }
+        
+        Write-Host "Albums for artist $($ProviderArtist.name):"
+        Write-Host "for local album: $($AlbumName) (year: $Year)"
+        
+        $totalPages = [math]::Ceiling($albumsForArtist.Count / $pageSize)
+        $startIdx = ($page - 1) * $pageSize
+        $endIdx = [math]::Min($startIdx + $pageSize - 1, $albumsForArtist.Count - 1)
+
+        for ($i = $startIdx; $i -le $endIdx; $i++) {
+            Write-Host "[$($i+1)] $($albumsForArtist[$i].name)  (id: $($albumsForArtist[$i].id)) (year: $($albumsForArtist[$i].release_date))"
+        }
+
+        # Non-interactive album selection
+        if ($AlbumId) {
+            return @{
+                NextStage = 'C'
+                SelectedAlbum = @{ id = $AlbumId; name = $AlbumId }
+                UpdatedCache = $CachedAlbums
+                UpdatedCachedArtistId = $CachedArtistId
+                UpdatedProvider = $Provider
+            }
+        }
+        if ($GoB) {
+            return @{
+                NextStage = 'C'
+                SelectedAlbum = $albumsForArtist[0]
+                UpdatedCache = $CachedAlbums
+                UpdatedCachedArtistId = $CachedArtistId
+                UpdatedProvider = $Provider
+            }
+        }
+        if ($AutoSelect -or $NonInteractive) {
+            return @{
+                NextStage = 'C'
+                SelectedAlbum = $albumsForArtist[0]
+                UpdatedCache = $CachedAlbums
+                UpdatedCachedArtistId = $CachedArtistId
+                UpdatedProvider = $Provider
+            }
+        }
+
+        $inputF = Read-Host "Select album(s) [1] (Enter=first), number(s) (e.g., 1,3,5-8), '(b)ack', '(n)ext', '(p)rev', '(s)kip', 'id:<id>', '(cp)' change provider, '*' (all albums), or text to search:"
+        
+        switch -Regex ($inputF) {
+            '^n$' {
+                if ($page -lt $totalPages) { $page++ }
+                continue
+            }
+            '^p$' {
+                if ($page -gt 1) { $page-- }
+                continue
+            }
+            '^cp$' {
+                Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
+                Write-Host "Available providers: Spotify, Qobuz, Discogs" -ForegroundColor Gray
+                $newProvider = Read-Host "Enter new provider name"
+                if ($newProvider -in @('Spotify', 'Qobuz', 'Discogs')) {
+                    $Provider = $newProvider
+                    Write-Host "Switched to provider: $Provider" -ForegroundColor Green
+                    return @{
+                        NextStage = 'A'
+                        SelectedAlbum = $null
+                        UpdatedCache = $null
+                        UpdatedCachedArtistId = $null
+                        UpdatedProvider = $Provider
+                    }
+                } else {
+                    Write-Warning "Invalid provider: $newProvider. Staying with $Provider."
+                    continue
+                }
+            }
+            '^b$' {
+                return @{
+                    NextStage = 'A'
+                    SelectedAlbum = $null
+                    UpdatedCache = $null
+                    UpdatedCachedArtistId = $null
+                    UpdatedProvider = $Provider
+                }
+            }
+            '^$' {
+                return @{
+                    NextStage = 'C'
+                    SelectedAlbum = $albumsForArtist[0]
+                    UpdatedCache = $CachedAlbums
+                    UpdatedCachedArtistId = $CachedArtistId
+                    UpdatedProvider = $Provider
+                }
+            }
+            '^id:(.+)$' {
+                $id = $matches[1].Trim()
+                if ($Provider -eq 'Discogs') { $id = & $NormalizeDiscogsId $id }
+                return @{
+                    NextStage = 'C'
+                    SelectedAlbum = @{ id = $id; name = $id }
+                    UpdatedCache = $CachedAlbums
+                    UpdatedCachedArtistId = $CachedArtistId
+                    UpdatedProvider = $Provider
+                }
+            }
+            '^\*$' {
+                # Toggle between Masters-only and All-releases for Discogs
+                if ($Provider -eq 'Discogs') {
+                    $mastersOnlyMode = -not $mastersOnlyMode
+                    $modeText = if ($mastersOnlyMode) { "MASTER releases only" } else { "ALL release types" }
+                    Write-Host "`nToggling to: $modeText" -ForegroundColor Yellow
+                    Write-Host "Fetching albums..." -ForegroundColor Cyan
+                } else {
+                    Write-Host "Fetching all albums for artist..." -ForegroundColor Cyan
+                }
+                
+                try {
+                    $fetchParams = @{
+                        Provider = $Provider
+                        ArtistId = $ProviderArtist.id
+                        AlbumType = 'Album'
+                    }
+                    
+                    # Add MastersOnly parameter for Discogs
+                    if ($Provider -eq 'Discogs') {
+                        $fetchParams['MastersOnly'] = $mastersOnlyMode
+                    }
+                    
+                    $albumsForArtist = Invoke-ProviderGetAlbums @fetchParams
+                    $albumsForArtist = @($albumsForArtist)
+                    $albumsForArtist = $albumsForArtist | Sort-Object { - (Get-StringSimilarity-Jaccard -String1 $AlbumName -String2 $_.Name) }
+                    $CachedAlbums = $albumsForArtist
+                    $page = 1
+                    
+                    $statusMsg = if ($Provider -eq 'Discogs') {
+                        "✓ Loaded $($albumsForArtist.Count) albums [$modeText]"
+                    } else {
+                        "✓ Loaded $($albumsForArtist.Count) albums"
+                    }
+                    Write-Host $statusMsg -ForegroundColor Green
+                } catch {
+                    Write-Warning "Failed to fetch all albums: $_"
+                }
+                continue
+            }
+            '^[\d,\-\s]+$' {
+                # Parse multi-selection: "1,3,5-8,12"
+                $selectedIndices = @()
+                $parts = $inputF -split ','
+                foreach ($part in $parts) {
+                    $part = $part.Trim()
+                    if ($part -match '^(\d+)-(\d+)$') {
+                        # Range: 5-8
+                        $start = [int]$matches[1]
+                        $end = [int]$matches[2]
+                        $selectedIndices += $start..$end
+                    } elseif ($part -match '^\d+$') {
+                        # Single number: 3
+                        $selectedIndices += [int]$part
+                    }
+                }
+                
+                # Validate all indices
+                $validIndices = @(
+                    $selectedIndices |
+                        Where-Object { $_ -ge 1 -and $_ -le $albumsForArtist.Count } |
+                        Select-Object -Unique |
+                        Sort-Object
+                )
+                
+                if ($validIndices.Count -eq 0) {
+                    Write-Warning "No valid album numbers selected"
+                    continue
+                }
+                
+                # If single selection, go directly to Stage C
+                if ($validIndices.Count -eq 1) {
+                    return @{
+                        NextStage = 'C'
+                        SelectedAlbum = $albumsForArtist[$validIndices[0] - 1]
+                        UpdatedCache = $CachedAlbums
+                        UpdatedCachedArtistId = $CachedArtistId
+                        UpdatedProvider = $Provider
+                    }
+                }
+                
+                # Multiple selections: combine all albums into one bucket
+                Write-Host "`nFetching tracks from $($validIndices.Count) selected albums..." -ForegroundColor Cyan
+                
+                $combinedTracks = @()
+                $albumNames = @()
+                $failedAlbums = 0
+                
+                foreach ($idx in $validIndices) {
+                    $currentAlbum = $albumsForArtist[$idx - 1]
+                    $albumNames += $currentAlbum.name
+                    
+                    Write-Host "  [$idx] Fetching: $($currentAlbum.name)..." -ForegroundColor Gray
+                    
+                    try {
+                        $tracks = Invoke-ProviderGetTracks -Provider $Provider -AlbumId $currentAlbum.id
+                        if ($tracks) {
+                            $combinedTracks += $tracks
+                            Write-Host "    ✓ Added $($tracks.Count) tracks" -ForegroundColor Green
+                        } else {
+                            Write-Warning "    ✗ No tracks returned for album: $($currentAlbum.name)"
+                            $failedAlbums++
+                        }
+                    }
+                    catch {
+                        Write-Warning "    ✗ Failed to fetch tracks for album: $($currentAlbum.name) - $_"
+                        $failedAlbums++
+                    }
+                }
+                
+                if ($combinedTracks.Count -eq 0) {
+                    Write-Warning "No tracks retrieved from any selected albums. Please try again."
+                    continue
+                }
+                
+                # Create a synthetic combined album object
+                $firstAlbum = $albumsForArtist[$validIndices[0] - 1]
+                $combinedAlbum = [PSCustomObject]@{
+                    id = "combined_$($validIndices -join '_')"
+                    name = if ($validIndices.Count -eq 2) { 
+                        "$($albumNames[0]) + $($albumNames[1])" 
+                    } else { 
+                        "$($albumNames[0]) + $($validIndices.Count - 1) more albums" 
+                    }
+                    release_date = $firstAlbum.release_date
+                    _isCombined = $true
+                    _albumCount = $validIndices.Count
+                    _albumNames = $albumNames
+                    _selectedIndices = $validIndices
+                    _tracks = $combinedTracks
+                }
+                
+                Write-Host "`n✓ Combined $($combinedTracks.Count) tracks from $($validIndices.Count) albums" -ForegroundColor Green
+                if ($failedAlbums -gt 0) {
+                    Write-Warning "  Note: $failedAlbums album(s) failed to load"
+                }
+                
+                return @{
+                    NextStage = 'C'
+                    SelectedAlbum = $combinedAlbum
+                    UpdatedCache = $CachedAlbums
+                    UpdatedCachedArtistId = $CachedArtistId
+                    UpdatedProvider = $Provider
+                }
+            }
+            default {
+                # User entered text - try as a new search term first
+                Write-Host "Searching for albums matching: '$inputF'..." -ForegroundColor Cyan
+                try {
+                    $searchParams = @{
+                        Provider    = $Provider
+                        ArtistId    = $ProviderArtist.id
+                        ArtistName  = $ProviderArtist.name
+                        AlbumName   = $inputF
+                        MastersOnly = ($Provider -eq 'Discogs')
+                    }
+
+                    $searchResults = Invoke-ProviderSearchAlbums @searchParams
+                    
+                    if ($searchResults -and $searchResults.Count -gt 0) {
+                        $albumsForArtist = @($searchResults)
+                        $albumsForArtist = $albumsForArtist | Sort-Object { - (Get-StringSimilarity-Jaccard -String1 $inputF -String2 $_.Name) }
+                        $CachedAlbums = $albumsForArtist
+                        $page = 1
+                        Write-Host "Found $($albumsForArtist.Count) albums matching '$inputF'" -ForegroundColor Green
+                        continue
+                    }
+                } catch {
+                    Write-Verbose "Search failed: $_"
+                }
+                
+                # Fallback to local filtering if search failed or returned no results
+                $filtered = $albumsForArtist | Where-Object { $_.name -like "*$inputF*" }
+                if ($filtered.Count -gt 0) {
+                    $albumsForArtist = $filtered
+                    $page = 1
+                    Write-Host "Filtered to $($filtered.Count) albums" -ForegroundColor Green
+                    continue
+                }
+                else {
+                    Write-Warning "No matches found for '$inputF'"
+                    continue
+                }
+            }
+        }
+    }
+}
