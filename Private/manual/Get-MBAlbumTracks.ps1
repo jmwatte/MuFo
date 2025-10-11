@@ -23,14 +23,59 @@ function Get-MBAlbumTracks {
     try {
         Write-Verbose "Fetching MusicBrainz release: $Id"
         
-        # Request release with media (tracks) and detailed artist credits
-        $inc = 'recordings+artist-credits+media'
+        # Request release with media (tracks), artist credits, and genres/tags
+        # Include release-groups to get album-level genre information
+        $inc = 'recordings+artist-credits+media+release-groups+genres+tags'
         
         $release = Invoke-MusicBrainzRequest -Endpoint 'release' -Id $Id -Inc $inc
         
         if (-not $release) {
             Write-Warning "No release found for ID: $Id"
             return @()
+        }
+        
+        # Extract genres from release-group (album-level genres)
+        $albumGenres = @()
+        
+        # First try 'genres' property (newer MusicBrainz API)
+        if ($release.PSObject.Properties['genres'] -and $release.genres) {
+            $albumGenres = $release.genres | 
+                Where-Object { $_ -and $_.PSObject.Properties['name'] } | 
+                Select-Object -First 5 -ExpandProperty name
+            Write-Verbose "Found $($albumGenres.Count) genres from release.genres"
+        }
+        
+        # Fallback to 'tags' property (older API or when genres not available)
+        if ($albumGenres.Count -eq 0 -and $release.PSObject.Properties['tags'] -and $release.tags) {
+            $albumGenres = $release.tags | 
+                Where-Object { $_ -and $_.PSObject.Properties['name'] -and $_.PSObject.Properties['count'] -and $_.count -gt 0 } | 
+                Sort-Object -Property count -Descending |
+                Select-Object -First 5 -ExpandProperty name
+            Write-Verbose "Found $($albumGenres.Count) tags from release.tags"
+        }
+        
+        # Also try release-groups if present
+        if ($albumGenres.Count -eq 0 -and $release.PSObject.Properties['release-group'] -and $release.'release-group') {
+            $rg = $release.'release-group'
+            if ($rg.PSObject.Properties['genres'] -and $rg.genres) {
+                $albumGenres = $rg.genres | 
+                    Where-Object { $_ -and $_.PSObject.Properties['name'] } | 
+                    Select-Object -First 5 -ExpandProperty name
+                Write-Verbose "Found $($albumGenres.Count) genres from release-group.genres"
+            } elseif ($rg.PSObject.Properties['tags'] -and $rg.tags) {
+                $albumGenres = $rg.tags | 
+                    Where-Object { $_ -and $_.PSObject.Properties['name'] -and $_.PSObject.Properties['count'] -and $_.count -gt 0 } | 
+                    Sort-Object -Property count -Descending |
+                    Select-Object -First 5 -ExpandProperty name
+                Write-Verbose "Found $($albumGenres.Count) tags from release-group.tags"
+            }
+        }
+        
+        if ($albumGenres.Count -eq 0) {
+            Write-Verbose "No genres/tags found for release $Id"
+            $albumGenres = @('Unknown')
+        } else {
+            Write-Verbose "Using album genres: $($albumGenres -join ', ')"
         }
         
         # Extract tracks from media
@@ -107,6 +152,7 @@ function Get-MBAlbumTracks {
                     track_number = $trackNumber
                     duration_ms = $durationMs
                     artists = $artists
+                    genres = $albumGenres  # Add album-level genres to track
                     _rawMusicBrainzObject = $recording
                 }
                 

@@ -69,11 +69,12 @@ function Show-Tracks {
                     }
                     Write-Host ("`t`tartist: {0}" -f $artistDisplay)
 
-                    if ($value = Get-IfExists $SpotifyArtist 'genres') {
+                    # Prefer track-level genres over artist-level (better for classical, MusicBrainz)
+                    if ($value = Get-IfExists $spotify 'genres') {
                         $providerGenres = $value -join ', '
                         Write-Host ("`t`tgenres: {0}" -f $providerGenres)
                     }
-                    elseif ($value = Get-IfExists $spotify 'genres') {
+                    elseif ($value = Get-IfExists $SpotifyArtist 'genres') {
                         $providerGenres = $value -join ', '
                         Write-Host ("`t`tgenres: {0}" -f $providerGenres)
                     }
@@ -351,14 +352,14 @@ function Show-Tracks {
         }
         Write-Host ("`t`tartist: {0}" -f $artistDisplay)
 
-        # write genres if present on SpotifyArtist object (defensive)
+        # Prefer track-level genres over artist-level (better for classical, MusicBrainz)
         $providerGenres = ''
-        if ($null -ne $SpotifyArtist -and $SpotifyArtist.PSObject.Properties['genres'] -and $SpotifyArtist.genres -and $SpotifyArtist.genres.Count -gt 0) {
-            $providerGenres = $SpotifyArtist.genres -join ', '
+        if ($null -ne $spotify -and $spotify.PSObject.Properties['genres'] -and $spotify.genres) {
+            $providerGenres = $spotify.genres -join ', '
             Write-Host ("`t`tgenres: {0}" -f $providerGenres)
         }
-        elseif ( $null -ne $spotify -and $spotify.PSObject.Properties['genres'] -and $spotify.genres) {
-            $providerGenres = $spotify.genres -join ', '
+        elseif ($null -ne $SpotifyArtist -and $SpotifyArtist.PSObject.Properties['genres'] -and $SpotifyArtist.genres -and $SpotifyArtist.genres.Count -gt 0) {
+            $providerGenres = $SpotifyArtist.genres -join ', '
             Write-Host ("`t`tgenres: {0}" -f $providerGenres)
         }
         # if ($null -ne $spotify -and $spotify.artists -and $spotify.artists.Count -gt 0) {
