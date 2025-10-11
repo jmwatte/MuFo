@@ -809,7 +809,15 @@ function Invoke-MuFoManual {
                                     $year = Get-ReleaseYear -ReleaseDate (Get-IfExists $ProviderAlbum 'release_date')
                                     $oldpath = $album.FullName
                                     $safeAlbumName = Approve-PathSegment -Segment (Get-IfExists $ProviderAlbum 'name') -Replacement '_' -CollapseRepeating -Transliterate
-                                    $safeArtistName = Approve-PathSegment -Segment (Get-IfExists $ProviderArtist 'name') -Replacement '_' -CollapseRepeating -Transliterate
+                                    
+                                    # Use ManualAlbumArtist if set, otherwise fall back to ProviderArtist
+                                    $artistNameForFolder = if ($script:ManualAlbumArtist) {
+                                        Write-Verbose "Using ManualAlbumArtist for folder name: $script:ManualAlbumArtist"
+                                        $script:ManualAlbumArtist
+                                    } else {
+                                        Get-IfExists $ProviderArtist 'name'
+                                    }
+                                    $safeArtistName = Approve-PathSegment -Segment $artistNameForFolder -Replacement '_' -CollapseRepeating -Transliterate
     
                                     $mvArgs = @{
                                         AlbumPath    = $oldpath
@@ -1134,7 +1142,15 @@ function Invoke-MuFoManual {
                                     $year = Get-ReleaseYear -ReleaseDate (Get-IfExists $ProviderAlbum 'release_date')
                                     $oldpath = $album.FullName
                                     $safeAlbumName = Approve-PathSegment -Segment (Get-IfExists $ProviderAlbum 'name') -Replacement '_' -CollapseRepeating -Transliterate
-                                    $safeArtistName = Approve-PathSegment -Segment (Get-IfExists $ProviderArtist 'name') -Replacement '_' -CollapseRepeating -Transliterate
+                                    
+                                    # Use ManualAlbumArtist if set, otherwise fall back to ProviderArtist
+                                    $artistNameForFolder = if ($script:ManualAlbumArtist) {
+                                        Write-Verbose "Using ManualAlbumArtist for folder name: $script:ManualAlbumArtist"
+                                        $script:ManualAlbumArtist
+                                    } else {
+                                        Get-IfExists $ProviderArtist 'name'
+                                    }
+                                    $safeArtistName = Approve-PathSegment -Segment $artistNameForFolder -Replacement '_' -CollapseRepeating -Transliterate
     
                                     $mvArgs = @{
                                         AlbumPath    = $oldpath
