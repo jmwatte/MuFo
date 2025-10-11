@@ -313,18 +313,20 @@ function Invoke-StageB-AlbumSelection {
                 if ($page -gt 1) { $page-- }
                 continue
             }
-            '^cp$' {
+            'cp' {
                 Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
-                Write-Host "Available providers: Spotify, Qobuz, Discogs" -ForegroundColor Gray
-                $newProvider = Read-Host "Enter new provider name"
-                if ($newProvider -in @('Spotify', 'Qobuz', 'Discogs')) {
-                    $Provider = $newProvider
+                Write-Host "Available providers: (S)potify, (Q)obuz, (D)iscogs" -ForegroundColor Gray
+                $newProvider = Read-Host "Enter provider (full name or first letter)"
+                $providerMap = @{ 's' = 'Spotify'; 'q' = 'Qobuz'; 'd' = 'Discogs'; 'spotify' = 'Spotify'; 'qobuz' = 'Qobuz'; 'discogs' = 'Discogs' }
+                $matched = $providerMap[$newProvider.ToLower()]
+                if ($matched) {
+                    $Provider = $matched
                     Write-Host "Switched to provider: $Provider" -ForegroundColor Green
                     return @{
                         NextStage = 'A'
                         SelectedAlbum = $null
-                        UpdatedCache = $null
-                        UpdatedCachedArtistId = $null
+                        UpdatedCache = $CachedAlbums
+                        UpdatedCachedArtistId = $CachedArtistId
                         UpdatedProvider = $Provider
                     }
                 } else {
