@@ -592,10 +592,10 @@ function Invoke-MuFoManual {
                                 }
                                 '^s$' { break 3 }
                                 '^sf$' {
-                                    $year = Get-ReleaseYear -ReleaseDate $ProviderAlbum.release_date
+                                    $year = Get-ReleaseYear -ReleaseDate (Get-IfExists $ProviderAlbum 'release_date')
                                     $oldpath = $album.FullName
-                                    $safeAlbumName = Approve-PathSegment -Segment $ProviderAlbum.name -Replacement '_' -CollapseRepeating -Transliterate
-                                    $safeArtistName = Approve-PathSegment -Segment $ProviderArtist.name -Replacement '_' -CollapseRepeating -Transliterate
+                                    $safeAlbumName = Approve-PathSegment -Segment (Get-IfExists $ProviderAlbum 'name') -Replacement '_' -CollapseRepeating -Transliterate
+                                    $safeArtistName = Approve-PathSegment -Segment (Get-IfExists $ProviderArtist 'name') -Replacement '_' -CollapseRepeating -Transliterate
     
                                     $mvArgs = @{
                                         AlbumPath    = $oldpath
@@ -855,16 +855,20 @@ function Invoke-MuFoManual {
                                         $audioFile = $audioFiles[$i]
                                         $filePath = $audioFile.FilePath
 
-                                        $genreTag = if ($null -ne $ProviderAlbum.genre) { $ProviderAlbum.genre -join '; ' } else { $ProviderArtist.genre -join '; ' }
+                                        # Safe property access for genre across all providers
+                                        $albumGenre = Get-IfExists $ProviderAlbum 'genre'
+                                        $artistGenre = Get-IfExists $ProviderArtist 'genre'
+                                        $genreTag = if ($null -ne $albumGenre) { $albumGenre -join '; ' } else { $artistGenre -join '; ' }
+                                        
                                         $tags = @{
                                             Title       = $spotifyTrack.Title
                                             Track       = $spotifyTrack.TrackNumber
                                             Disc        = $spotifyTrack.DiscNumber
                                             Performers  = $spotifyTrack.artists.name -join '; '
                                             Genres      = $genreTag
-                                            AlbumArtist = $ProviderArtist.name
+                                            AlbumArtist = Get-IfExists $ProviderArtist 'name'
                                             Date        = $year
-                                            Album       = $ProviderAlbum.name
+                                            Album       = Get-IfExists $ProviderAlbum 'name'
                                         }
                                         #if there is a $spotifyTrack.composer, add that to the $tags
                                         if ($spotifyTrack.composer) {
@@ -889,10 +893,10 @@ function Invoke-MuFoManual {
                                         # In preview mode keep TagFile open so UI can continue to inspect tags.
                                         Write-Verbose "Preview: keeping TagFile handles open so interactive UI can display tags."
                                     }
-                                    $year = Get-ReleaseYear -ReleaseDate $ProviderAlbum.release_date
+                                    $year = Get-ReleaseYear -ReleaseDate (Get-IfExists $ProviderAlbum 'release_date')
                                     $oldpath = $album.FullName
-                                    $safeAlbumName = Approve-PathSegment -Segment $ProviderAlbum.name -Replacement '_' -CollapseRepeating -Transliterate
-                                    $safeArtistName = Approve-PathSegment -Segment $ProviderArtist.name -Replacement '_' -CollapseRepeating -Transliterate
+                                    $safeAlbumName = Approve-PathSegment -Segment (Get-IfExists $ProviderAlbum 'name') -Replacement '_' -CollapseRepeating -Transliterate
+                                    $safeArtistName = Approve-PathSegment -Segment (Get-IfExists $ProviderArtist 'name') -Replacement '_' -CollapseRepeating -Transliterate
     
                                     $mvArgs = @{
                                         AlbumPath    = $oldpath
