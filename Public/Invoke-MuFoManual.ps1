@@ -562,7 +562,7 @@ function Invoke-MuFoManual {
                                 Write-Host ""
                                 $response = Read-Host "Press 'a' to build custom album artist, or Enter to use automatic detection"
                                 if ($response -eq 'a') {
-                                    $script:ManualAlbumArtist = Invoke-AlbumArtistBuilder -Tracks $tracksForAlbum
+                                    $script:ManualAlbumArtist = Invoke-AlbumArtistBuilder -AlbumName $ProviderAlbum.name -Tracks $tracksForAlbum -CurrentAlbumArtist $ProviderArtist.name
                                     if ($script:ManualAlbumArtist) {
                                         Write-Host "✓ Album artist set to: $script:ManualAlbumArtist" -ForegroundColor Green
                                     } else {
@@ -762,7 +762,7 @@ function Invoke-MuFoManual {
                                 '^aa$' {
                                     # Manual album artist builder
                                     if ($tracksForAlbum -and $tracksForAlbum.Count -gt 0) {
-                                        $script:ManualAlbumArtist = Invoke-AlbumArtistBuilder -Tracks $tracksForAlbum
+                                        $script:ManualAlbumArtist = Invoke-AlbumArtistBuilder -AlbumName $ProviderAlbum.name -Tracks $tracksForAlbum -CurrentAlbumArtist $ProviderArtist.name
                                         if ($script:ManualAlbumArtist) {
                                             Write-Host "`n✓ Album artist set to: $script:ManualAlbumArtist" -ForegroundColor Green
                                             $refreshTracks = $true
