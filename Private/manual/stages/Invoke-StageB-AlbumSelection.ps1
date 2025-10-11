@@ -458,12 +458,12 @@ function Invoke-StageB-AlbumSelection {
                                     Write-Host "... and $($releases.Count - 20) more" -ForegroundColor DarkGray
                                 }
                                 
-                                $relInput = Read-Host "`nSelect release number [1-$($releases.Count)], 'main' for main_release, or press Enter for release 1"
+                                $relInput = Read-Host "`nSelect release [1-$($releases.Count)], [0] for main_release, or Enter for #1"
                                 
                                 $selectedRelease = $null
-                                if ($relInput -eq '' -or $relInput -eq '1') {
+                                if ($relInput -eq '') {
                                     $selectedRelease = $releases[0]
-                                } elseif ($relInput -eq 'main') {
+                                } elseif ($relInput -eq '0' -or $relInput -eq 'main') {
                                     # Fetch master details to get main_release
                                     try {
                                         $masterDetails = Invoke-DiscogsRequest -Uri "/masters/$($selectedAlbum.id)"
