@@ -130,8 +130,8 @@ function Invoke-MuFoManual {
                         $candidates = @()
                         if ($value = Get-IfExists $r.artists "items") { $candidates = $value }
                         #if ($r -and $r.artists -and $r.artists.items) { $candidates = $r.artists.items }
-                        # Normalize to array so .Count is available even for single-item responses
-                        $candidates = @($candidates)
+                        # Normalize to array and filter out null/empty values
+                        $candidates = @($candidates | Where-Object { $_ -ne $null })
                         Write-Verbose "Search returned $($candidates.Count) candidates"
     
                         if (-not $candidates -or $candidates.Count -eq 0) {
