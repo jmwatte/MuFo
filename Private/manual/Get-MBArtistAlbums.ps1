@@ -75,9 +75,9 @@ function Get-MBArtistAlbums {
             
             # Get label info if available
             $label = ""
-            if (Get-IfExists $release 'label-info' -and $release.'label-info'.Count -gt 0) {
+            if ($release.PSObject.Properties['label-info'] -and $release.'label-info' -and $release.'label-info'.Count -gt 0) {
                 $labelObj = $release.'label-info'[0]
-                if (Get-IfExists $labelObj 'label' -and (Get-IfExists $labelObj.label 'name')) {
+                if ($labelObj -and $labelObj.PSObject.Properties['label'] -and $labelObj.label -and $labelObj.label.PSObject.Properties['name']) {
                     $label = " - $($labelObj.label.name)"
                 }
             }

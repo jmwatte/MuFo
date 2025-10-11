@@ -38,7 +38,7 @@ function Invoke-ProviderSearchAlbums {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [ValidateSet('Spotify', 'Qobuz', 'Discogs')]
+        [ValidateSet('Spotify', 'Qobuz', 'Discogs', 'MusicBrainz')]
         [string]$Provider,
 
         [Parameter()]
@@ -85,6 +85,18 @@ function Invoke-ProviderSearchAlbums {
                 $searchParams.AllAlbumsCache = $AllAlbumsCache
             }
             Search-DAlbumsByName @searchParams
+        }
+        'MusicBrainz' {
+            # MusicBrainz: If we have cached albums, filter them locally
+            # Otherwise fetch all albums and filter (no direct album name search API)
+            if ($AllAlbumsCache -and $AllAlbumsCache.Count -gt 0) {
+                Write-Verbose "Filtering $($AllAlbumsCache.Count) cached albums for: $AlbumName"
+                $AllAlbumsCache | Where-Object { $_.title -like "*$AlbumName*" -or $_.name -like "*$AlbumName*" }
+            } else {
+                Write-Verbose "No cache provided, fetching all albums and filtering for: $AlbumName"
+                $allAlbums = Get-MBArtistAlbums -ArtistId $ArtistId
+                $allAlbums | Where-Object { $_.title -like "*$AlbumName*" -or $_.name -like "*$AlbumName*" }
+            }
         }
     }
 }
