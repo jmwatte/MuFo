@@ -30,6 +30,7 @@ function Get-MBAlbumTracks {
         # Note: We'll fetch each work separately to get composer relationships
         $inc = 'recordings+artist-credits+media+release-groups+genres+tags+artist-rels+work-rels'
         
+        Write-Verbose "Requesting release with inc parameters: $inc"
         $release = Invoke-MusicBrainzRequest -Endpoint 'release' -Id $Id -Inc $inc
         
         if (-not $release) {
@@ -178,6 +179,10 @@ function Get-MBAlbumTracks {
                 # Note: Release-level work-rels don't include work's composer relationships
                 # We need to fetch the work separately if we find a work ID
                 $composer = $null
+                
+                # Debug: Show what properties the recording has
+                Write-Verbose "Recording properties: $($recording.PSObject.Properties.Name -join ', ')"
+                
                 if ($recording.PSObject.Properties['relations'] -and $recording.relations) {
                     Write-Verbose "Recording has $($recording.relations.Count) relations"
                     

@@ -92,7 +92,12 @@ function Invoke-MusicBrainzRequest {
     
     # Make the request
     try {
+        # Build full URL with query params for debugging
+        $queryString = ($queryParams.GetEnumerator() | ForEach-Object { "$($_.Key)=$([System.Uri]::EscapeDataString($_.Value))" }) -join '&'
+        $fullUrl = if ($queryString) { "$baseUri`?$queryString" } else { $baseUri }
+        
         Write-Verbose "MusicBrainz API request: $Endpoint $(if ($Id) { "($Id)" })"
+        Write-Verbose "Full URL: $fullUrl"
         
         $requestParams = @{
             Uri = $baseUri
