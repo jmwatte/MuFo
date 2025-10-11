@@ -176,97 +176,96 @@ function Get-MBAlbumTracks {
                 }
                 
                 # Extract composer from work relationships
-                # Note: Release-level work-rels don't include work's composer relationships
-                # We need to fetch the work separately if we find a work ID
+                # Note: The /release endpoint doesn't include recording relationships
+                # We must fetch each recording individually to get work relationships
                 $composer = $null
                 
-                # Debug: Show what properties the recording has
-                Write-Verbose "Recording properties: $($recording.PSObject.Properties.Name -join ', ')"
-                
-                if ($recording.PSObject.Properties['relations'] -and $recording.relations) {
-                    Write-Verbose "Recording has $($recording.relations.Count) relations"
-                    
-                    # Debug: Show all relation types
-                    foreach ($rel in $recording.relations) {
-                        $relType = if ($rel.PSObject.Properties['type']) { $rel.type } else { 'NO-TYPE' }
-                        $relTarget = if ($rel.PSObject.Properties['work']) { 'work' } elseif ($rel.PSObject.Properties['artist']) { 'artist' } else { 'unknown' }
-                        Write-Verbose "  Relation: type='$relType', target='$relTarget'"
-                    }
-                    
-                    # Look for work relationships
-                    $workRels = @($recording.relations | Where-Object { 
-                        $_.PSObject.Properties['work'] -and $_.work
-                    })
-                    
-                    Write-Verbose "Found $($workRels.Count) work relationships"
-                    
-                    if ($workRels.Count -gt 0) {
-                        $workStub = $workRels[0].work
-                        $workId = if ($workStub.PSObject.Properties['id']) { $workStub.id } else { $null }
-                        $workTitle = if ($workStub.PSObject.Properties['title']) { $workStub.title } else { 'Unknown' }
+                if ($recording.PSObject.Properties['id'] -and $recording.id) {
+                    try {
+                        Write-Verbose "Fetching recording details for work/composer information..."
+                        $recordingDetails = Invoke-MusicBrainzRequest -Endpoint 'recording' -Id $recording.id -Inc 'work-rels+artist-rels'
                         
-                        Write-Verbose "Found work stub: $workTitle (id: $workId)"
-                        
-                        # The work stub doesn't include relationships, fetch full work details
-                        if ($workId) {
-                            # Check cache first (multiple movements often share the same work)
-                            if ($workCache.ContainsKey($workId)) {
-                                Write-Verbose "Using cached work details for: $workTitle"
-                                $fullWork = $workCache[$workId]
-                            } else {
-                                Write-Verbose "Fetching full work details with composer relationships..."
-                                try {
-                                    $fullWork = Invoke-MusicBrainzRequest -Endpoint 'work' -Id $workId -Inc 'artist-rels'
-                                    # Cache the work for future tracks
-                                    $workCache[$workId] = $fullWork
-                                } catch {
-                                    Write-Warning "Failed to fetch work details: $_"
-                                    $fullWork = $null
-                                }
-                            }
+                        if ($recordingDetails.PSObject.Properties['relations'] -and $recordingDetails.relations) {
+                            Write-Verbose "Recording has $($recordingDetails.relations.Count) relations"
                             
-                            if ($fullWork) {
+                            # Look for work relationships (type='performance' links recording to work)
+                            $workRels = @($recordingDetails.relations | Where-Object { 
+                                $_.PSObject.Properties['work'] -and $_.work
+                            })
+                            
+                            Write-Verbose "Found $($workRels.Count) work relationships"
+                            
+                            if ($workRels.Count -gt 0) {
+                                $workStub = $workRels[0].work
+                                $workId = if ($workStub.PSObject.Properties['id']) { $workStub.id } else { $null }
+                                $workTitle = if ($workStub.PSObject.Properties['title']) { $workStub.title } else { 'Unknown' }
                                 
-                                if ($fullWork.PSObject.Properties['relations'] -and $fullWork.relations) {
-                                    Write-Verbose "Work has $($fullWork.relations.Count) relations"
-                                    
-                                    $composerRels = @($fullWork.relations | Where-Object {
-                                        $_.PSObject.Properties['type'] -and $_.type -eq 'composer' -and
-                                        $_.PSObject.Properties['artist'] -and $_.artist -and
-                                        $_.artist.PSObject.Properties['name']
-                                    })
-                                    
-                                    Write-Verbose "Found $($composerRels.Count) composer relationships"
-                                    
-                                    if ($composerRels.Count -gt 0) {
-                                        $composerName = $composerRels[0].artist.name
-                                        $composerId = if ($composerRels[0].artist.PSObject.Properties['id']) { 
-                                            $composerRels[0].artist.id 
-                                        } else { 
-                                            $null 
+                                Write-Verbose "Found work stub: $workTitle (id: $workId)"
+                                
+                                # The work stub doesn't include relationships, fetch full work details
+                                if ($workId) {
+                                    # Check cache first (multiple movements often share the same work)
+                                    if ($workCache.ContainsKey($workId)) {
+                                        Write-Verbose "Using cached work details for: $workTitle"
+                                        $fullWork = $workCache[$workId]
+                                    } else {
+                                        Write-Verbose "Fetching full work details with composer relationships..."
+                                        try {
+                                            $fullWork = Invoke-MusicBrainzRequest -Endpoint 'work' -Id $workId -Inc 'artist-rels'
+                                            # Cache the work for future tracks
+                                            $workCache[$workId] = $fullWork
+                                        } catch {
+                                            Write-Warning "Failed to fetch work details: $_"
+                                            $fullWork = $null
                                         }
-                                        
-                                        # Check for non-Latin composer name and get Latin alias
-                                        if ($composerId -and $composerName -match '[^\x00-\x7F]') {
-                                            Write-Verbose "Composer name '$composerName' contains non-Latin characters, fetching Latin alias..."
-                                            $latinComposer = Get-MBArtistLatinName -ArtistId $composerId -OriginalName $composerName
-                                            if ($latinComposer -and $latinComposer -ne $composerName) {
-                                                Write-Verbose "Using Latin composer name: $latinComposer (original: $composerName)"
-                                                $composerName = $latinComposer
-                                            }
-                                        }
-                                        
-                                        $composer = $composerName
-                                        Write-Verbose "Found composer: $composer"
                                     }
-                                } else {
-                                    Write-Verbose "Work has no relations property"
+                                    
+                                    if ($fullWork) {
+                                        
+                                        if ($fullWork.PSObject.Properties['relations'] -and $fullWork.relations) {
+                                            Write-Verbose "Work has $($fullWork.relations.Count) relations"
+                                            
+                                            $composerRels = @($fullWork.relations | Where-Object {
+                                                $_.PSObject.Properties['type'] -and $_.type -eq 'composer' -and
+                                                $_.PSObject.Properties['artist'] -and $_.artist -and
+                                                $_.artist.PSObject.Properties['name']
+                                            })
+                                            
+                                            Write-Verbose "Found $($composerRels.Count) composer relationships"
+                                            
+                                            if ($composerRels.Count -gt 0) {
+                                                $composerName = $composerRels[0].artist.name
+                                                $composerId = if ($composerRels[0].artist.PSObject.Properties['id']) { 
+                                                    $composerRels[0].artist.id 
+                                                } else { 
+                                                    $null 
+                                                }
+                                                
+                                                # Check for non-Latin composer name and get Latin alias
+                                                if ($composerId -and $composerName -match '[^\x00-\x7F]') {
+                                                    Write-Verbose "Composer name '$composerName' contains non-Latin characters, fetching Latin alias..."
+                                                    $latinComposer = Get-MBArtistLatinName -ArtistId $composerId -OriginalName $composerName
+                                                    if ($latinComposer -and $latinComposer -ne $composerName) {
+                                                        Write-Verbose "Using Latin composer name: $latinComposer (original: $composerName)"
+                                                        $composerName = $latinComposer
+                                                    }
+                                                }
+                                                
+                                                $composer = $composerName
+                                                Write-Verbose "Found composer: $composer"
+                                            }
+                                        } else {
+                                            Write-Verbose "Work has no relations property"
+                                        }
+                                    }
                                 }
                             }
+                        } else {
+                            Write-Verbose "Recording details have no relations property"
                         }
+                    } catch {
+                        Write-Warning "Failed to fetch recording details for composer: $_"
                     }
-                } else {
-                    Write-Verbose "Recording has no relations property"
                 }
                 
                 # Extract duration (in milliseconds)
