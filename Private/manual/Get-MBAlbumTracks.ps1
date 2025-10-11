@@ -175,9 +175,15 @@ function Get-MBAlbumTracks {
                 if ($recording.PSObject.Properties['relations'] -and $recording.relations) {
                     Write-Verbose "Recording has $($recording.relations.Count) relations"
                     
-                    # Look for work relationships
+                    # Debug: Show all relation types
+                    foreach ($rel in $recording.relations) {
+                        $relType = if ($rel.PSObject.Properties['type']) { $rel.type } else { 'NO-TYPE' }
+                        $relTarget = if ($rel.PSObject.Properties['work']) { 'work' } elseif ($rel.PSObject.Properties['artist']) { 'artist' } else { 'unknown' }
+                        Write-Verbose "  Relation: type='$relType', target='$relTarget'"
+                    }
+                    
+                    # Look for work relationships (try both 'performance' and direct work links)
                     $workRels = @($recording.relations | Where-Object { 
-                        $_.PSObject.Properties['type'] -and $_.type -eq 'performance' -and
                         $_.PSObject.Properties['work'] -and $_.work
                     })
                     
