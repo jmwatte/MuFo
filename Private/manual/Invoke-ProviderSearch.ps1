@@ -17,6 +17,14 @@ function Invoke-ProviderSearch {
         'Spotify'      { Search-Item -Query $Query -Type $Type }
         'Qobuz'        { Search-QItem -Query $Query -Type $Type }
         'Discogs'      { Search-DItem -Query $Query -Type $Type }
-        'MusicBrainz'  { Search-MBArtist -Query $Query }
+        'MusicBrainz'  { 
+            # MusicBrainz returns array directly, wrap it to match Spotify structure
+            $artists = Search-MBArtist -Query $Query
+            return [PSCustomObject]@{
+                artists = [PSCustomObject]@{
+                    items = $artists
+                }
+            }
+        }
     }
 }
