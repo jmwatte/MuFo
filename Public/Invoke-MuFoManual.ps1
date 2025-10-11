@@ -125,6 +125,10 @@ function Invoke-MuFoManual {
                             Write-Host "Searching for: $artistQuery" -ForegroundColor Yellow
                         }
                         Write-Host ""
+                        
+                        # Always clear candidates and perform fresh search
+                        $candidates = $null
+                        
                         Write-Verbose "Searching for artist: '$artistQuery' with provider: $Provider"
                         try { $r = Invoke-ProviderSearch -Provider $Provider -query $artistQuery -Type artist } catch { Write-Warning "Search failed: $_"; $r = $null }
                         $candidates = @()
