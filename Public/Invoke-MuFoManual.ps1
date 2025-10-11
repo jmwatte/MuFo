@@ -1020,9 +1020,9 @@ function Invoke-MuFoManual {
                                             }
                                             $refreshTracks = $true
                                         }
-                                        $stage = 'C'
-                                        $exitDo = $true
-                                        break
+                                        # Don't exit the doTracks loop - just refresh and continue
+                                        # This avoids re-entering Stage C which would re-fetch tracks from provider
+                                        continue doTracks
                                     }
                                     catch {
                                         Write-Host '---- ERROR in save-tags (st) handler ----' -ForegroundColor Red
