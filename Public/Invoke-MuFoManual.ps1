@@ -216,8 +216,8 @@ function Invoke-MuFoManual {
                             $Provider = $stageBResult.UpdatedProvider
                         }
                         
-                        # Handle new artist query from Stage B
-                        if ($stageBResult.NewArtistQuery) {
+                        # Handle new artist query from Stage B (if provided)
+                        if ($stageBResult.ContainsKey('NewArtistQuery') -and $stageBResult.NewArtistQuery) {
                             $artistQuery = $stageBResult.NewArtistQuery
                         }
                         
