@@ -121,6 +121,9 @@ function Invoke-MuFoManual {
                     "A" {
                         Clear-Host
                         Write-Host "Original Artist: $artist" -ForegroundColor Cyan
+                        if ($artistQuery -ne $artist) {
+                            Write-Host "Searching for: $artistQuery" -ForegroundColor Yellow
+                        }
                         Write-Host ""
                         try { $r = Invoke-ProviderSearch -Provider $Provider -query $artistQuery -Type artist } catch { Write-Warning "Search failed: $_"; $r = $null }
                         $candidates = @()
