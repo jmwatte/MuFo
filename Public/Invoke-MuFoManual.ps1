@@ -287,10 +287,11 @@ function Invoke-MuFoManual {
                             if ($Provider -eq 'Discogs' -and (Get-IfExists $ProviderAlbum 'type') -eq 'master') {
                                 Write-Verbose "Album is a Discogs master (id: $albumIdToFetch), resolving to main_release..."
                                 try {
-                                    $masterDetails = Invoke-DiscogsRequest -Endpoint "masters/$albumIdToFetch"
+                                    $masterDetails = Invoke-DiscogsRequest -Uri "/masters/$albumIdToFetch"
                                     if ($masterDetails -and (Get-IfExists $masterDetails 'main_release')) {
                                         $albumIdToFetch = [string]$masterDetails.main_release
                                         Write-Verbose "Resolved master to main_release: $albumIdToFetch"
+                                        Write-Host "  ℹ️  Resolved master $($ProviderAlbum.id) → release $albumIdToFetch" -ForegroundColor Gray
                                     } else {
                                         Write-Warning "Master $albumIdToFetch has no main_release, using master ID"
                                     }
