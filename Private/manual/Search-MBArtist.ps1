@@ -42,29 +42,55 @@ function Search-MBArtist {
         
         $response = Invoke-MusicBrainzRequest -Endpoint 'artist' -Query $queryParams
         
-        if (-not $response -or -not (Get-IfExists $response 'artists')) {
+        if (-not $response) {
+            Write-Verbose "No response from MusicBrainz"
+            return @()
+        }
+        
+        # MusicBrainz returns artists in 'artists' property
+        $artists = @()
+        if ($response.PSObject.Properties['artists']) {
+            $artists = @($response.artists)
+        } else {
+            Write-Verbose "Response does not contain 'artists' property. Response type: $($response.GetType().Name)"
+            Write-Verbose "Available properties: $($response.PSObject.Properties.Name -join ', ')"
+            return @()
+        }
+        
+        if ($artists.Count -eq 0) {
             Write-Verbose "No artists found for query: $Query"
             return @()
         }
         
-        $artists = $response.artists
         Write-Verbose "Found $($artists.Count) artists"
         
         # Normalize to Spotify-like structure
         $normalizedArtists = foreach ($artist in $artists) {
+            if (-not $artist) { continue }
+            
+            # Verify required properties exist
+            if (-not $artist.PSObject.Properties['id'] -or -not $artist.PSObject.Properties['name']) {
+                Write-Verbose "Skipping artist with missing id or name"
+                continue
+            }
+            
             # Extract genres/tags (MusicBrainz uses 'tags')
             $genres = @()
-            if (Get-IfExists $artist 'tags') {
+            if ($artist.PSObject.Properties['tags'] -and $artist.tags) {
                 $genres = $artist.tags | 
-                    Where-Object { $_ -and (Get-IfExists $_ 'name') } | 
+                    Where-Object { $_ -and $_.PSObject.Properties['name'] } | 
                     Select-Object -First 5 -ExpandProperty name
             }
             
             # Get artist type (Person, Group, Orchestra, Choir, etc.)
-            $artistType = if (Get-IfExists $artist 'type') { $artist.type } else { 'Unknown' }
+            $artistType = if ($artist.PSObject.Properties['type'] -and $artist.type) { 
+                $artist.type 
+            } else { 
+                'Unknown' 
+            }
             
             # Build disambiguation if available
-            $disambiguation = if (Get-IfExists $artist 'disambiguation') { 
+            $disambiguation = if ($artist.PSObject.Properties['disambiguation'] -and $artist.disambiguation) { 
                 " ($($artist.disambiguation))" 
             } else { 
                 "" 
@@ -75,8 +101,8 @@ function Search-MBArtist {
                 name = $artist.name + $disambiguation
                 type = $artistType
                 genres = $genres
-                score = if (Get-IfExists $artist 'score') { $artist.score } else { 0 }
-                country = if (Get-IfExists $artist 'country') { $artist.country } else { $null }
+                score = if ($artist.PSObject.Properties['score']) { $artist.score } else { 0 }
+                country = if ($artist.PSObject.Properties['country'] -and $artist.country) { $artist.country } else { $null }
                 _rawMusicBrainzObject = $artist
             }
         }
