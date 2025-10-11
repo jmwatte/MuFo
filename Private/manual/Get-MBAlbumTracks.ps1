@@ -172,22 +172,30 @@ function Get-MBAlbumTracks {
                 # Extract composer from work relationships
                 $composer = $null
                 if ($recording.PSObject.Properties['relations'] -and $recording.relations) {
+                    Write-Verbose "Recording has $($recording.relations.Count) relations"
+                    
                     # Look for work relationships
                     $workRels = @($recording.relations | Where-Object { 
                         $_.PSObject.Properties['type'] -and $_.type -eq 'performance' -and
                         $_.PSObject.Properties['work'] -and $_.work
                     })
                     
+                    Write-Verbose "Found $($workRels.Count) work relationships"
+                    
                     if ($workRels.Count -gt 0) {
                         $work = $workRels[0].work
+                        Write-Verbose "Work: $($work.title) (id: $($work.id))"
                         
                         # Look for composer in work's relations
                         if ($work.PSObject.Properties['relations'] -and $work.relations) {
+                            Write-Verbose "Work has $($work.relations.Count) relations"
                             $composerRels = @($work.relations | Where-Object {
                                 $_.PSObject.Properties['type'] -and $_.type -eq 'composer' -and
                                 $_.PSObject.Properties['artist'] -and $_.artist -and
                                 $_.artist.PSObject.Properties['name']
                             })
+                            
+                            Write-Verbose "Found $($composerRels.Count) composer relationships"
                             
                             if ($composerRels.Count -gt 0) {
                                 $composerName = $composerRels[0].artist.name
@@ -210,8 +218,12 @@ function Get-MBAlbumTracks {
                                 $composer = $composerName
                                 Write-Verbose "Found composer: $composer"
                             }
+                        } else {
+                            Write-Verbose "Work has no relations property"
                         }
                     }
+                } else {
+                    Write-Verbose "Recording has no relations property"
                 }
                 
                 # Extract duration (in milliseconds)
