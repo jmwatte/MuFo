@@ -431,11 +431,94 @@ function Invoke-StageB-AlbumSelection {
                     continue
                 }
                 
-                # If single selection, go directly to Stage C
+                # If single selection, check if it's a Discogs master that needs resolution
                 if ($validIndices.Count -eq 1) {
+                    $selectedAlbum = $albumsForArtist[$validIndices[0] - 1]
+                    
+                    # For Discogs masters: fetch releases and let user choose
+                    if ($Provider -eq 'Discogs' -and (Get-IfExists $selectedAlbum 'type') -eq 'master') {
+                        Write-Host "`n📀 Selected album is a Discogs MASTER - fetching releases..." -ForegroundColor Yellow
+                        
+                        try {
+                            $masterVersions = Invoke-DiscogsRequest -Uri "/masters/$($selectedAlbum.id)/versions?per_page=50"
+                            
+                            if ($masterVersions -and (Get-IfExists $masterVersions 'versions') -and $masterVersions.versions.Count -gt 0) {
+                                $releases = $masterVersions.versions
+                                Write-Host "Found $($releases.Count) releases for this master:`n" -ForegroundColor Cyan
+                                
+                                for ($i = 0; $i -lt [Math]::Min(20, $releases.Count); $i++) {
+                                    $rel = $releases[$i]
+                                    $country = if (Get-IfExists $rel 'country') { " [$($rel.country)]" } else { "" }
+                                    $format = if (Get-IfExists $rel 'format') { " - $($rel.format)" } else { "" }
+                                    $label = if (Get-IfExists $rel 'label') { " ($($rel.label))" } else { "" }
+                                    Write-Host "[$($i+1)] $($rel.title)$country$format$label" -ForegroundColor Gray
+                                }
+                                
+                                if ($releases.Count -gt 20) {
+                                    Write-Host "... and $($releases.Count - 20) more" -ForegroundColor DarkGray
+                                }
+                                
+                                $relInput = Read-Host "`nSelect release number [1-$($releases.Count)], 'main' for main_release, or press Enter for release 1"
+                                
+                                $selectedRelease = $null
+                                if ($relInput -eq '' -or $relInput -eq '1') {
+                                    $selectedRelease = $releases[0]
+                                } elseif ($relInput -eq 'main') {
+                                    # Fetch master details to get main_release
+                                    try {
+                                        $masterDetails = Invoke-DiscogsRequest -Uri "/masters/$($selectedAlbum.id)"
+                                        if ($masterDetails -and (Get-IfExists $masterDetails 'main_release')) {
+                                            $mainReleaseId = [string]$masterDetails.main_release
+                                            Write-Host "Using main_release: $mainReleaseId" -ForegroundColor Green
+                                            # Create a minimal release object with the main_release ID
+                                            $selectedRelease = @{ id = $mainReleaseId; title = $selectedAlbum.name }
+                                        } else {
+                                            Write-Warning "Master has no main_release, using first release"
+                                            $selectedRelease = $releases[0]
+                                        }
+                                    } catch {
+                                        Write-Warning "Failed to fetch main_release: $_. Using first release."
+                                        $selectedRelease = $releases[0]
+                                    }
+                                } elseif ($relInput -match '^\d+$') {
+                                    $idx = [int]$relInput
+                                    if ($idx -ge 1 -and $idx -le $releases.Count) {
+                                        $selectedRelease = $releases[$idx - 1]
+                                    } else {
+                                        Write-Warning "Invalid selection, using first release"
+                                        $selectedRelease = $releases[0]
+                                    }
+                                } else {
+                                    Write-Warning "Invalid input, using first release"
+                                    $selectedRelease = $releases[0]
+                                }
+                                
+                                # Return the selected release instead of the master
+                                Write-Host "✓ Selected release: $($selectedRelease.id) - $($selectedRelease.title)" -ForegroundColor Green
+                                return @{
+                                    NextStage = 'C'
+                                    SelectedAlbum = @{
+                                        id = [string]$selectedRelease.id
+                                        name = $selectedRelease.title
+                                        type = 'release'  # Mark as release, not master
+                                        _resolvedFromMaster = $selectedAlbum.id
+                                    }
+                                    UpdatedCache = $CachedAlbums
+                                    UpdatedCachedArtistId = $CachedArtistId
+                                    UpdatedProvider = $Provider
+                                }
+                            } else {
+                                Write-Warning "No releases found for master $($selectedAlbum.id), attempting to use master ID directly"
+                            }
+                        } catch {
+                            Write-Warning "Failed to fetch releases for master: $_. Will attempt to use master ID."
+                        }
+                    }
+                    
+                    # Normal path: return selected album (non-master or master resolution failed)
                     return @{
                         NextStage = 'C'
-                        SelectedAlbum = $albumsForArtist[$validIndices[0] - 1]
+                        SelectedAlbum = $selectedAlbum
                         UpdatedCache = $CachedAlbums
                         UpdatedCachedArtistId = $CachedArtistId
                         UpdatedProvider = $Provider
