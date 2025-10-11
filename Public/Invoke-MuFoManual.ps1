@@ -135,14 +135,40 @@ function Invoke-MuFoManual {
                                 Write-Warning "NonInteractive: skipping album because no artist candidates were found for '$artistQuery'."
                                 break
                             }
-                            $inputF = Read-Host "Enter new search, 'skip' to skip album, or 'id:<id>' to select by id"
-                            if ($inputF -eq 'skip') { break }
-                            if ($inputF -like 'id:*') { 
-                                $id = $inputF.Substring(3)
-                                if ($Provider -eq 'Discogs') { $id = & $normalizeDiscogsId $id }
-                                $ProviderArtist = @{ id = $id; name = $id }; $stage = 'B'; continue 
+                            $inputF = Read-Host "Enter new search, '(cp)' change provider, '(s)kip' to skip album, or 'id:<id>' to select by id"
+                            switch -Regex ($inputF) {
+                                '^s(kip)?$' { 
+                                    break 
+                                }
+                                '^cp$' {
+                                    Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
+                                    Write-Host "Available providers: Spotify, Qobuz, Discogs" -ForegroundColor Gray
+                                    $newProvider = Read-Host "Enter new provider name"
+                                    if ($newProvider -in @('Spotify', 'Qobuz', 'Discogs')) {
+                                        $Provider = $newProvider
+                                        Write-Host "Switched to provider: $Provider" -ForegroundColor Green
+                                        continue
+                                    } else {
+                                        Write-Warning "Invalid provider: $newProvider. Staying with $Provider."
+                                        continue
+                                    }
+                                }
+                                '^id:(.+)$' { 
+                                    $id = $matches[1].Trim()
+                                    if ($Provider -eq 'Discogs') { $id = & $normalizeDiscogsId $id }
+                                    $ProviderArtist = @{ id = $id; name = $id }
+                                    $stage = 'B'
+                                    continue 
+                                }
+                                default {
+                                    if ($inputF) { 
+                                        $artistQuery = $inputF
+                                        continue 
+                                    } else { 
+                                        continue 
+                                    }
+                                }
                             }
-                            if ($inputF) { $artistQuery = $inputF; continue } else { continue }
                         }
     
                         Write-Host "Artist candidates for '$artistQuery':"
