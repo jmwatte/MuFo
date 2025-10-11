@@ -1,0 +1,86 @@
+[
+  {
+    "Test": "Master m2745248 should resolve to release",
+    "Result": "PASS",
+    "Expected": "Resolved",
+    "Actual": "Resolved"
+  },
+  {
+    "Test": "Master should have versions array",
+    "Result": "PASS",
+    "Expected": "HasVersions",
+    "Actual": "HasVersions"
+  },
+  {
+    "Test": "Release r2745248 should be different from master m2745248",
+    "Result": "PASS",
+    "Expected": "Different",
+    "Actual": "Different"
+  },
+  {
+    "Test": "Get-DArtistAlbums should return albums for Górecki",
+    "Result": "PASS",
+    "Expected": "HasAlbums",
+    "Actual": "HasAlbums"
+  },
+  {
+    "Test": "Masters-only should include Symphony No. 3",
+    "Result": "PASS",
+    "Expected": "Found",
+    "Actual": "Found"
+  },
+  {
+    "Test": "Album object should have 'type' property",
+    "Result": "PASS",
+    "Expected": "HasType",
+    "Actual": "HasType"
+  },
+  {
+    "Test": "Bracketed master [m2745248] should strip to m2745248",
+    "Result": "PASS",
+    "Expected": "m2745248",
+    "Actual": "m2745248"
+  },
+  {
+    "Test": "Bracketed release [r2745248] should strip to r2745248",
+    "Result": "PASS",
+    "Expected": "r2745248",
+    "Actual": "r2745248"
+  },
+  {
+    "Test": "Master m2745248 should extract numeric 2745248",
+    "Result": "PASS",
+    "Expected": "2745248",
+    "Actual": "2745248"
+  },
+  {
+    "Test": "Release r2745248 should extract numeric 2745248",
+    "Result": "PASS",
+    "Expected": "2745248",
+    "Actual": "2745248"
+  },
+  {
+    "Test": "Empty album list should be handled",
+    "Result": "PASS",
+    "Expected": "EmptyArray",
+    "Actual": "EmptyArray"
+  },
+  {
+    "Test": "Null album should use Get-IfExists safely",
+    "Result": "PASS",
+    "Expected": "Null",
+    "Actual": "Null"
+  },
+  {
+    "Test": "Non-numeric page number should be rejected",
+    "Result": "PASS",
+    "Expected": "Invalid",
+    "Actual": "Invalid"
+  },
+  {
+    "Test": "Full workflow: Find album -> Resolve master -> Get tracks",
+    "Result": "PASS",
+    "Expected": "Success",
+    "Actual": "Success"
+  }
+]
