@@ -115,7 +115,7 @@ function Invoke-MuFoManual {
             $pageSize = 25
             $albumDone = $false
             $mastersOnlyMode = $true  # Track Discogs filter state: true=masters only, false=all releases
-            while ($true) {
+            :stageLoop while ($true) {
                 switch ($stage) {
                     
                     "A" {
@@ -156,10 +156,10 @@ function Invoke-MuFoManual {
                                     if ($newProvider -in @('Spotify', 'Qobuz', 'Discogs')) {
                                         $Provider = $newProvider
                                         Write-Host "Switched to provider: $Provider" -ForegroundColor Green
-                                        continue
+                                        continue stageLoop
                                     } else {
                                         Write-Warning "Invalid provider: $newProvider. Staying with $Provider."
-                                        continue
+                                        continue stageLoop
                                     }
                                 }
                                 '^id:(.+)$' { 
@@ -173,9 +173,9 @@ function Invoke-MuFoManual {
                                     if ($inputF) { 
                                         $artistQuery = $inputF
                                         Write-Verbose "Updated artistQuery to: '$artistQuery' (from no-candidates prompt)"
-                                        continue 
+                                        continue stageLoop
                                     } else { 
-                                        continue 
+                                        continue stageLoop
                                     }
                                 }
                             }
@@ -210,7 +210,7 @@ function Invoke-MuFoManual {
                             if ($Provider -eq 'Discogs') { $id = & $normalizeDiscogsId $id }
                             $ProviderArtist = @{ id = $id; name = $id }; $stage = 'B'; continue 
                         }
-                        if ($inputF -match '^\d+$') { $idx = [int]$inputF; if ($idx -ge 1 -and $idx -le $candidates.Count) { $ProviderArtist = $candidates[$idx - 1]; $stage = 'B'; continue } else { Write-Warning "Invalid"; continue } }
+                        if ($inputF -match '^\d+$') { $idx = [int]$inputF; if ($idx -ge 1 -and $idx -le $candidates.Count) { $ProviderArtist = $candidates[$idx - 1]; $stage = 'B'; continue } else { Write-Warning "Invalid"; continue stageLoop } }
                         if ($inputF -eq 'skip') { break }
                         if ($inputF -eq 'cp') {
                             Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
@@ -219,15 +219,15 @@ function Invoke-MuFoManual {
                             if ($newProvider -in @('Spotify', 'Qobuz', 'Discogs')) {
                                 $Provider = $newProvider
                                 Write-Host "Switched to provider: $Provider" -ForegroundColor Green
-                                continue
+                                continue stageLoop
                             } else {
                                 Write-Warning "Invalid provider: $newProvider. Staying with $Provider."
-                                continue
+                                continue stageLoop
                             }
                         }
                         $artistQuery = $inputF
                         Write-Verbose "Updated artistQuery to: '$artistQuery' (from selection prompt)"
-                        continue
+                        continue stageLoop
                     }
     
                     "B" {
@@ -267,7 +267,7 @@ function Invoke-MuFoManual {
                             break
                         }
                         
-                        continue
+                        continue stageLoop
                     }
                     "C" {
                         Clear-Host
