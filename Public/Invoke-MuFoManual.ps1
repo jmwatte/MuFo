@@ -592,7 +592,13 @@ function Invoke-MuFoManual {
                             $isAmbiguous = Test-AlbumArtistAmbiguity -Artist $ProviderArtist -Album $ProviderAlbum -Tracks $tracksForAlbum
                             if ($isAmbiguous) {
                                 Write-Host "`n⚠️  This classical album has ambiguous album artist assignment." -ForegroundColor Yellow
-                                Write-Host "   Album artist from API: $($ProviderAlbum.album_artist)" -ForegroundColor Gray
+                                # Try different property names for album artist across providers
+                                $currentAlbumArtist = Get-IfExists $ProviderAlbum 'album_artist'
+                                if (-not $currentAlbumArtist) { $currentAlbumArtist = Get-IfExists $ProviderAlbum 'artist' }
+                                if (-not $currentAlbumArtist -and $ProviderArtist) { $currentAlbumArtist = Get-IfExists $ProviderArtist 'name' }
+                                if ($currentAlbumArtist) {
+                                    Write-Host "   Album artist from API: $currentAlbumArtist" -ForegroundColor Gray
+                                }
                                 Write-Host "   Multiple artists found in tracks" -ForegroundColor Gray
                                 Write-Host ""
                                 $response = Read-Host "Press 'a' to build custom album artist, or Enter to use automatic detection"
