@@ -125,12 +125,14 @@ function Invoke-MuFoManual {
                             Write-Host "Searching for: $artistQuery" -ForegroundColor Yellow
                         }
                         Write-Host ""
+                        Write-Verbose "Searching for artist: '$artistQuery' with provider: $Provider"
                         try { $r = Invoke-ProviderSearch -Provider $Provider -query $artistQuery -Type artist } catch { Write-Warning "Search failed: $_"; $r = $null }
                         $candidates = @()
                         if ($value = Get-IfExists $r.artists "items") { $candidates = $value }
                         #if ($r -and $r.artists -and $r.artists.items) { $candidates = $r.artists.items }
                         # Normalize to array so .Count is available even for single-item responses
                         $candidates = @($candidates)
+                        Write-Verbose "Search returned $($candidates.Count) candidates"
     
                         if (-not $candidates -or $candidates.Count -eq 0) {
                             Write-Host "No artist candidates found for '$artistQuery'."
@@ -174,7 +176,10 @@ function Invoke-MuFoManual {
                             }
                         }
     
-                        Write-Host "Artist candidates for '$artistQuery':"
+                        Write-Host "Artist candidates for '$artistQuery':" -ForegroundColor Green
+                        if ($candidates.Count -eq 0) {
+                            Write-Warning "No candidates returned from search (this should not happen - should have been caught above)"
+                        }
                         for ($i = 0; $i -lt $candidates.Count; $i++) {
                             Write-Host "[$($i+1)] $($candidates[$i].name) - $($candidates[$i].genres -join ', ') (id: $($candidates[$i].id))"
                         }
