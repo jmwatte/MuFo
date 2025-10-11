@@ -164,7 +164,7 @@ function Invoke-MuFoManual {
                             $stage = 'B'; continue
                         }
 
-                        $inputF = Read-Host "Select artist [1] (Enter=first), number, 'skip', 'id:<id>', or new search term:"
+                        $inputF = Read-Host "Select artist [1] (Enter=first), number, 'skip', 'id:<id>', '(cp)' change provider, or new search term:"
                         if ($inputF -eq '') { $ProviderArtist = $candidates[0]; $stage = 'B'; continue }
                         if ($inputF -like 'id:*') { 
                             $id = $inputF.Substring(3)
@@ -173,6 +173,19 @@ function Invoke-MuFoManual {
                         }
                         if ($inputF -match '^\d+$') { $idx = [int]$inputF; if ($idx -ge 1 -and $idx -le $candidates.Count) { $ProviderArtist = $candidates[$idx - 1]; $stage = 'B'; continue } else { Write-Warning "Invalid"; continue } }
                         if ($inputF -eq 'skip') { break }
+                        if ($inputF -eq 'cp') {
+                            Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
+                            Write-Host "Available providers: Spotify, Qobuz, Discogs" -ForegroundColor Gray
+                            $newProvider = Read-Host "Enter new provider name"
+                            if ($newProvider -in @('Spotify', 'Qobuz', 'Discogs')) {
+                                $Provider = $newProvider
+                                Write-Host "Switched to provider: $Provider" -ForegroundColor Green
+                                continue
+                            } else {
+                                Write-Warning "Invalid provider: $newProvider. Staying with $Provider."
+                                continue
+                            }
+                        }
                         $artistQuery = $inputF; continue
                     }
     
@@ -312,7 +325,7 @@ function Invoke-MuFoManual {
                             if ($goB) { $ProviderAlbum = $albumsForArtist[0]; $stage = 'C'; break }
                             if ($AutoSelect -or $NonInteractive) { $ProviderAlbum = $albumsForArtist[0]; $stage = 'C'; break }
 
-                            $inputF = Read-Host "Select album(s) [1] (Enter=first), number(s) (e.g., 1,3,5-8), '(b)ack', '(n)ext', '(p)rev', '(s)kip', 'id:<id>', '*' (all albums), or text to search:"
+                            $inputF = Read-Host "Select album(s) [1] (Enter=first), number(s) (e.g., 1,3,5-8), '(b)ack', '(n)ext', '(p)rev', '(s)kip', 'id:<id>', '(cp)' change provider, '*' (all albums), or text to search:"
                             
                             switch -Regex ($inputF) {
                                 '^n$' {
@@ -322,6 +335,23 @@ function Invoke-MuFoManual {
                                 '^p$' {
                                     if ($page -gt 1) { $page-- }
                                     continue
+                                }
+                                '^cp$' {
+                                    Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
+                                    Write-Host "Available providers: Spotify, Qobuz, Discogs" -ForegroundColor Gray
+                                    $newProvider = Read-Host "Enter new provider name"
+                                    if ($newProvider -in @('Spotify', 'Qobuz', 'Discogs')) {
+                                        $Provider = $newProvider
+                                        Write-Host "Switched to provider: $Provider" -ForegroundColor Green
+                                        $cachedAlbums = $null
+                                        $cachedArtistId = $null
+                                        $stage = 'A'
+                                        $exitdo = $true
+                                        break
+                                    } else {
+                                        Write-Warning "Invalid provider: $newProvider. Staying with $Provider."
+                                        continue
+                                    }
                                 }
                                 '^b$' {
                                     $cachedAlbums = $null
