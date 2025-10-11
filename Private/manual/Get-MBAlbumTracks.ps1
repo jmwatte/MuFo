@@ -39,35 +39,43 @@ function Get-MBAlbumTracks {
         
         # First try 'genres' property (newer MusicBrainz API)
         if ($release.PSObject.Properties['genres'] -and $release.genres) {
-            $albumGenres = $release.genres | 
+            $albumGenres = @($release.genres | 
                 Where-Object { $_ -and $_.PSObject.Properties['name'] } | 
-                Select-Object -First 5 -ExpandProperty name
-            Write-Verbose "Found $($albumGenres.Count) genres from release.genres"
+                Select-Object -First 5 -ExpandProperty name)
+            if ($albumGenres.Count -gt 0) {
+                Write-Verbose "Found $($albumGenres.Count) genres from release.genres"
+            }
         }
         
         # Fallback to 'tags' property (older API or when genres not available)
         if ($albumGenres.Count -eq 0 -and $release.PSObject.Properties['tags'] -and $release.tags) {
-            $albumGenres = $release.tags | 
+            $albumGenres = @($release.tags | 
                 Where-Object { $_ -and $_.PSObject.Properties['name'] -and $_.PSObject.Properties['count'] -and $_.count -gt 0 } | 
                 Sort-Object -Property count -Descending |
-                Select-Object -First 5 -ExpandProperty name
-            Write-Verbose "Found $($albumGenres.Count) tags from release.tags"
+                Select-Object -First 5 -ExpandProperty name)
+            if ($albumGenres.Count -gt 0) {
+                Write-Verbose "Found $($albumGenres.Count) tags from release.tags"
+            }
         }
         
         # Also try release-groups if present
         if ($albumGenres.Count -eq 0 -and $release.PSObject.Properties['release-group'] -and $release.'release-group') {
             $rg = $release.'release-group'
             if ($rg.PSObject.Properties['genres'] -and $rg.genres) {
-                $albumGenres = $rg.genres | 
+                $albumGenres = @($rg.genres | 
                     Where-Object { $_ -and $_.PSObject.Properties['name'] } | 
-                    Select-Object -First 5 -ExpandProperty name
-                Write-Verbose "Found $($albumGenres.Count) genres from release-group.genres"
+                    Select-Object -First 5 -ExpandProperty name)
+                if ($albumGenres.Count -gt 0) {
+                    Write-Verbose "Found $($albumGenres.Count) genres from release-group.genres"
+                }
             } elseif ($rg.PSObject.Properties['tags'] -and $rg.tags) {
-                $albumGenres = $rg.tags | 
+                $albumGenres = @($rg.tags | 
                     Where-Object { $_ -and $_.PSObject.Properties['name'] -and $_.PSObject.Properties['count'] -and $_.count -gt 0 } | 
                     Sort-Object -Property count -Descending |
-                    Select-Object -First 5 -ExpandProperty name
-                Write-Verbose "Found $($albumGenres.Count) tags from release-group.tags"
+                    Select-Object -First 5 -ExpandProperty name)
+                if ($albumGenres.Count -gt 0) {
+                    Write-Verbose "Found $($albumGenres.Count) tags from release-group.tags"
+                }
             }
         }
         
@@ -78,15 +86,20 @@ function Get-MBAlbumTracks {
             Write-Verbose "Using album genres: $($albumGenres -join ', ')"
         }
         
-        # Extract tracks from media
-        if (-not (Get-IfExists $release 'media') -or $release.media.Count -eq 0) {
+        # Extract tracks from media (ensure it's an array)
+        $media = @()
+        if (Get-IfExists $release 'media') {
+            $media = @($release.media)
+        }
+        
+        if ($media.Count -eq 0) {
             Write-Warning "Release $Id has no media/tracks"
             return @()
         }
         
         $allTracks = @()
         
-        foreach ($medium in $release.media) {
+        foreach ($medium in $media) {
             $discNumber = if (Get-IfExists $medium 'position') { $medium.position } else { 1 }
             $tracks = if (Get-IfExists $medium 'tracks') { $medium.tracks } else { @() }
             
