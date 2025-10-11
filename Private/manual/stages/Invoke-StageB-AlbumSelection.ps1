@@ -502,6 +502,8 @@ function Invoke-StageB-AlbumSelection {
                                         name = $selectedRelease.title
                                         type = 'release'  # Mark as release, not master
                                         _resolvedFromMaster = $selectedAlbum.id
+                                        _masterReleases = $releases  # Store releases for potential retry
+                                        _masterName = $selectedAlbum.name
                                     }
                                     UpdatedCache = $CachedAlbums
                                     UpdatedCachedArtistId = $CachedArtistId

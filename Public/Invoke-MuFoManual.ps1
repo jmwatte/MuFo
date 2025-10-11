@@ -339,10 +339,87 @@ function Invoke-MuFoManual {
                                     Write-Host "   - The album/release has no track data in the provider's database" -ForegroundColor Gray
                                     Write-Host "   - The ID is for a master release (try selecting a specific release)" -ForegroundColor Gray
                                     Write-Host "   - The resource was deleted or moved" -ForegroundColor Gray
-                                    $skipChoice = Read-Host "`nPress Enter to skip this album, 'b' to go back to album selection, or 'cp' to change provider"
+                                    
+                                    # Check if this was a master release with stored releases list
+                                    $canRetryReleases = (Get-IfExists $ProviderAlbum '_masterReleases') -and $ProviderAlbum._masterReleases.Count -gt 0
+                                    $backPrompt = if ($canRetryReleases) { "'b' to try different release" } else { "'b' to go back to album selection" }
+                                    
+                                    $skipChoice = Read-Host "`nPress Enter to skip this album, $backPrompt, or 'cp' to change provider"
                                     if ($skipChoice -eq 'b') {
-                                        $stage = 'B'
-                                        continue stageLoop
+                                        if ($canRetryReleases) {
+                                            # Show releases again for this master
+                                            Clear-Host
+                                            Write-Host "📀 Discogs MASTER: $($ProviderAlbum._masterName)" -ForegroundColor Yellow
+                                            Write-Host "Found $($ProviderAlbum._masterReleases.Count) releases:`n" -ForegroundColor Cyan
+                                            
+                                            $releases = $ProviderAlbum._masterReleases
+                                            for ($i = 0; $i -lt [Math]::Min(20, $releases.Count); $i++) {
+                                                $rel = $releases[$i]
+                                                $country = if (Get-IfExists $rel 'country') { " [$($rel.country)]" } else { "" }
+                                                $format = if (Get-IfExists $rel 'format') { " - $($rel.format)" } else { "" }
+                                                $label = if (Get-IfExists $rel 'label') { " ($($rel.label))" } else { "" }
+                                                Write-Host "[$($i+1)] $($rel.title)$country$format$label" -ForegroundColor Gray
+                                            }
+                                            
+                                            if ($releases.Count -gt 20) {
+                                                Write-Host "... and $($releases.Count - 20) more" -ForegroundColor DarkGray
+                                            }
+                                            
+                                            $relInput = Read-Host "`nSelect release [1-$($releases.Count)], [0] for main_release, 'b' for album list, or Enter for #1"
+                                            
+                                            if ($relInput -eq 'b') {
+                                                $stage = 'B'
+                                                continue stageLoop
+                                            }
+                                            
+                                            $selectedRelease = $null
+                                            if ($relInput -eq '') {
+                                                $selectedRelease = $releases[0]
+                                            } elseif ($relInput -eq '0' -or $relInput -eq 'main') {
+                                                try {
+                                                    $masterDetails = Invoke-DiscogsRequest -Uri "/masters/$($ProviderAlbum._resolvedFromMaster)"
+                                                    if ($masterDetails -and (Get-IfExists $masterDetails 'main_release')) {
+                                                        $mainReleaseId = [string]$masterDetails.main_release
+                                                        Write-Host "Using main_release: $mainReleaseId" -ForegroundColor Green
+                                                        $selectedRelease = @{ id = $mainReleaseId; title = $ProviderAlbum._masterName }
+                                                    } else {
+                                                        Write-Warning "Master has no main_release, using first release"
+                                                        $selectedRelease = $releases[0]
+                                                    }
+                                                } catch {
+                                                    Write-Warning "Failed to fetch main_release: $_. Using first release."
+                                                    $selectedRelease = $releases[0]
+                                                }
+                                            } elseif ($relInput -match '^\d+$') {
+                                                $idx = [int]$relInput
+                                                if ($idx -ge 1 -and $idx -le $releases.Count) {
+                                                    $selectedRelease = $releases[$idx - 1]
+                                                } else {
+                                                    Write-Warning "Invalid selection, using first release"
+                                                    $selectedRelease = $releases[0]
+                                                }
+                                            } else {
+                                                Write-Warning "Invalid input, using first release"
+                                                $selectedRelease = $releases[0]
+                                            }
+                                            
+                                            # Update the album object with new release selection
+                                            Write-Host "✓ Selected release: $($selectedRelease.id) - $($selectedRelease.title)" -ForegroundColor Green
+                                            $ProviderAlbum = @{
+                                                id = [string]$selectedRelease.id
+                                                name = $selectedRelease.title
+                                                type = 'release'
+                                                _resolvedFromMaster = $ProviderAlbum._resolvedFromMaster
+                                                _masterReleases = $releases
+                                                _masterName = $ProviderAlbum._masterName
+                                            }
+                                            # Retry fetching tracks with new release
+                                            continue stageLoop
+                                        } else {
+                                            # No releases stored, go back to album selection
+                                            $stage = 'B'
+                                            continue stageLoop
+                                        }
                                     } elseif ($skipChoice -eq 'cp') {
                                         Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
                                         Write-Host "Available providers: Spotify, Qobuz, Discogs" -ForegroundColor Gray
@@ -363,10 +440,86 @@ function Invoke-MuFoManual {
                             } catch { 
                                 Write-Warning "Get-AlbumTracks failed: $_"
                                 $tracksForAlbum = @()
-                                $skipChoice = Read-Host "Press Enter to skip, 'b' for album selection, 'cp' to change provider"
+                                
+                                # Check if this was a master release with stored releases list
+                                $canRetryReleases = (Get-IfExists $ProviderAlbum '_masterReleases') -and $ProviderAlbum._masterReleases.Count -gt 0
+                                $backPrompt = if ($canRetryReleases) { "'b' to try different release" } else { "'b' for album selection" }
+                                
+                                $skipChoice = Read-Host "Press Enter to skip, $backPrompt, 'cp' to change provider"
                                 if ($skipChoice -eq 'b') {
-                                    $stage = 'B'
-                                    continue stageLoop
+                                    if ($canRetryReleases) {
+                                        # Show releases again (same code as above)
+                                        Clear-Host
+                                        Write-Host "📀 Discogs MASTER: $($ProviderAlbum._masterName)" -ForegroundColor Yellow
+                                        Write-Host "Found $($ProviderAlbum._masterReleases.Count) releases:`n" -ForegroundColor Cyan
+                                        
+                                        $releases = $ProviderAlbum._masterReleases
+                                        for ($i = 0; $i -lt [Math]::Min(20, $releases.Count); $i++) {
+                                            $rel = $releases[$i]
+                                            $country = if (Get-IfExists $rel 'country') { " [$($rel.country)]" } else { "" }
+                                            $format = if (Get-IfExists $rel 'format') { " - $($rel.format)" } else { "" }
+                                            $label = if (Get-IfExists $rel 'label') { " ($($rel.label))" } else { "" }
+                                            Write-Host "[$($i+1)] $($rel.title)$country$format$label" -ForegroundColor Gray
+                                        }
+                                        
+                                        if ($releases.Count -gt 20) {
+                                            Write-Host "... and $($releases.Count - 20) more" -ForegroundColor DarkGray
+                                        }
+                                        
+                                        $relInput = Read-Host "`nSelect release [1-$($releases.Count)], [0] for main_release, 'b' for album list, or Enter for #1"
+                                        
+                                        if ($relInput -eq 'b') {
+                                            $stage = 'B'
+                                            continue stageLoop
+                                        }
+                                        
+                                        $selectedRelease = $null
+                                        if ($relInput -eq '') {
+                                            $selectedRelease = $releases[0]
+                                        } elseif ($relInput -eq '0' -or $relInput -eq 'main') {
+                                            try {
+                                                $masterDetails = Invoke-DiscogsRequest -Uri "/masters/$($ProviderAlbum._resolvedFromMaster)"
+                                                if ($masterDetails -and (Get-IfExists $masterDetails 'main_release')) {
+                                                    $mainReleaseId = [string]$masterDetails.main_release
+                                                    Write-Host "Using main_release: $mainReleaseId" -ForegroundColor Green
+                                                    $selectedRelease = @{ id = $mainReleaseId; title = $ProviderAlbum._masterName }
+                                                } else {
+                                                    Write-Warning "Master has no main_release, using first release"
+                                                    $selectedRelease = $releases[0]
+                                                }
+                                            } catch {
+                                                Write-Warning "Failed to fetch main_release: $_. Using first release."
+                                                $selectedRelease = $releases[0]
+                                            }
+                                        } elseif ($relInput -match '^\d+$') {
+                                            $idx = [int]$relInput
+                                            if ($idx -ge 1 -and $idx -le $releases.Count) {
+                                                $selectedRelease = $releases[$idx - 1]
+                                            } else {
+                                                Write-Warning "Invalid selection, using first release"
+                                                $selectedRelease = $releases[0]
+                                            }
+                                        } else {
+                                            Write-Warning "Invalid input, using first release"
+                                            $selectedRelease = $releases[0]
+                                        }
+                                        
+                                        # Update the album object with new release selection
+                                        Write-Host "✓ Selected release: $($selectedRelease.id) - $($selectedRelease.title)" -ForegroundColor Green
+                                        $ProviderAlbum = @{
+                                            id = [string]$selectedRelease.id
+                                            name = $selectedRelease.title
+                                            type = 'release'
+                                            _resolvedFromMaster = $ProviderAlbum._resolvedFromMaster
+                                            _masterReleases = $releases
+                                            _masterName = $ProviderAlbum._masterName
+                                        }
+                                        # Retry fetching tracks with new release
+                                        continue stageLoop
+                                    } else {
+                                        $stage = 'B'
+                                        continue stageLoop
+                                    }
                                 } elseif ($skipChoice -eq 'cp') {
                                     Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
                                     Write-Host "Available providers: Spotify, Qobuz, Discogs" -ForegroundColor Gray
