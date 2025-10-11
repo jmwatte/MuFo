@@ -804,7 +804,11 @@ function Invoke-MuFoManual {
                                     $refreshTracks = $true
                                     continue
                                 }
-                                '^s$' { break 3 }
+                                '^s$' { 
+                                    # Skip to next album in pipeline
+                                    $albumDone = $true
+                                    break  # Break out of doTracks loop
+                                }
                                 '^sf$' {
                                     $year = Get-ReleaseYear -ReleaseDate (Get-IfExists $ProviderAlbum 'release_date')
                                     $oldpath = $album.FullName
