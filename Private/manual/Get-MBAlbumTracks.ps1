@@ -102,6 +102,10 @@ function Get-MBAlbumTracks {
         
         $allTracks = @()
         
+        # Cache for work details to avoid redundant API calls
+        # Classical albums often have multiple tracks linking to the same work (movements)
+        $workCache = @{}
+        
         foreach ($medium in $media) {
             $discNumber = if (Get-IfExists $medium 'position') { $medium.position } else { 1 }
             $tracks = if (Get-IfExists $medium 'tracks') { $medium.tracks } else { @() }
@@ -200,11 +204,25 @@ function Get-MBAlbumTracks {
                         
                         # The work stub doesn't include relationships, fetch full work details
                         if ($workId) {
-                            Write-Verbose "Fetching full work details with composer relationships..."
-                            try {
-                                $fullWork = Invoke-MusicBrainzRequest -Endpoint 'work' -Id $workId -Inc 'artist-rels'
+                            # Check cache first (multiple movements often share the same work)
+                            if ($workCache.ContainsKey($workId)) {
+                                Write-Verbose "Using cached work details for: $workTitle"
+                                $fullWork = $workCache[$workId]
+                            } else {
+                                Write-Verbose "Fetching full work details with composer relationships..."
+                                try {
+                                    $fullWork = Invoke-MusicBrainzRequest -Endpoint 'work' -Id $workId -Inc 'artist-rels'
+                                    # Cache the work for future tracks
+                                    $workCache[$workId] = $fullWork
+                                } catch {
+                                    Write-Warning "Failed to fetch work details: $_"
+                                    $fullWork = $null
+                                }
+                            }
+                            
+                            if ($fullWork) {
                                 
-                                if ($fullWork -and $fullWork.PSObject.Properties['relations'] -and $fullWork.relations) {
+                                if ($fullWork.PSObject.Properties['relations'] -and $fullWork.relations) {
                                     Write-Verbose "Work has $($fullWork.relations.Count) relations"
                                     
                                     $composerRels = @($fullWork.relations | Where-Object {
@@ -239,8 +257,6 @@ function Get-MBAlbumTracks {
                                 } else {
                                     Write-Verbose "Work has no relations property"
                                 }
-                            } catch {
-                                Write-Warning "Failed to fetch work details: $_"
                             }
                         }
                     }
@@ -282,6 +298,9 @@ function Get-MBAlbumTracks {
         }
         
         Write-Verbose "Found $($allTracks.Count) tracks for release $Id"
+        if ($workCache.Count -gt 0) {
+            Write-Verbose "Work cache: fetched $($workCache.Count) unique works (avoided redundant API calls for repeated works)"
+        }
         return $allTracks
     }
     catch {
