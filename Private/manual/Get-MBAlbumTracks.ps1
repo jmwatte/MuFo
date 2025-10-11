@@ -26,7 +26,8 @@ function Get-MBAlbumTracks {
         # Request release with media (tracks), artist credits, and genres/tags
         # Include release-groups to get album-level genre information
         # Include artist-rels to get detailed artist info with aliases (for Latin script names)
-        $inc = 'recordings+artist-credits+media+release-groups+genres+tags+artist-rels'
+        # Include work-rels to get composer information from works
+        $inc = 'recordings+artist-credits+media+release-groups+genres+tags+artist-rels+work-rels'
         
         $release = Invoke-MusicBrainzRequest -Endpoint 'release' -Id $Id -Inc $inc
         
@@ -168,6 +169,51 @@ function Get-MBAlbumTracks {
                     $artists = @([PSCustomObject]@{ name = 'Unknown Artist'; id = $null })
                 }
                 
+                # Extract composer from work relationships
+                $composer = $null
+                if ($recording.PSObject.Properties['relations'] -and $recording.relations) {
+                    # Look for work relationships
+                    $workRels = @($recording.relations | Where-Object { 
+                        $_.PSObject.Properties['type'] -and $_.type -eq 'performance' -and
+                        $_.PSObject.Properties['work'] -and $_.work
+                    })
+                    
+                    if ($workRels.Count -gt 0) {
+                        $work = $workRels[0].work
+                        
+                        # Look for composer in work's relations
+                        if ($work.PSObject.Properties['relations'] -and $work.relations) {
+                            $composerRels = @($work.relations | Where-Object {
+                                $_.PSObject.Properties['type'] -and $_.type -eq 'composer' -and
+                                $_.PSObject.Properties['artist'] -and $_.artist -and
+                                $_.artist.PSObject.Properties['name']
+                            })
+                            
+                            if ($composerRels.Count -gt 0) {
+                                $composerName = $composerRels[0].artist.name
+                                $composerId = if ($composerRels[0].artist.PSObject.Properties['id']) { 
+                                    $composerRels[0].artist.id 
+                                } else { 
+                                    $null 
+                                }
+                                
+                                # Check for non-Latin composer name and get Latin alias
+                                if ($composerId -and $composerName -match '[^\x00-\x7F]') {
+                                    Write-Verbose "Composer name '$composerName' contains non-Latin characters, fetching Latin alias..."
+                                    $latinComposer = Get-MBArtistLatinName -ArtistId $composerId -OriginalName $composerName
+                                    if ($latinComposer -and $latinComposer -ne $composerName) {
+                                        Write-Verbose "Using Latin composer name: $latinComposer (original: $composerName)"
+                                        $composerName = $latinComposer
+                                    }
+                                }
+                                
+                                $composer = $composerName
+                                Write-Verbose "Found composer: $composer"
+                            }
+                        }
+                    }
+                }
+                
                 # Extract duration (in milliseconds)
                 $durationMs = 0
                 if (Get-IfExists $recording 'length') {
@@ -193,6 +239,7 @@ function Get-MBAlbumTracks {
                     duration_ms = $durationMs
                     artists = $artists
                     genres = $albumGenres  # Add album-level genres to track
+                    composer = $composer  # Add composer from work relationships
                     _rawMusicBrainzObject = $recording
                 }
                 
