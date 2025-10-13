@@ -627,7 +627,8 @@ function Invoke-StageB-AlbumSelection {
                     
                     if ($searchResults -and $searchResults.Count -gt 0) {
                         $albumsForArtist = $searchResults
-                        $albumsForArtist = $albumsForArtist | Sort-Object { - (Get-StringSimilarity-Jaccard -String1 $inputF -String2 $_.Name) }
+                        # Wrap Sort-Object result to ensure it stays an array (single results can be unwrapped)
+                        $albumsForArtist = @($albumsForArtist | Sort-Object { - (Get-StringSimilarity-Jaccard -String1 $inputF -String2 $_.name) })
                         $CachedAlbums = $albumsForArtist
                         $page = 1
                         Write-Host "Found $($albumsForArtist.Count) albums matching '$inputF'" -ForegroundColor Green
