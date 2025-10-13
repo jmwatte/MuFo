@@ -574,104 +574,7 @@ function Invoke-MuFoManual {
                             }
                         }
                         
-                        # Normalize to array and defensively map properties (different providers may return different shapes)
-                        <#   $tracksForAlbum = @($tracksForAlbum) | ForEach-Object {
-                            # Defensive handling: some providers or earlier pipeline steps can emit ErrorRecord
-                            # or Exception objects into the collection. Handle those explicitly so we don't
-                            # accidentally use exception text as a track title (which caused the 'artists'
-                            # missing-property messages to appear as Titles).
-                            if ($_ -is [System.Management.Automation.ErrorRecord] -or $_ -is [System.Exception]) {
-                                $errMsg = $_.ToString()
-                                Write-Verbose "Skipping provider error object while mapping tracks: $errMsg"
-                                [PSCustomObject]@{
-                                    Id = $null
-                                    Title = "[provider error] $errMsg"
-                                    name = "[provider error] $errMsg"
-                                    DiscNumber = 0
-                                    TrackNumber = 0
-                                    Duration = 0
-                                    Artist = $null
-                                    artists = @()
-                                    FilePath = $null
-                                    _RawProviderObject = $_
-                                }
-                                continue
-                            }
-
-                            try {
-                                $artistName = $null
-                                if ($_.PSObject.Properties.Match('artists')) {
-                                    # artists might be an object with 'name' or an array; handle common shapes
-                                    $a = $_.artists
-                                    if ($a -is [System.Collections.IEnumerable] -and -not ($a -is [string])) {
-                                        $first = @($a) | Select-Object -First 1
-                                        if ($first -and $first.name) { $artistName = $first.name }
-                                    } else {
-                                        if ($a -and $a.name) { $artistName = $a.name }
-                                    }
-                                } elseif ($_.PSObject.Properties.Match('artist')) {
-                                    $artistName = $_.artist
-                                }
-
-                                # Normalize into a shape that satisfies existing code paths:
-                                # - Title and name (some providers use 'name')
-                                # - Artist (string) and artists (array of objects with .name) for compatibility
-                                $titleVal = if ($_.PSObject.Properties.Match('name')) { $_.name } elseif ($_.PSObject.Properties.Match('title')) { $_.title } else { $_.ToString() }
-                                $discVal = if ($_.PSObject.Properties.Match('disc_number')) { $_.disc_number } elseif ($_.PSObject.Properties.Match('discNumber')) { $_.discNumber } else { 0 }
-                                $trackVal = if ($_.PSObject.Properties.Match('track_number')) { $_.track_number } elseif ($_.PSObject.Properties.Match('trackNumber')) { $_.trackNumber } else { 0 }
-                                $durationVal = if ($_.PSObject.Properties.Match('duration_ms')) { $_.duration_ms } elseif ($_.PSObject.Properties.Match('durationMs')) { $_.durationMs } else { 0 }
-
-                                # Build a defensive 'artists' array (objects with .name) when we only resolved a string
-                                $artistsArray = @()
-                                if ($_.PSObject.Properties.Match('artists')) {
-                                    $rawA = $_.artists
-                                    if ($rawA -is [System.Collections.IEnumerable] -and -not ($rawA -is [string])) {
-                                        foreach ($it in @($rawA)) {
-                                            if ($it -is [string]) { $artistsArray += [PSCustomObject]@{ name = $it } }
-                                            elseif ($it.PSObject.Properties.Match('name')) { $artistsArray += [PSCustomObject]@{ name = $it.name } }
-                                            else { $artistsArray += [PSCustomObject]@{ name = $it.ToString() } }
-                                        }
-                                    }
-                                    else {
-                                        if ($rawA -is [string]) { $artistsArray += [PSCustomObject]@{ name = $rawA } }
-                                        elseif ($rawA.PSObject.Properties.Match('name')) { $artistsArray += [PSCustomObject]@{ name = $rawA.name } }
-                                        else { $artistsArray += [PSCustomObject]@{ name = $rawA.ToString() } }
-                                    }
-                                }
-                                elseif ($artistName) {
-                                    $artistsArray += [PSCustomObject]@{ name = $artistName }
-                                }
-
-                                [PSCustomObject]@{
-                                    Id          = ($_.PSObject.Properties.Match('id') ? $_.id : $null)
-                                    Title       = $titleVal
-                                    name        = $titleVal
-                                    DiscNumber  = $discVal
-                                    TrackNumber = $trackVal
-                                    Duration    = $durationVal
-                                    Artist      = $artistName
-                                    artists     = $artistsArray
-                                    FilePath    = $null
-                                    _RawProviderObject = $_
-                                }
-                            }
-                            catch {
-                                $errText = $_.ToString()
-                                Write-Verbose "Warning: unexpected track object shape while mapping (exception): $errText"
-                                [PSCustomObject]@{
-                                    Id = $null
-                                    Title = "[mapping error] $errText"
-                                    name = "[mapping error] $errText"
-                                    DiscNumber = 0
-                                    TrackNumber = 0
-                                    Duration = 0
-                                    Artist = $null
-                                    artists = @()
-                                    FilePath = $null
-                                    _MappingException = $_
-                                }
-                            }
-                        } #>
+                      
     
                         # Prefer sorting by disc/track when provider supplied disc numbers, otherwise keep name-sorting
                         $hasDiscNumbers = $false
@@ -730,7 +633,7 @@ function Invoke-MuFoManual {
                             else {
                                 if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Red' }
                                 $whatIfStatus = if ($useWhatIf) { "ON" } else { "OFF" }
-                                $optionsLine = "`nOptions:SortByTit(l)e,(d)uration,(t)rackNumber,(n)ame,(h)ybrid,(m)anual,(r)everse,(s)ave Tags(st),(sf)older,(sa)ll,(aa)lbumArtist,(b)ack,(cp) change provider,(w)hatif $whatIfStatus (s)kip"
+                                $optionsLine = "`nOptions: SortBy (l)Title, (d)Duration, (t)TrackNumber, (n)Name, (h)Hybrid, (m)Manual, (r)Reverse | Save: (st)Tags, (sf)Folder, (sa)All | (aa)AlbumArtist, (b)Back, (cp)ChangeProvider, (w)WhatIf:$whatIfStatus, (s)Skip"
                                 $commandList = @('d','t','n','l','h','m','r','st','sf','sa','aa','b','cp','w','whatif','s')
                                 $paramshow = @{
                                     PairedTracks   = $pairedTracks
@@ -808,7 +711,8 @@ function Invoke-MuFoManual {
                                 '^s$' { 
                                     # Skip to next album in pipeline
                                     $albumDone = $true
-                                    break  # Break out of doTracks loop
+                                    $exitDo = $true  # Need this to break out of doTracks loop
+                                    break
                                 }
                                 '^sf$' {
                                     $year = Get-ReleaseYear -ReleaseDate (Get-IfExists $ProviderAlbum 'release_date')
@@ -1103,53 +1007,9 @@ function Invoke-MuFoManual {
                                             Write-Verbose ("Skipping track '{0}' - no matching audio file" -f $pair.SpotifyTrack.name)
                                         }
                                     }
-                                    <#  for ($i = 0; $i -lt $tracksForAlbum.Count; $i++) {
-                                        $audioFile = $audioFiles[$i]
-                                        $filePath = $audioFile.FilePath
-
-                                        $tags = get-Tags -Artist $ProviderArtist -Album $ProviderAlbum -SpotifyTrack $tracksForAlbum[$i]
-                                     
-
-                                        Write-Verbose ("Saving tags to: {0}" -f $filePath)
-                                        Write-Verbose ("Tag values:\n{0}" -f ($tags | Out-String))
-                                        $res = Save-TagsForFile -FilePath $filePath -TagValues $tags -WhatIf:$isWhatIf
-                                        if ($res.Success) { Write-Host ("Saved tags: {0} -> {1:D2}.{2:D2}: {3}" -f (Split-Path -Leaf $filePath), $tags.Disc, $tags.Track, $tags.Title) -ForegroundColor Green }
-                                        else { Write-Warning ("Skipped/Failed: {0} ({1})" -f $filePath, ($res.Reason -or 'unknown')) }
-                                    }
- #>
+                                    
 
 
-
-
-                                    <# for ($i = 0; $i -lt $tracksForAlbum.Count; $i++) {
-                                        $spotifyTrack = $tracksForAlbum[$i]
-                                        $audioFile = $audioFiles[$i]
-                                        $filePath = $audioFile.FilePath
-
-                                        # Safe property access for genre across all providers
-                                        $albumGenre = Get-IfExists $ProviderAlbum 'genre'
-                                        $artistGenre = Get-IfExists $ProviderArtist 'genre'
-                                        $genreTag = if ($null -ne $albumGenre) { $albumGenre -join '; ' } else { $artistGenre -join '; ' }
-                                        
-                                        $tags = @{
-                                            Title       = $spotifyTrack.Title
-                                            Track       = $spotifyTrack.TrackNumber
-                                            Disc        = $spotifyTrack.DiscNumber
-                                            Performers  = $spotifyTrack.artists.name -join '; '
-                                            Genres      = $genreTag
-                                            AlbumArtist = Get-IfExists $ProviderArtist 'name'
-                                            Date        = $year
-                                            Album       = Get-IfExists $ProviderAlbum 'name'
-                                        }
-                                        #if there is a $spotifyTrack.composer, add that to the $tags
-                                        if ($spotifyTrack.composer) {
-                                            $tags.Composer = $spotifyTrack.composer -join '; '
-                                        }
-                                        $res = Save-TagsForFile -FilePath $filePath -TagValues $tags -WhatIf:$isWhatIf
-                                        if ($res.Success) { Write-Host ("Saved tags: {0} -> {1:D2}.{2:D2}: {3}" -f (Split-Path -Leaf $filePath), $spotifyTrack.DiscNumber, $spotifyTrack.TrackNumber, $spotifyTrack.Title) -ForegroundColor Green }
-                                        else { Write-Warning ("Skipped/Failed: {0} ({1})" -f $filePath, ($res.Reason -or 'unknown')) }
-                                    } #>
-    
                                     # dispose any lingering TagFile handles only when actually applying changes (not in -WhatIf)
                                     if (-not $useWhatIf) {
                                         foreach ($a in $audioFiles) {
