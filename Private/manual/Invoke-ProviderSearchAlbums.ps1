@@ -61,14 +61,16 @@ function Invoke-ProviderSearchAlbums {
 
     switch ($Provider) {
         'Spotify' {
-            Search-SAlbumsByName -ArtistName $ArtistName -AlbumName $AlbumName -ArtistId $ArtistId
+            $results = Search-SAlbumsByName -ArtistName $ArtistName -AlbumName $AlbumName -ArtistId $ArtistId
+            @($results)
         }
         'Qobuz' {
             if (-not $ArtistId) {
                 Write-Warning "Qobuz album search requires ArtistId (artist URL)"
                 return @()
             }
-            Search-QAlbumsByName -ArtistId $ArtistId -AlbumName $AlbumName -ArtistName $ArtistName
+            $results = Search-QAlbumsByName -ArtistId $ArtistId -AlbumName $AlbumName -ArtistName $ArtistName
+            @($results)
         }
         'Discogs' {
             $searchParams = @{
@@ -84,7 +86,8 @@ function Invoke-ProviderSearchAlbums {
             if ($AllAlbumsCache) {
                 $searchParams.AllAlbumsCache = $AllAlbumsCache
             }
-            Search-DAlbumsByName @searchParams
+            $results = Search-DAlbumsByName @searchParams
+            @($results)
         }
         'MusicBrainz' {
             # MusicBrainz: If we have cached albums, filter them locally
