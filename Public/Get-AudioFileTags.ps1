@@ -309,27 +309,28 @@ function Get-AudioFileTags {
                 }
                 
                 # Add read-only convenience properties (singular forms) for easy access
+                # Calculate values first, then add as read-only properties
+                $artistValue = if ($artists.Count -gt 0) { $artists[0] } else { $null }
                 $normalizedTag.PSObject.Properties.Add(
-                    [System.Management.Automation.PSNoteProperty]::new('Artist', 
-                        (if ($artists.Count -gt 0) { $artists[0] } else { $null }))
+                    [System.Management.Automation.PSNoteProperty]::new('Artist', $artistValue)
                 )
                 $normalizedTag.PSObject.Properties['Artist'].IsSettable = $false
                 
+                $albumArtistValue = if ($albumArtists.Count -gt 0) { $albumArtists[0] } else { if ($artists.Count -gt 0) { $artists[0] } else { $null }}
                 $normalizedTag.PSObject.Properties.Add(
-                    [System.Management.Automation.PSNoteProperty]::new('AlbumArtist', 
-                        (if ($albumArtists.Count -gt 0) { $albumArtists[0] } else { if ($artists.Count -gt 0) { $artists[0] } else { $null }}))
+                    [System.Management.Automation.PSNoteProperty]::new('AlbumArtist', $albumArtistValue)
                 )
                 $normalizedTag.PSObject.Properties['AlbumArtist'].IsSettable = $false
                 
+                $genreValue = if ($genres.Count -gt 0) { $genres[0] } else { $null }
                 $normalizedTag.PSObject.Properties.Add(
-                    [System.Management.Automation.PSNoteProperty]::new('Genre', 
-                        (if ($genres.Count -gt 0) { $genres[0] } else { $null }))
+                    [System.Management.Automation.PSNoteProperty]::new('Genre', $genreValue)
                 )
                 $normalizedTag.PSObject.Properties['Genre'].IsSettable = $false
                 
+                $composerValue = if ($composers.Count -gt 0) { $composers[0] } else { $null }
                 $normalizedTag.PSObject.Properties.Add(
-                    [System.Management.Automation.PSNoteProperty]::new('Composer', 
-                        (if ($composers.Count -gt 0) { $composers[0] } else { $null }))
+                    [System.Management.Automation.PSNoteProperty]::new('Composer', $composerValue)
                 )
                 $normalizedTag.PSObject.Properties['Composer'].IsSettable = $false
 
