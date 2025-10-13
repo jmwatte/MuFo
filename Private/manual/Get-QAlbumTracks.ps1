@@ -407,19 +407,19 @@ function Get-QAlbumTracks {
                 $performerInfo = if ($infoNode) { $infoNode.InnerText.Trim() } else { "" }
                 
                 # DEBUG: Track artist extraction
-                Write-Host "`n=== TRACK $trackNumber DEBUG ===" -ForegroundColor Yellow
-                Write-Host "Title: $title" -ForegroundColor Cyan
-                Write-Host "Raw performerInfo: [$performerInfo]" -ForegroundColor Gray
-                Write-Host "performerInfo length: $($performerInfo.Length) chars" -ForegroundColor Gray
+                Write-Debug "`n=== TRACK $trackNumber DEBUG ==="
+                Write-Debug "Title: $title"
+                Write-Debug "Raw performerInfo: [$performerInfo]"
+                Write-Debug "performerInfo length: $($performerInfo.Length) chars"
                 
                 $parsed = ParsePerformer $performerInfo
                 
-                Write-Host "Parsed results:" -ForegroundColor Cyan
-                Write-Host "  Performers: $($parsed.Performers.Count) - [$($parsed.Performers -join '; ')]" -ForegroundColor Gray
-                Write-Host "  MainArtists: $($parsed.MainArtists.Count) - [$($parsed.MainArtists -join '; ')]" -ForegroundColor Gray
-                Write-Host "  Composers: $($parsed.Composers.Count) - [$($parsed.Composers -join '; ')]" -ForegroundColor Gray
-                Write-Host "  Conductor: [$($parsed.Conductor)]" -ForegroundColor Gray
-                Write-Host "  Ensemble: [$($parsed.Ensemble)]" -ForegroundColor Gray
+                Write-Debug "Parsed results:"
+                Write-Debug "  Performers: $($parsed.Performers.Count) - [$($parsed.Performers -join '; ')]"
+                Write-Debug "  MainArtists: $($parsed.MainArtists.Count) - [$($parsed.MainArtists -join '; ')]"
+                Write-Debug "  Composers: $($parsed.Composers.Count) - [$($parsed.Composers -join '; ')]"
+                Write-Debug "  Conductor: [$($parsed.Conductor)]"
+                Write-Debug "  Ensemble: [$($parsed.Ensemble)]"
 
                 # Build artists array from parsed performers and main artists
                 $artists = @()
@@ -428,27 +428,27 @@ function Get-QAlbumTracks {
                     $artists += [PSCustomObject]@{ name = $performer; type = $artistType }
                 }
                 
-                Write-Host "Built artists array: $($artists.Count) items" -ForegroundColor Cyan
+                Write-Debug "Built artists array: $($artists.Count) items"
                 if ($artists.Count -gt 0) {
                     foreach ($a in $artists) {
-                        Write-Host "  - $($a.name) (type: $($a.type))" -ForegroundColor Green
+                        Write-Debug "  - $($a.name) (type: $($a.type))"
                     }
                 }
                 
                 # Fallback: If no artist found, try to extract from data-gtm "item_brand" field (album artist)
                 if ($artists.Count -eq 0) {
-                    Write-Host "No artists found, trying GTM fallback..." -ForegroundColor Yellow
+                    Write-Debug "No artists found, trying GTM fallback..."
                     try {
                         $albumArtist = Get-GtmProductField -GtmRaw $dataGtm -FieldName 'item_brand'
-                        Write-Host "  GTM item_brand: [$albumArtist]" -ForegroundColor Gray
+                        Write-Debug "  GTM item_brand: [$albumArtist]"
                         if ($albumArtist -and $albumArtist -ne '') {
                             $artists += [PSCustomObject]@{ name = $albumArtist; type = "album_artist" }
-                            Write-Host "  ✓ Using album artist fallback: $albumArtist" -ForegroundColor Green
+                            Write-Debug "  ✓ Using album artist fallback: $albumArtist"
                         } else {
-                            Write-Host "  ✗ GTM item_brand is empty" -ForegroundColor Red
+                            Write-Debug "  ✗ GTM item_brand is empty"
                         }
                     } catch {
-                        Write-Host "  ✗ Could not extract album artist from GTM data: $_" -ForegroundColor Red
+                        Write-Debug "  ✗ Could not extract album artist from GTM data: $_"
                     }
                 }
 

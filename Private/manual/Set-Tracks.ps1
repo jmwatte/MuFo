@@ -182,7 +182,7 @@ function Set-Tracks {
                 }
             }
             else {
-                Write-Host "DEBUG: Using Normal mode for byTrackNumber"
+                Write-Debug "Using Normal mode for byTrackNumber"
                 # Original: Iterate over Spotify tracks
                 $SpotifyTracks = $SpotifyTracks | Sort-Object disc_number, track_number
                 foreach ($spotify in $SpotifyTracks) {
