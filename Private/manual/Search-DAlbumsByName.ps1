@@ -49,11 +49,11 @@ function Search-DAlbumsByName {
     )
 
     Write-Verbose "Searching Discogs for artist '$ArtistName' albums matching '$AlbumName'"
-    Write-Host "[DEBUG] Search-DAlbumsByName called: Artist='$ArtistName', Album='$AlbumName', MastersOnly=$MastersOnly, CacheProvided=$($null -ne $AllAlbumsCache)" -ForegroundColor Yellow
+    Write-Debug "Search-DAlbumsByName called: Artist='$ArtistName', Album='$AlbumName', MastersOnly=$MastersOnly, CacheProvided=$($null -ne $AllAlbumsCache)"
 
     # If cache provided, use cache-based filtering (fast, no API calls)
     if ($AllAlbumsCache) {
-        Write-Host "[DEBUG] Using cache path" -ForegroundColor Yellow
+        Write-Debug "Using cache path"
         Write-Verbose "Using cached album list ($($AllAlbumsCache.Count) albums)"
         $allAlbums = $AllAlbumsCache
         
@@ -78,7 +78,7 @@ function Search-DAlbumsByName {
     }
 
     # No cache - use Discogs API search
-    Write-Host "[DEBUG] Using API search path" -ForegroundColor Yellow
+    Write-Debug "Using API search path"
     Write-Verbose "Searching Discogs API with title='$AlbumName' and artist='$ArtistName'"
     
     try {
@@ -88,9 +88,9 @@ function Search-DAlbumsByName {
             type = 'release'  # Always search for releases (broader results)
         }
         
-        Write-Host "[DEBUG] Calling Invoke-DiscogsRequest..." -ForegroundColor Yellow
+        Write-Debug "Calling Invoke-DiscogsRequest..."
         $searchResult = Invoke-DiscogsRequest -Uri 'https://api.discogs.com/database/search' -Body $searchParams
-        Write-Host "[DEBUG] API call completed, processing results..." -ForegroundColor Yellow
+        Write-Debug "API call completed, processing results..."
         
         if (-not $searchResult.results -or $searchResult.results.Count -eq 0) {
             Write-Verbose "No albums found via API search"

@@ -687,7 +687,7 @@ function Invoke-MuFoManual {
                         # that disc numbers were parsed and normalized (helps compare with test output)
                         try {
                             if ($PSBoundParameters.ContainsKey('Verbose')) {
-                                Write-Host "\n[DEBUG] Provider tracks for album: $($ProviderAlbum.name) (count: $($tracksForAlbum.Count))" -ForegroundColor Cyan
+                                Write-Verbose "Provider tracks for album: $($ProviderAlbum.name) (count: $($tracksForAlbum.Count))"
                                 $tracksForAlbum | Select-Object id, name, disc_number, track_number | Format-Table -AutoSize
                             }
                         }
