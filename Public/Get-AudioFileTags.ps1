@@ -286,14 +286,12 @@ function Get-AudioFileTags {
                     }
                 }
 
-                # Create comprehensive tag object
+                # Create comprehensive tag object with writable array properties
                 $normalizedTag = [PSCustomObject]@{
                     Path            = $file
                     FileName        = [System.IO.Path]::GetFileName($file)
                     Title           = if ($tag -and $tag.Title) { $tag.Title } else { [System.IO.Path]::GetFileNameWithoutExtension($file) }
-                    Artist          = if ($artists.Count -gt 0) { $artists[0] } else { $null }
                     Artists         = $artists
-                    AlbumArtist     = if ($albumArtists.Count -gt 0) { $albumArtists[0] } else { if ($artists.Count -gt 0) { $artists[0] } else { $null } }
                     AlbumArtists    = $albumArtists
                     Album           = if ($tag -and $tag.Album) { $tag.Album } else { $null }
                     Track           = if ($tag -and $tag.Track) { $tag.Track } else { $null }
@@ -301,9 +299,7 @@ function Get-AudioFileTags {
                     Disc            = if ($tag -and $tag.Disc) { $tag.Disc } else { $null }
                     DiscCount       = if ($tag -and $tag.DiscCount) { $tag.DiscCount } else { $null }
                     Year            = if ($tag -and $tag.Year) { $tag.Year } else { $null }
-                    Genre           = if ($genres.Count -gt 0) { $genres[0] } else { $null }
                     Genres          = $genres
-                    Composer        = if ($composers.Count -gt 0) { $composers[0] } else { $null }
                     Composers       = $composers
                     Duration        = if ($properties -and $properties.Duration) { $properties.Duration } else { [TimeSpan]::Zero }
                     DurationSeconds = if ($properties -and $properties.Duration) { [double]$properties.Duration.TotalSeconds } else { 0.0 }
@@ -311,6 +307,31 @@ function Get-AudioFileTags {
                     SampleRate      = if ($properties -and $properties.AudioSampleRate) { $properties.AudioSampleRate } else { 0 }
                     Format          = [System.IO.Path]::GetExtension($file).TrimStart('.')
                 }
+                
+                # Add read-only convenience properties (singular forms) for easy access
+                $normalizedTag.PSObject.Properties.Add(
+                    [System.Management.Automation.PSNoteProperty]::new('Artist', 
+                        (if ($artists.Count -gt 0) { $artists[0] } else { $null }))
+                )
+                $normalizedTag.PSObject.Properties['Artist'].IsSettable = $false
+                
+                $normalizedTag.PSObject.Properties.Add(
+                    [System.Management.Automation.PSNoteProperty]::new('AlbumArtist', 
+                        (if ($albumArtists.Count -gt 0) { $albumArtists[0] } else { if ($artists.Count -gt 0) { $artists[0] } else { $null }}))
+                )
+                $normalizedTag.PSObject.Properties['AlbumArtist'].IsSettable = $false
+                
+                $normalizedTag.PSObject.Properties.Add(
+                    [System.Management.Automation.PSNoteProperty]::new('Genre', 
+                        (if ($genres.Count -gt 0) { $genres[0] } else { $null }))
+                )
+                $normalizedTag.PSObject.Properties['Genre'].IsSettable = $false
+                
+                $normalizedTag.PSObject.Properties.Add(
+                    [System.Management.Automation.PSNoteProperty]::new('Composer', 
+                        (if ($composers.Count -gt 0) { $composers[0] } else { $null }))
+                )
+                $normalizedTag.PSObject.Properties['Composer'].IsSettable = $false
 
                 # Add classical music analysis if requested
                 if ($IncludeComposer) {

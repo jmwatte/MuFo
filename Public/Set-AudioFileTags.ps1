@@ -184,7 +184,8 @@ function Set-AudioFileTags {
             # Build list of changes
             $changes = @()
             $readOnlyProps = @('Path', 'FileName', 'Format', 'Duration', 'DurationSeconds', 'Bitrate', 'SampleRate', 
-                              'IsClassical', 'ContributingArtists', 'Conductor', 'SuggestedAlbumArtist')
+                              'IsClassical', 'ContributingArtists', 'Conductor', 'SuggestedAlbumArtist',
+                              'Artist', 'AlbumArtist', 'Genre', 'Composer')  # Singular convenience properties are read-only
             
             foreach ($prop in $newTags.PSObject.Properties) {
                 $propName = $prop.Name
