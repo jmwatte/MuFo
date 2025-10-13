@@ -37,6 +37,8 @@ function Search-QAlbumsByName {
 
     try {
         $allAlbums = Get-QArtistAlbums -Id $ArtistId
+        # Normalize to array before checking Count
+        $allAlbums = @($allAlbums)
     }
     catch {
         Write-Warning "Failed to fetch Qobuz albums: $_"
