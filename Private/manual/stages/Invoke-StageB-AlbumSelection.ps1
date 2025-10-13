@@ -92,12 +92,16 @@ function Invoke-StageB-AlbumSelection {
         [string]$AlbumId,
         
         [Parameter()]
-        [switch]$GoB
+        [switch]$GoB,
+        
+        [Parameter()]
+        [scriptblock]$ShowHeader
     )
     
     Clear-Host
-    Write-Host "🔍 Provider: $Provider" -ForegroundColor Magenta
-    Write-Host ""
+    if ($ShowHeader) {
+        & $ShowHeader -Provider $Provider -Artist $Artist -AlbumName $AlbumName
+    }
     
     # Initialize pagination
     $page = 1
@@ -255,7 +259,9 @@ function Invoke-StageB-AlbumSelection {
     # Main album selection loop
     while ($true) {
         Clear-Host
-        Write-Host "🔍 Provider: $Provider" -ForegroundColor Magenta
+        if ($ShowHeader) {
+            & $ShowHeader -Provider $Provider -Artist $Artist -AlbumName $AlbumName
+        }
         
         # Show filter mode indicator for Discogs
         if ($Provider -eq 'Discogs') {

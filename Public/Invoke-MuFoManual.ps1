@@ -120,12 +120,12 @@ function Invoke-MuFoManual {
                     
                     "A" {
                         Clear-Host
-                        Write-Host "🔍 Provider: $Provider" -ForegroundColor Magenta
-                        Write-Host "Original Artist: $artist" -ForegroundColor Cyan
+                        & $showHeader -Provider $Provider -Artist $artist -AlbumName $albumName
+                        
                         if ($artistQuery -ne $artist) {
                             Write-Host "Searching for: $artistQuery" -ForegroundColor Yellow
+                            Write-Host ""
                         }
-                        Write-Host ""
                         
                         # Always clear candidates and perform fresh search
                         $candidates = $null
@@ -250,6 +250,7 @@ function Invoke-MuFoManual {
                             -CachedArtistId $cachedArtistId `
                             -NormalizeDiscogsId $normalizeDiscogsId `
                             -Artist $artist `
+                            -ShowHeader $showHeader `
                             -NonInteractive:$NonInteractive `
                             -AutoSelect:$AutoSelect `
                             -AlbumId $albumId `
@@ -280,6 +281,8 @@ function Invoke-MuFoManual {
                     }
                     "C" {
                         Clear-Host
+                        & $showHeader -Provider $Provider -Artist $artist -AlbumName $albumName
+                        
                         if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Red' }
                         
                         # Display appropriate header for single or combined albums
