@@ -1,13 +1,13 @@
-function Set-AudioFileTags {
+function Write-SpotifyAlbumTags {
 <#
 .SYNOPSIS
     Writes and updates audio file tags with intelligent met    # Get cur       }
     
     # Get current tags to work with (exclude lib folders)  
     # Get current tags to work with (exclude lib folders)
-    $existingTags = Get-AudioFileTags -Path $Path -IncludeComposerGet current tags to work with (exclude lib folders)
-    $existingTags = Get-AudioFileTags -Path $Path -IncludeComposerags to work with (exclude lib folders)
-    $existingTags = Get-AudioFileTags -Path $Path -IncludeComposer
+    $existingTags = Read-AudioFileTags -Path $Path -IncludeComposerGet current tags to work with (exclude lib folders)
+    $existingTags = Read-AudioFileTags -Path $Path -IncludeComposerags to work with (exclude lib folders)
+    $existingTags = Read-AudioFileTags -Path $Path -IncludeComposer
     if ($existingTags.Count -eq 0) {
         Write-Warning "No au            # Fetch album trac                if ($spotifyTrack -and $spotifyTrack.artists -and $spotifyTrack.artists.Count -gt 0) {
                     # Use track-specific artists (handles featuring artists correctly)
@@ -87,17 +87,17 @@ function Set-AudioFileTags {
     Show what changes would be made without actually writing them.
 
 .EXAMPLE
-    Set-AudioFileTags -Path "C:\Music\Arvo Pärt\1999 - Alina" -OptimizeClassicalTags
+    Write-SpotifyAlbumTags -Path "C:\Music\Arvo Pärt\1999 - Alina" -OptimizeClassicalTags
     
     Fixes all metadata issues and optimizes for classical music organization.
 
 .EXAMPLE
-    Set-AudioFileTags -Path "C:\Music\Album" -SpotifyAlbum $album -DontFix Genres -ValidateCompleteness
+    Write-SpotifyAlbumTags -Path "C:\Music\Album" -SpotifyAlbum $album -DontFix Genres -ValidateCompleteness
     
     Fixes all metadata except genres, and validates track completeness.
 
 .EXAMPLE
-    Set-AudioFileTags -Path "C:\Music\Album" -FixOnly Titles,TrackNumbers
+    Write-SpotifyAlbumTags -Path "C:\Music\Album" -FixOnly Titles,TrackNumbers
     
     Only fixes track titles and track numbers, leaves other metadata unchanged.
 

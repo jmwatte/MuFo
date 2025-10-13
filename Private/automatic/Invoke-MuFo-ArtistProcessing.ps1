@@ -467,7 +467,7 @@ function Invoke-MuFoArtistProcessing {
                                         $tagParams.LogTo = $tagLogPath
                                     }
 
-                                    $tagResults = Set-AudioFileTags @tagParams
+                                    $tagResults = Write-SpotifyAlbumTags @tagParams
                                     $c | Add-Member -NotePropertyName TagEnhancementResults -NotePropertyValue $tagResults
 
                                     $enhancedTracks = Read-AudioFileTags -Path $c.LocalPath -IncludeComposer -ShowProgress
