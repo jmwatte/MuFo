@@ -616,8 +616,11 @@ function Invoke-StageB-AlbumSelection {
 
                     $searchResults = Invoke-ProviderSearchAlbums @searchParams
                     
+                    # Normalize to array before checking Count
+                    $searchResults = @($searchResults)
+                    
                     if ($searchResults -and $searchResults.Count -gt 0) {
-                        $albumsForArtist = @($searchResults)
+                        $albumsForArtist = $searchResults
                         $albumsForArtist = $albumsForArtist | Sort-Object { - (Get-StringSimilarity-Jaccard -String1 $inputF -String2 $_.Name) }
                         $CachedAlbums = $albumsForArtist
                         $page = 1
