@@ -23,11 +23,31 @@ function Get-DAlbumTracks {
     try {
         Write-Verbose "Fetching Discogs release $Id..."
         
-        # Get release details
-        $release = Invoke-DiscogsRequest -Uri "/releases/$Id"
+        # Check if this is a master ID that needs resolution
+        # Masters cannot be fetched directly for tracks - need to resolve to main_release first
+        $releaseId = $Id
+        if ($Id -match '^m?(\d+)$') {
+            $numericId = $matches[1]
+            
+            # Try to fetch as master first to check if it exists
+            try {
+                $master = Invoke-DiscogsRequest -Uri "/masters/$numericId"
+                if ($master -and $master.main_release) {
+                    Write-Verbose "Master $numericId detected, resolving to main_release: $($master.main_release)"
+                    $releaseId = [string]$master.main_release
+                }
+            } catch {
+                # Not a master, treat as release ID
+                Write-Verbose "Not a master or failed to fetch master $numericId, treating as release ID"
+                $releaseId = $numericId
+            }
+        }
+        
+        # Get release details using resolved release ID
+        $release = Invoke-DiscogsRequest -Uri "/releases/$releaseId"
         
         if (-not $release) {
-            Write-Warning "No release found for ID: $Id"
+            Write-Warning "No release found for ID: $releaseId (original: $Id)"
             return @()
         }
         
