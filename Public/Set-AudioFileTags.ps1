@@ -148,8 +148,8 @@ function Set-AudioFileTags {
             # Determine new tag values based on parameter set
             $newTags = switch ($PSCmdlet.ParameterSetName) {
                 'Simple' {
-                    # Apply hashtable updates to current tags
-                    $updated = $currentTags
+                    # Apply hashtable updates to current tags - make a copy first
+                    $updated = $currentTags | Select-Object *
                     foreach ($key in $Tags.Keys) {
                         if ($updated.PSObject.Properties.Name -contains $key) {
                             $updated.$key = $Tags[$key]
@@ -160,9 +160,10 @@ function Set-AudioFileTags {
                     $updated
                 }
                 'Pipeline' {
-                    # Use modified tags from pipeline, optionally apply additional hashtable updates
+                    # Use tags from pipeline - make a copy and optionally apply hashtable updates
                     if ($Tags) {
-                        $updated = $InputObject
+                        # Make a copy to avoid modifying the pipeline object
+                        $updated = $InputObject | Select-Object *
                         foreach ($key in $Tags.Keys) {
                             if ($updated.PSObject.Properties.Name -contains $key) {
                                 $updated.$key = $Tags[$key]
@@ -170,6 +171,7 @@ function Set-AudioFileTags {
                         }
                         $updated
                     } else {
+                        # Return pipeline object as-is (assume user already modified it)
                         $InputObject
                     }
                 }
@@ -240,7 +242,7 @@ function Set-AudioFileTags {
                         $propName = $change.Property
                         $newValue = $change.NewValue
                         
-                        Write-Verbose "  $propName: '$($change.OldValue)' -> '$newValue'"
+                        Write-Verbose "  $($propName) : '$($change.OldValue)' -> '$newValue'"
                         
                         # Map common property names to TagLib properties
                         switch ($propName) {
