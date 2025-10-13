@@ -90,6 +90,25 @@ function Invoke-MuFoManual {
             return $id
         }
         
+        # Helper function to show consistent header across all stages
+        $showHeader = {
+            param(
+                [string]$Provider,
+                [string]$Artist,
+                [string]$AlbumName
+            )
+            Write-Host ""
+            Write-Host "🎵 ═══════════════════════════════════════════════════════════" -ForegroundColor DarkCyan
+            Write-Host "🔍 Provider: " -NoNewline -ForegroundColor Magenta
+            Write-Host $Provider -ForegroundColor Cyan
+            Write-Host "👤 Original Artist: " -NoNewline -ForegroundColor Yellow
+            Write-Host $Artist -ForegroundColor White
+            Write-Host "💿 Original Album: " -NoNewline -ForegroundColor Green
+            Write-Host $AlbumName -ForegroundColor White
+            Write-Host "═══════════════════════════════════════════════════════════" -ForegroundColor DarkCyan
+            Write-Host ""
+        }
+        
         $artist = Split-Path -Leaf $Path
         $albums = Get-ChildItem -LiteralPath $Path -Directory
         foreach ($album in $albums) {
