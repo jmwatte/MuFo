@@ -523,7 +523,7 @@ function Add-TrackInformationToComparisons {
             
             $tracks = @()
             foreach ($p in $scanPaths) {
-                $tracks += Get-AudioFileTags -Path $p -IncludeComposer
+                $tracks += Read-AudioFileTags -Path $p -IncludeComposer
             }
             
             $c | Add-Member -NotePropertyName TrackCountLocal -NotePropertyValue $tracks.Count

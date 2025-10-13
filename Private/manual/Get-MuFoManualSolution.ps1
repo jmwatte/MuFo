@@ -223,7 +223,7 @@ function Get-MuFoManualSolution {
                     continue
                 } #>
                 #collect all the audiofiles in the directory $album.fullname
-                $audioFiles = Get-AudioFileTags $album.FullName
+                $audioFiles = Read-AudioFileTags $album.FullName
                 #$audioFiles = Get-ChildItem -Path $album.FullName -File | Where-Object { $_.Extension -match '\.(mp3|flac|wav|m4a|aac|ogg|ape)' }
                 <# $audioFiles = foreach ($f in $audioFiles) {
                     

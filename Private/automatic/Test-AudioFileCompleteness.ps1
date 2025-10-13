@@ -60,7 +60,7 @@ function Test-AudioFileCompleteness {
     }
     
     # Get all audio file tags (this will now exclude lib folders)
-    $audioTags = Get-AudioFileTags -Path $Path -IncludeComposer
+    $audioTags = Read-AudioFileTags -Path $Path -IncludeComposer
     
     if ($audioTags.Count -eq 0) {
         Write-Warning "No audio files found in: $Path"

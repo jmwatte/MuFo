@@ -539,7 +539,7 @@ function Add-TrackInformationToComparisons {
             
             $tracks = @()
             foreach ($p in $scanPaths) {
-                $tracks += Get-AudioFileTags -Path $p -IncludeComposer
+                $tracks += Read-AudioFileTags -Path $p -IncludeComposer
             }
             
             # Sort tracks by disc number and track number for consistent processing
@@ -798,7 +798,7 @@ function Invoke-MuFoTrackProcessing {
         
         $localTracks = @()
         foreach ($p in $scanPaths) {
-            $localTracks += Get-AudioFileTags -Path $p -IncludeComposer
+            $localTracks += Read-AudioFileTags -Path $p -IncludeComposer
         }
         
         if ($localTracks.Count -eq 0) {

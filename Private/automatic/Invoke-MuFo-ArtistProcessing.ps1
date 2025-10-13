@@ -384,7 +384,7 @@ function Invoke-MuFoArtistProcessing {
                                 }
                                 $tracks = @()
                                 foreach ($p in $scanPaths) {
-                                    $tracks += Get-AudioFileTags -Path $p -IncludeComposer -ShowProgress
+                                    $tracks += Read-AudioFileTags -Path $p -IncludeComposer -ShowProgress
                                 }
                             
                                 # For Manual mode with selected tracks, filter to only selected tracks
@@ -470,7 +470,7 @@ function Invoke-MuFoArtistProcessing {
                                     $tagResults = Set-AudioFileTags @tagParams
                                     $c | Add-Member -NotePropertyName TagEnhancementResults -NotePropertyValue $tagResults
 
-                                    $enhancedTracks = Get-AudioFileTags -Path $c.LocalPath -IncludeComposer -ShowProgress
+                                    $enhancedTracks = Read-AudioFileTags -Path $c.LocalPath -IncludeComposer -ShowProgress
                                     $updatedMissingTitles = ($enhancedTracks | Where-Object { -not $_.Title }).Count
                                     $c | Add-Member -NotePropertyName TracksWithMissingTitleAfterFix -NotePropertyValue $updatedMissingTitles -Force
                                 }

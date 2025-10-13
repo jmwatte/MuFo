@@ -132,14 +132,14 @@ function Set-AudioFileTags {
     )
     
     # Supported audio file extensions
-    $supportedExtensions = @('.mp3', '.flac', '.m4a', '.ogg', '.wav', '.wma', '.ape')
+    $supportedExtensions = @('.mp3', '.flac', '.m4a', '.ogg', '.wav', '.wma')
     
-    # Check if TagLib-Sharp is available (reuse detection from Get-AudioFileTags)
+    # Check if TagLib-Sharp is available (reuse detection from Read-AudioFileTags)
     $tagLibLoaded = [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.FullName -like '*TagLib*' }
     
     if (-not $tagLibLoaded) {
         Write-Warning "TagLib-Sharp is required for writing tags but is not loaded."
-        Write-Host "Please run: Get-AudioFileTags first to load TagLib-Sharp" -ForegroundColor Yellow
+        Write-Host "Please run: Read-AudioFileTags first to load TagLib-Sharp" -ForegroundColor Yellow
         return @()
     }
     

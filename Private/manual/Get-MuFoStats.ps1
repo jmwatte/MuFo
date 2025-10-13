@@ -56,7 +56,7 @@ function Get-MuFoStats {
     $localTracks = @()
     $localTags = @{}
     foreach ($file in $audioFiles) {
-        $tags = Get-AudioFileTags -Path $file.FullName
+        $tags = Read-AudioFileTags -Path $file.FullName
         if ($tags) {
             $localTracks += [PSCustomObject]@{
                 FileName = $file.Name
