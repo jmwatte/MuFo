@@ -206,7 +206,7 @@ function Invoke-MuFoManual {
                             $stage = 'B'; continue
                         }
 
-                        $inputF = Read-Host "Select artist [1] (Enter=first), number, 'skip', 'id:<id>', '(cp)' change provider [$Provider], or new search term:"
+                        $inputF = Read-Host "Select artist [1] (Enter=first), number, '(s)kip' album, 'id:<id>', '(cp)' change provider [$Provider], or new search term:"
                         if ($inputF -eq '') { $ProviderArtist = $candidates[0]; $stage = 'B'; continue }
                         if ($inputF -like 'id:*') { 
                             $id = $inputF.Substring(3)
@@ -214,7 +214,11 @@ function Invoke-MuFoManual {
                             $ProviderArtist = @{ id = $id; name = $id }; $stage = 'B'; continue 
                         }
                         if ($inputF -match '^\d+$') { $idx = [int]$inputF; if ($idx -ge 1 -and $idx -le $candidates.Count) { $ProviderArtist = $candidates[$idx - 1]; $stage = 'B'; continue } else { Write-Warning "Invalid"; continue stageLoop } }
-                        if ($inputF -eq 'skip') { break }
+                        if ($inputF -eq 's' -or $inputF -eq 'skip') { 
+                            # Skip this album folder entirely
+                            $albumDone = $true
+                            break 
+                        }
                         if ($inputF -eq 'cp') {
                             Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
                             Write-Host "Available providers: (S)potify, (Q)obuz, (D)iscogs, (M)usicBrainz" -ForegroundColor Gray
