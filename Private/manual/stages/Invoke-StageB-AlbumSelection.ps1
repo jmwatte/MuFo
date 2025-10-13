@@ -639,7 +639,7 @@ function Invoke-StageB-AlbumSelection {
                 }
                 
                 # Fallback to local filtering if search failed or returned no results
-                $filtered = $albumsForArtist | Where-Object { $_.name -like "*$inputF*" }
+                $filtered = @($albumsForArtist | Where-Object { $_.name -like "*$inputF*" })
                 if ($filtered.Count -gt 0) {
                     $albumsForArtist = $filtered
                     $page = 1
