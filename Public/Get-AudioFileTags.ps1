@@ -309,30 +309,23 @@ function Get-AudioFileTags {
                 }
                 
                 # Add read-only convenience properties (singular forms) for easy access
-                # Calculate values first, then add as read-only properties
+                # These are derived from the array properties and should not be modified directly
                 $artistValue = if ($artists.Count -gt 0) { $artists[0] } else { $null }
-                $normalizedTag.PSObject.Properties.Add(
-                    [System.Management.Automation.PSNoteProperty]::new('Artist', $artistValue)
-                )
-                $normalizedTag.PSObject.Properties['Artist'].IsSettable = $false
+                $normalizedTag | Add-Member -MemberType ScriptProperty -Name 'Artist' -Value {
+                    if ($this.Artists.Count -gt 0) { $this.Artists[0] } else { $null }
+                } -SecondValue { throw "Artist is read-only. Modify Artists array instead." }
                 
-                $albumArtistValue = if ($albumArtists.Count -gt 0) { $albumArtists[0] } else { if ($artists.Count -gt 0) { $artists[0] } else { $null }}
-                $normalizedTag.PSObject.Properties.Add(
-                    [System.Management.Automation.PSNoteProperty]::new('AlbumArtist', $albumArtistValue)
-                )
-                $normalizedTag.PSObject.Properties['AlbumArtist'].IsSettable = $false
+                $normalizedTag | Add-Member -MemberType ScriptProperty -Name 'AlbumArtist' -Value {
+                    if ($this.AlbumArtists.Count -gt 0) { $this.AlbumArtists[0] } else { if ($this.Artists.Count -gt 0) { $this.Artists[0] } else { $null }}
+                } -SecondValue { throw "AlbumArtist is read-only. Modify AlbumArtists array instead." }
                 
-                $genreValue = if ($genres.Count -gt 0) { $genres[0] } else { $null }
-                $normalizedTag.PSObject.Properties.Add(
-                    [System.Management.Automation.PSNoteProperty]::new('Genre', $genreValue)
-                )
-                $normalizedTag.PSObject.Properties['Genre'].IsSettable = $false
+                $normalizedTag | Add-Member -MemberType ScriptProperty -Name 'Genre' -Value {
+                    if ($this.Genres.Count -gt 0) { $this.Genres[0] } else { $null }
+                } -SecondValue { throw "Genre is read-only. Modify Genres array instead." }
                 
-                $composerValue = if ($composers.Count -gt 0) { $composers[0] } else { $null }
-                $normalizedTag.PSObject.Properties.Add(
-                    [System.Management.Automation.PSNoteProperty]::new('Composer', $composerValue)
-                )
-                $normalizedTag.PSObject.Properties['Composer'].IsSettable = $false
+                $normalizedTag | Add-Member -MemberType ScriptProperty -Name 'Composer' -Value {
+                    if ($this.Composers.Count -gt 0) { $this.Composers[0] } else { $null }
+                } -SecondValue { throw "Composer is read-only. Modify Composers array instead." }
 
                 # Add classical music analysis if requested
                 if ($IncludeComposer) {
