@@ -602,7 +602,11 @@ function Invoke-StageB-AlbumSelection {
                         ArtistId    = $ProviderArtist.id
                         ArtistName  = $ProviderArtist.name
                         AlbumName   = $inputF
-                        MastersOnly = ($Provider -eq 'Discogs')
+                    }
+                    
+                    # Add MastersOnly parameter for Discogs, respecting toggle state
+                    if ($Provider -eq 'Discogs') {
+                        $searchParams['MastersOnly'] = $mastersOnlyMode
                     }
 
                     $searchResults = Invoke-ProviderSearchAlbums @searchParams
