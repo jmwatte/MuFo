@@ -176,8 +176,12 @@ function Set-AudioFileTags {
                     }
                 }
                 'Transform' {
-                    # Execute transform scriptblock with current tags as context
-                    $Transform.InvokeWithContext($null, [psvariable]::new('_', $currentTags), $currentTags)
+                    # Execute transform scriptblock - make a copy first for safety
+                    $updated = $currentTags | Select-Object *
+                    # Set $_ for the scriptblock
+                    Set-Variable -Name '_' -Value $updated -Scope Script
+                    # Invoke the transform
+                    & $Transform
                 }
             }
             
