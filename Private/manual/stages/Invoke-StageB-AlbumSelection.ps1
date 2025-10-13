@@ -96,6 +96,8 @@ function Invoke-StageB-AlbumSelection {
     )
     
     Clear-Host
+    Write-Host "🔍 Provider: $Provider" -ForegroundColor Magenta
+    Write-Host ""
     
     # Initialize pagination
     $page = 1
@@ -252,6 +254,9 @@ function Invoke-StageB-AlbumSelection {
 
     # Main album selection loop
     while ($true) {
+        Clear-Host
+        Write-Host "🔍 Provider: $Provider" -ForegroundColor Magenta
+        
         # Show filter mode indicator for Discogs
         if ($Provider -eq 'Discogs') {
             $modeIndicator = if ($mastersOnlyMode) { 
@@ -262,7 +267,7 @@ function Invoke-StageB-AlbumSelection {
             Write-Host $modeIndicator -ForegroundColor Yellow
         }
         
-        Write-Host "Albums for artist $($ProviderArtist.name):"
+        Write-Host "$Provider Albums for artist $($ProviderArtist.name):"
         Write-Host "for local album: $($AlbumName) (year: $Year)"
         
         $totalPages = [math]::Ceiling($albumsForArtist.Count / $pageSize)
@@ -302,7 +307,7 @@ function Invoke-StageB-AlbumSelection {
             }
         }
 
-        $inputF = Read-Host "Select album(s) [1] (Enter=first), number(s) (e.g., 1,3,5-8), '(b)ack', '(n)ext', '(p)rev', '(s)kip', 'id:<id>', '(cp)' change provider, '*' (all albums), or text to search:"
+        $inputF = Read-Host "Select album(s) [1] (Enter=first), number(s) (e.g., 1,3,5-8), '(b)ack', '(n)ext', '(p)rev', '(s)kip', 'id:<id>', '(cp)' change provider [$Provider], '*' (all albums), or text to search:"
         
         switch -Regex ($inputF) {
             '^n$' {

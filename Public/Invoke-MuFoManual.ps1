@@ -120,6 +120,7 @@ function Invoke-MuFoManual {
                     
                     "A" {
                         Clear-Host
+                        Write-Host "🔍 Provider: $Provider" -ForegroundColor Magenta
                         Write-Host "Original Artist: $artist" -ForegroundColor Cyan
                         if ($artistQuery -ne $artist) {
                             Write-Host "Searching for: $artistQuery" -ForegroundColor Yellow
@@ -144,7 +145,7 @@ function Invoke-MuFoManual {
                                 Write-Warning "NonInteractive: skipping album because no artist candidates were found for '$artistQuery'."
                                 break
                             }
-                            $inputF = Read-Host "Enter new search, '(cp)' change provider, '(s)kip' to skip album, or 'id:<id>' to select by id"
+                            $inputF = Read-Host "Enter new search, '(cp)' change provider [$Provider], '(s)kip' to skip album, or 'id:<id>' to select by id"
                             switch -Regex ($inputF) {
                                 '^s(kip)?$' { 
                                     break 
@@ -183,7 +184,7 @@ function Invoke-MuFoManual {
                             }
                         }
     
-                        Write-Host "Artist candidates for '$artistQuery':" -ForegroundColor Green
+                        Write-Host "$Provider Artist candidates for '$artistQuery':" -ForegroundColor Green
                         if ($candidates.Count -eq 0) {
                             Write-Warning "No candidates returned from search (this should not happen - should have been caught above)"
                         }
@@ -205,7 +206,7 @@ function Invoke-MuFoManual {
                             $stage = 'B'; continue
                         }
 
-                        $inputF = Read-Host "Select artist [1] (Enter=first), number, 'skip', 'id:<id>', '(cp)' change provider, or new search term:"
+                        $inputF = Read-Host "Select artist [1] (Enter=first), number, 'skip', 'id:<id>', '(cp)' change provider [$Provider], or new search term:"
                         if ($inputF -eq '') { $ProviderArtist = $candidates[0]; $stage = 'B'; continue }
                         if ($inputF -like 'id:*') { 
                             $id = $inputF.Substring(3)
