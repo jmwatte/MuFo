@@ -316,6 +316,15 @@ function Invoke-StageB-AlbumSelection {
         $inputF = Read-Host "Select album(s) [1] (Enter=first), number(s) (e.g., 1,3,5-8), '(b)ack', '(n)ext', '(p)rev', '(s)kip', 'id:<id>', '(cp)' change provider [$Provider], '*' (all albums), or text to search:"
         
         switch -Regex ($inputF) {
+             '^s$' {
+                return @{
+                    NextStage = 'Skip'
+                    SelectedAlbum = $null
+                    UpdatedCache = $CachedAlbums
+                    UpdatedCachedArtistId = $CachedArtistId
+                    UpdatedProvider = $Provider
+                }
+            }
             '^n$' {
                 if ($page -lt $totalPages) { $page++ }
                 continue
