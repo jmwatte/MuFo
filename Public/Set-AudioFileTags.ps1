@@ -534,6 +534,13 @@ function Set-AudioFileTags {
                                     $tag.Comment = $null
                                 }
                             }
+                            'Lyrics' { 
+                                if ($newValue) {
+                                    $tag.Lyrics = $newValue
+                                } else {
+                                    $tag.Lyrics = $null
+                                }
+                            }
                             default {
                                 Write-Verbose "  Skipping unknown or read-only property: $propName"
                             }
