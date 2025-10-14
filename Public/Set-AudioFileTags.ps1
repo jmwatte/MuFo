@@ -290,6 +290,8 @@ function Set-AudioFileTags {
                         Year            = $currentTags.Year
                         Genres          = if ($currentTags.Genres) { @($currentTags.Genres) } else { @() }
                         Composers       = if ($currentTags.Composers) { @($currentTags.Composers) } else { @() }
+                        Comment         = if ($currentTags.Comment) { $currentTags.Comment } else { $null }
+                        Lyrics          = if ($currentTags.Lyrics) { $currentTags.Lyrics } else { $null }
                         Duration        = $currentTags.Duration
                         DurationSeconds = $currentTags.DurationSeconds
                         Bitrate         = $currentTags.Bitrate
@@ -323,6 +325,8 @@ function Set-AudioFileTags {
                             Year            = $InputObject.Year
                             Genres          = if ($InputObject.Genres) { @($InputObject.Genres) } else { @() }
                             Composers       = if ($InputObject.Composers) { @($InputObject.Composers) } else { @() }
+                            Comment         = if ($InputObject.Comment) { $InputObject.Comment } else { $null }
+                            Lyrics          = if ($InputObject.Lyrics) { $InputObject.Lyrics } else { $null }
                             Duration        = $InputObject.Duration
                             DurationSeconds = $InputObject.DurationSeconds
                             Bitrate         = $InputObject.Bitrate
@@ -356,6 +360,8 @@ function Set-AudioFileTags {
                         Year            = $currentTags.Year
                         Genres          = if ($currentTags.Genres) { @($currentTags.Genres) } else { @() }
                         Composers       = if ($currentTags.Composers) { @($currentTags.Composers) } else { @() }
+                        Comment         = if ($currentTags.Comment) { $currentTags.Comment } else { $null }
+                        Lyrics          = if ($currentTags.Lyrics) { $currentTags.Lyrics } else { $null }
                         Duration        = $currentTags.Duration
                         DurationSeconds = $currentTags.DurationSeconds
                         Bitrate         = $currentTags.Bitrate
