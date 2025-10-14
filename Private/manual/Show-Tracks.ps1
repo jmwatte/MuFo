@@ -64,6 +64,9 @@ function Show-Tracks {
                     if ($a -is [System.Collections.IEnumerable] -and -not ($a -is [string])) {
                         $artistDisplay = ($a | ForEach-Object { if ($_.PSObject.Properties.Match('name')) { $_.name } else { $_ } }) -join ', '
                     }
+                    elseif ($a -and $a.PSObject.Properties.Match('name')) {
+                        $artistDisplay = $a.name
+                    }
                     else {
                         $artistDisplay = $a
                     }
@@ -101,12 +104,14 @@ function Show-Tracks {
                     $audioDurationStr = if ($audio.Duration) {
                         if ($audio.Duration -is [TimeSpan]) {
                             "{0:mm\:ss}" -f $audio.Duration
-                        } else {
+                        }
+                        else {
                             # Duration is in milliseconds
                             $durationSpan = [TimeSpan]::FromMilliseconds($audio.Duration)
                             "{0:mm\:ss}" -f $durationSpan
                         }
-                    } else {
+                    }
+                    else {
                         "00:00"
                     }
                     
