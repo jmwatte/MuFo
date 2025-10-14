@@ -301,6 +301,8 @@ function Get-AudioFileTags {
                     Year            = if ($tag -and $tag.Year) { $tag.Year } else { $null }
                     Genres          = $genres
                     Composers       = $composers
+                    Comment         = if ($tag -and $tag.Comment) { $tag.Comment } else { $null }
+                    Lyrics          = if ($tag -and $tag.Lyrics) { $tag.Lyrics } else { $null }
                     Duration        = if ($properties -and $properties.Duration) { $properties.Duration } else { [TimeSpan]::Zero }
                     DurationSeconds = if ($properties -and $properties.Duration) { [double]$properties.Duration.TotalSeconds } else { 0.0 }
                     Bitrate         = if ($properties -and $properties.AudioBitrate) { $properties.AudioBitrate } else { 0 }
