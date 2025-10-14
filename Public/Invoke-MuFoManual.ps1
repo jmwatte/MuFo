@@ -610,7 +610,7 @@ function Invoke-MuFoManual {
                             }
                         }
                         catch { $hasDiscNumbers = $false }
-                        $sortMethod = if ($hasDiscNumbers) { 'byTrackNumber' } else { 'byName' }
+                        $sortMethod = if ($hasDiscNumbers) { 'byTrackNumber' } else { 'byOrder' }
 
                         # Debug: when verbose, print the raw provider track list so users can verify
                         # that disc numbers were parsed and normalized (helps compare with test output)
@@ -659,8 +659,8 @@ function Invoke-MuFoManual {
                             else {
                                 if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Red' }
                                 $whatIfStatus = if ($useWhatIf) { "ON" } else { "OFF" }
-                                $optionsLine = "`nOptions: SortBy (l)Title, (d)Duration, (t)TrackNumber, (n)Name, (h)Hybrid, (m)Manual, (r)Reverse | Save: (st)Tags, (sf)Folder, (sa)All | (aa)AlbumArtist, (b)Back, (cp)ChangeProvider, (w)WhatIf:$whatIfStatus, (s)Skip"
-                                $commandList = @('d','t','n','l','h','m','r','st','sf','sa','aa','b','cp','w','whatif','s')
+                                $optionsLine = "`nOptions: SortBy (o)rder, Tit(l)e, (d)uration, (t)rackNumber, (n)ame, (h)ybrid, (m)anual, (r)everse | Save: (st)Tags, (sf)Folder, (sa)All | (aa)AlbumArtist, (b)ack, (cp)ChangeProvider, (w)hatIf:$whatIfStatus, (s)kip"
+                                $commandList = @('o','d','t','n','l','h','m','r','st','sf','sa','aa','b','cp','w','whatif','s')
                                 $paramshow = @{
                                     PairedTracks   = $pairedTracks
                                     AlbumName      = $ProviderAlbum.name
@@ -682,6 +682,7 @@ function Invoke-MuFoManual {
                             }
 
                             switch -Regex ($inputF) {
+                                '^o$' { $sortMethod = 'byOrder'; $refreshTracks = $true; continue }
                                 '^d$' { $sortMethod = 'byDuration'; $refreshTracks = $true; continue }
                                 '^t$' { $sortMethod = 'byTrackNumber'; $refreshTracks = $true; continue }
                                 '^n$' { $sortMethod = 'byName'; $refreshTracks = $true; continue }

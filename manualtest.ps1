@@ -259,13 +259,16 @@ foreach ($album in $albums) {
                 # Write-Host "[$num] $($t.name)  (id: $($t.id))"
                 # Write-Host "`t $($t.artists.name -join ', ')"
             }
-            #prompt should have an option for sorting the tracks by name, track number, or duration
-            $prompt = "Select tracks (e.g. '1,3-5', 'all'), durationS,trackS, nameS,(S), 'back', 'skip', or 'id:<id1,id2>':"
+            #prompt should have an option for sorting the tracks by name, track number, duration and order
+            $prompt = "Sort by (d)uration, (t)rack number, (n)ame, (o)rder. Current: $sortMethod. Select tracks (e.g. '1,3-5', 'all'), '(b)ack', '(s)kip', or 'id:<id1,id2>':"
             $inputF = Read-Host $prompt
             #if sortmethod is changed, re-sort the lists and re-display
             if ($inputF -ieq 'd') {
             
                 $sortMethod = 'byDuration'; continue
+            }
+            if ($inputF -ieq 'o') {
+                $sortMethod = 'byOrder'; continue
             }
             if ($inputF -ieq 't') {
                 $sortMethod = 'byTrackNumber'; continue

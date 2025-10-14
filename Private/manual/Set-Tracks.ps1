@@ -11,6 +11,33 @@ function Set-Tracks {
     $pairedTracks = @()
     #Write-Host "DEBUG: Starting Set-Tracks with Reverse=$Reverse"
     switch ($SortMethod) {
+        # byOrder: each one in the order by which they came in
+        "byOrder" {
+            if ($Reverse) {
+                # Iterate over audio files, match to Spotify by order
+                foreach ($audio in $AudioFiles) {
+                    $index = [Array]::IndexOf($AudioFiles, $audio)
+                    $spotifyTrack = if ($index -lt $SpotifyTracks.Count) { $SpotifyTracks[$index] } else { $null }
+                    
+                    $pairedTracks += [PSCustomObject]@{
+                        SpotifyTrack = $spotifyTrack
+                        AudioFile    = $audio
+                    }
+                }
+            }
+            else {
+                # Original: Iterate over Spotify tracks
+                foreach ($spotify in $SpotifyTracks) {
+                    $index = [Array]::IndexOf($SpotifyTracks, $spotify)
+                    $audioFile = if ($index -lt $AudioFiles.Count) { $AudioFiles[$index] } else { $null }
+                    
+                    $pairedTracks += [PSCustomObject]@{
+                        SpotifyTrack = $spotify
+                        AudioFile    = $audioFile
+                    }
+                }
+            }
+        }
         "byName" {
             # Build all possible matches with scores (filename similarity + duration)
             # This approach works for both normal and reverse modes
