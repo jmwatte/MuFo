@@ -320,7 +320,7 @@ function Get-QAlbumTracks {
                     }
                     
                     # Extract MainArtist
-                    if ($role -eq 'MainArtist') {
+                    if ($role -eq 'MainArtist' -or $role -eq 'Main Artist') {
                         if ($name -notin $mainArtists) {
                             $mainArtists += $name
                         }

@@ -47,7 +47,9 @@ function Invoke-StageB-AlbumSelection {
     
     .PARAMETER GoB
         Auto-select first album (from workflow flags).
-    
+
+    .PARAMETER FetchAlbums
+        if true fetch albums from provider even if cached albums exist (default false)
     .OUTPUTS
         Hashtable with:
         - NextStage: 'A', 'C', or 'Skip'
@@ -95,7 +97,9 @@ function Invoke-StageB-AlbumSelection {
         [switch]$GoB,
         
         [Parameter()]
-        [scriptblock]$ShowHeader
+        [scriptblock]$ShowHeader,
+        [Parameter()]
+        [switch]$FetchAlbums
     )
     
     Clear-Host
@@ -107,7 +111,13 @@ function Invoke-StageB-AlbumSelection {
     $page = 1
     $pageSize = 25
     $mastersOnlyMode = $true  # Default for Discogs
-    
+    $albumsForArtist = @($CachedAlbums)
+
+
+
+if($FetchAlbums)
+{
+    Write-Host "Fetching albums from provider: $Provider"
     # Enhance artist with full details (including genres) if needed
     if ($Provider -eq 'Spotify' -and $ProviderArtist -and $ProviderArtist.id) {
         if (-not $ProviderArtist.genres -or $ProviderArtist.genres.Count -eq 0) {
@@ -256,6 +266,14 @@ function Invoke-StageB-AlbumSelection {
     # Sort by Jaccard similarity descending
     $albumsForArtist = $albumsForArtist | Sort-Object { - (Get-StringSimilarity-Jaccard -String1 $AlbumName -String2 $_.Name) }
 
+
+
+
+}
+
+$CachedAlbums=$albumsForArtist
+
+
     # Main album selection loop
     while ($true) {
         Clear-Host
@@ -273,8 +291,10 @@ function Invoke-StageB-AlbumSelection {
             Write-Host $modeIndicator -ForegroundColor Yellow
         }
         
-        Write-Host "$Provider Albums for artist $($ProviderArtist.name):"
+        
+    Write-Host "$Provider Albums for artist $($ProviderArtist.name):"
         Write-Host "for local album: $($AlbumName) (year: $Year)"
+        
         
         $totalPages = [math]::Ceiling($albumsForArtist.Count / $pageSize)
         $startIdx = ($page - 1) * $pageSize

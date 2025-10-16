@@ -73,11 +73,13 @@ function Invoke-MuFoManual {
                     if ($master -and $master.main_release) {
                         $id = [string]$master.main_release
                         Write-Host "✓ Resolved to main release: $id" -ForegroundColor Green
-                    } else {
+                    }
+                    else {
                         Write-Warning "Could not resolve master $masterId to main release, using master ID"
                         $id = $masterId
                     }
-                } catch {
+                }
+                catch {
                     Write-Warning "Failed to fetch master release: $_"
                     $id = $masterId
                 }
@@ -108,7 +110,89 @@ function Invoke-MuFoManual {
             Write-Host "═══════════════════════════════════════════════════════════" -ForegroundColor DarkCyan
             Write-Host ""
         }
+        # Helper function for album folder move with retry on access errors
+        function Invoke-MoveAlbumWithRetry {
+            param($mvArgs, $useWhatIf)
         
+            $moveSucceeded = $false
+            do {
+                try {
+                    $moveResult = Move-AlbumFolder @mvArgs -WhatIf:$useWhatIf
+                    $moveSucceeded = $true
+                }
+                catch {
+                    Write-Warning "Move-AlbumFolder failed: $($_.Exception.Message)"
+                    $retry = Read-Host "Folder may be in use by another process. Free the folder (close files/apps) and press Enter to retry, or 's' to skip"
+                    if ($retry -eq 's') {
+                        Write-Host "Skipping folder move." -ForegroundColor Yellow
+                        return $null
+                    }
+                }
+            } while (-not $moveSucceeded)
+        
+            return $moveResult
+        }
+        # Helper scriptblock for handling move success (shared between sf and sa)
+        $handleMoveSuccess = {
+            param($moveResult, $useWhatIf, $oldpath, $album, $audioFiles, $refreshTracks)
+    
+            if ($moveResult -and $moveResult.Success) {
+                if ($useWhatIf) {
+                    Write-Host "WhatIf: album would be moved:" -ForegroundColor Yellow
+                    Write-Host -NoNewline -ForegroundColor Green "Old: "
+                    Write-Host $oldpath
+                    Write-Host -NoNewline -ForegroundColor Green "New: "
+                    Write-Host $moveResult.NewAlbumPath
+                    if ($moveResult.NewAlbumPath -ne $oldpath -and -not ($NonInteractive -or $goC) -and -not $useWhatIf) {
+                        Read-Host -Prompt "Press Enter to continue"
+                    }
+                    else {
+                        Write-Verbose "NonInteractive/goC/WhatIf or no-path-change: skipping pause after move."
+                    }
+                    Write-Host "Album saved. Choose 's' to skip to next album, or select another option." -ForegroundColor Yellow
+                    # continue doTracks
+                }
+                else {
+                    if ($moveResult.NewAlbumPath -eq $oldpath) {
+                        Write-Verbose "Move result indicates no change to album path; continuing."
+                        Write-Host "Album saved. Choose 's' to skip to next album, or select another option." -ForegroundColor Yellow
+                        #  continue doTracks
+                    }
+                    # Folder was moved - update $album and reload audio files from new location
+                    $album = Get-Item -LiteralPath $moveResult.NewAlbumPath
+            
+                    # Reload audio files with fresh TagLib handles from the NEW album path
+                    $audioFiles = Get-ChildItem -LiteralPath $album.FullName -File -Recurse | Where-Object { $_.Extension -match '\.(mp3|flac|wav|m4a|aac|ogg|ape)' }
+                    $audioFiles = foreach ($f in $audioFiles) {
+                        try {
+                            $tagFile = [TagLib.File]::Create($f.FullName)
+                            [PSCustomObject]@{
+                                FilePath    = $f.FullName
+                                DiscNumber  = $tagFile.Tag.Disc
+                                TrackNumber = $tagFile.Tag.Track
+                                Title       = $tagFile.Tag.Title
+                                TagFile     = $tagFile
+                                Composer    = if ($tagFile.Tag.Composers) { $tagFile.Tag.Composers -join '; ' } else { 'Unknown Composer' }
+                                Artist      = if ($tagFile.Tag.Performers) { $tagFile.Tag.Performers -join '; ' } else { 'Unknown Artist' }
+                                Name        = if ($tagFile.Tag.Title) { $tagFile.Tag.Title } else { $f.BaseName }
+                                Duration    = $tagFile.Properties.Duration.TotalMilliseconds
+                            }
+                        }
+                        catch {
+                            Write-Warning "Skipping corrupted or invalid audio file: $($f.FullName) - Error: $($_.Exception.Message)"
+                            continue
+                        }
+                    }
+                    $refreshTracks = $true
+                    Write-Host "Album saved and folder moved. Choose 's' to skip to next album, or select another option." -ForegroundColor Yellow
+                    #  continue doTracks
+                }
+            }
+            else {
+                Write-Warning "Move failed or was skipped. Move result: $moveResult"
+            }
+        }
+
         $artist = Split-Path -Leaf $Path
         $albums = Get-ChildItem -LiteralPath $Path -Directory
         foreach ($album in $albums) {
@@ -118,18 +202,27 @@ function Invoke-MuFoManual {
             $useWhatIf = $isWhatIf
             if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Red' }
             # derive album name and year
-                       # Try to extract year from the start of the folder name (e.g., "2023 - Album Name")
+            # Try to extract year from the start of the folder name (e.g., "2023 - Album Name")
             if ($album.Name -match '^(\d{4})\s*[-]?\s*(.+)') {
                 $year = $matches[1]
                 $albumName = $matches[2].Trim()
-            } else {
+            }
+            else {
                 $year = $null
                 $albumName = $album.Name.Trim()
+
             }
+            $audioFilesCheck = Get-ChildItem -LiteralPath $album.FullName -File -Recurse | Where-Object { $_.Extension -match '\.(mp3|flac|wav|m4a|aac|ogg|ape)' }
+            if (-not $audioFilesCheck -or $audioFilesCheck.Count -eq 0) {
+                Write-Warning "No supported audio files found in album folder: $($album.FullName). Skipping album."
+                continue
+            }
+
             $artistQuery = $artist
             $stage = "A"
             $cachedAlbums = $null
             $cachedArtistId = $null
+            $loadStageBResults = $true 
             $page = 1
             $pageSize = 25
             $albumDone = $false
@@ -138,6 +231,7 @@ function Invoke-MuFoManual {
                 switch ($stage) {
                     
                     "A" {
+                        $loadStageBResults = $true
                         Clear-Host
                         & $showHeader -Provider $Provider -Artist $artist -AlbumName $albumName
                         
@@ -179,7 +273,8 @@ function Invoke-MuFoManual {
                                         $Provider = $matched
                                         Write-Host "Switched to provider: $Provider" -ForegroundColor Green
                                         continue stageLoop
-                                    } else {
+                                    }
+                                    else {
                                         Write-Warning "Invalid provider: $newProvider. Staying with $Provider."
                                         continue stageLoop
                                     }
@@ -196,7 +291,8 @@ function Invoke-MuFoManual {
                                         $artistQuery = $inputF
                                         Write-Verbose "Updated artistQuery to: '$artistQuery' (from no-candidates prompt)"
                                         continue stageLoop
-                                    } else { 
+                                    }
+                                    else { 
                                         continue stageLoop
                                     }
                                 }
@@ -248,7 +344,8 @@ function Invoke-MuFoManual {
                                 $Provider = $matched
                                 Write-Host "Switched to provider: $Provider" -ForegroundColor Green
                                 continue stageLoop
-                            } else {
+                            }
+                            else {
                                 Write-Warning "Invalid provider: $newProvider. Staying with $Provider."
                                 continue stageLoop
                             }
@@ -260,6 +357,7 @@ function Invoke-MuFoManual {
     
                     "B" {
                         # Stage B: Album selection
+                        
                         $stageBResult = Invoke-StageB-AlbumSelection `
                             -Provider $Provider `
                             -ProviderArtist $ProviderArtist `
@@ -273,13 +371,17 @@ function Invoke-MuFoManual {
                             -NonInteractive:$NonInteractive `
                             -AutoSelect:$AutoSelect `
                             -AlbumId $albumId `
-                            -GoB:$goB
-                        
+                            -GoB:$goB `
+                            -FetchAlbums:$loadStageBResults `
+
+
+                                
+                            
                         # Handle results
-                        $stage = $stageBResult.NextStage
-                        $ProviderAlbum = $stageBResult.SelectedAlbum
                         $cachedAlbums = $stageBResult.UpdatedCache
                         $cachedArtistId = $stageBResult.UpdatedCachedArtistId
+                        $stage = $stageBResult.NextStage
+                        $ProviderAlbum = $stageBResult.SelectedAlbum
                         
                         # Handle provider changes
                         if ($stageBResult.UpdatedProvider -and $stageBResult.UpdatedProvider -ne $Provider) {
@@ -313,7 +415,8 @@ function Invoke-MuFoManual {
                                 Write-Host "    - $albumName" -ForegroundColor Gray
                             }
                             Write-Host ""
-                        } else {
+                        }
+                        else {
                             Write-Host "Searching tracks for album: $($ProviderAlbum.name) (id: $($ProviderAlbum.id))"
                         }
                         
@@ -353,7 +456,8 @@ function Invoke-MuFoManual {
                         if (Get-IfExists $ProviderAlbum '_isCombined') {
                             Write-Verbose "Using pre-fetched tracks from combined album"
                             $tracksForAlbum = $ProviderAlbum._tracks
-                        } else {
+                        }
+                        else {
                             # Use album ID directly - masters should have been resolved in Stage B
                             $albumIdToFetch = $ProviderAlbum.id
                             
@@ -406,30 +510,36 @@ function Invoke-MuFoManual {
                                             $selectedRelease = $null
                                             if ($relInput -eq '') {
                                                 $selectedRelease = $releases[0]
-                                            } elseif ($relInput -eq '0' -or $relInput -eq 'main') {
+                                            }
+                                            elseif ($relInput -eq '0' -or $relInput -eq 'main') {
                                                 try {
                                                     $masterDetails = Invoke-DiscogsRequest -Uri "/masters/$($ProviderAlbum._resolvedFromMaster)"
                                                     if ($masterDetails -and (Get-IfExists $masterDetails 'main_release')) {
                                                         $mainReleaseId = [string]$masterDetails.main_release
                                                         Write-Host "Using main_release: $mainReleaseId" -ForegroundColor Green
                                                         $selectedRelease = @{ id = $mainReleaseId; title = $ProviderAlbum._masterName }
-                                                    } else {
+                                                    }
+                                                    else {
                                                         Write-Warning "Master has no main_release, using first release"
                                                         $selectedRelease = $releases[0]
                                                     }
-                                                } catch {
+                                                }
+                                                catch {
                                                     Write-Warning "Failed to fetch main_release: $_. Using first release."
                                                     $selectedRelease = $releases[0]
                                                 }
-                                            } elseif ($relInput -match '^\d+$') {
+                                            }
+                                            elseif ($relInput -match '^\d+$') {
                                                 $idx = [int]$relInput
                                                 if ($idx -ge 1 -and $idx -le $releases.Count) {
                                                     $selectedRelease = $releases[$idx - 1]
-                                                } else {
+                                                }
+                                                else {
                                                     Write-Warning "Invalid selection, using first release"
                                                     $selectedRelease = $releases[0]
                                                 }
-                                            } else {
+                                            }
+                                            else {
                                                 Write-Warning "Invalid input, using first release"
                                                 $selectedRelease = $releases[0]
                                             }
@@ -437,21 +547,23 @@ function Invoke-MuFoManual {
                                             # Update the album object with new release selection
                                             Write-Host "✓ Selected release: $($selectedRelease.id) - $($selectedRelease.title)" -ForegroundColor Green
                                             $ProviderAlbum = @{
-                                                id = [string]$selectedRelease.id
-                                                name = $selectedRelease.title
-                                                type = 'release'
+                                                id                  = [string]$selectedRelease.id
+                                                name                = $selectedRelease.title
+                                                type                = 'release'
                                                 _resolvedFromMaster = $ProviderAlbum._resolvedFromMaster
-                                                _masterReleases = $releases
-                                                _masterName = $ProviderAlbum._masterName
+                                                _masterReleases     = $releases
+                                                _masterName         = $ProviderAlbum._masterName
                                             }
                                             # Retry fetching tracks with new release
                                             continue stageLoop
-                                        } else {
+                                        }
+                                        else {
                                             # No releases stored, go back to album selection
                                             $stage = 'B'
                                             continue stageLoop
                                         }
-                                    } elseif ($skipChoice -eq 'cp') {
+                                    }
+                                    elseif ($skipChoice -eq 'cp') {
                                         Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
                                         Write-Host "Available providers: (S)potify, (Q)obuz, (D)iscogs, (M)usicBrainz" -ForegroundColor Gray
                                         $newProvider = Read-Host "Enter provider (full name or first letter)"
@@ -461,16 +573,19 @@ function Invoke-MuFoManual {
                                             $Provider = $matched
                                             Write-Host "Switched to provider: $Provider" -ForegroundColor Green
                                             $stage = 'A'
-                                        } else {
+                                        }
+                                        else {
                                             Write-Warning "Invalid provider: $newProvider"
                                         }
                                         continue stageLoop
-                                    } else {
+                                    }
+                                    else {
                                         # Skip this album
                                         break
                                     }
                                 }
-                            } catch { 
+                            }
+                            catch { 
                                 Write-Warning "Get-AlbumTracks failed: $_"
                                 $tracksForAlbum = @()
                                 
@@ -509,30 +624,36 @@ function Invoke-MuFoManual {
                                         $selectedRelease = $null
                                         if ($relInput -eq '') {
                                             $selectedRelease = $releases[0]
-                                        } elseif ($relInput -eq '0' -or $relInput -eq 'main') {
+                                        }
+                                        elseif ($relInput -eq '0' -or $relInput -eq 'main') {
                                             try {
                                                 $masterDetails = Invoke-DiscogsRequest -Uri "/masters/$($ProviderAlbum._resolvedFromMaster)"
                                                 if ($masterDetails -and (Get-IfExists $masterDetails 'main_release')) {
                                                     $mainReleaseId = [string]$masterDetails.main_release
                                                     Write-Host "Using main_release: $mainReleaseId" -ForegroundColor Green
                                                     $selectedRelease = @{ id = $mainReleaseId; title = $ProviderAlbum._masterName }
-                                                } else {
+                                                }
+                                                else {
                                                     Write-Warning "Master has no main_release, using first release"
                                                     $selectedRelease = $releases[0]
                                                 }
-                                            } catch {
+                                            }
+                                            catch {
                                                 Write-Warning "Failed to fetch main_release: $_. Using first release."
                                                 $selectedRelease = $releases[0]
                                             }
-                                        } elseif ($relInput -match '^\d+$') {
+                                        }
+                                        elseif ($relInput -match '^\d+$') {
                                             $idx = [int]$relInput
                                             if ($idx -ge 1 -and $idx -le $releases.Count) {
                                                 $selectedRelease = $releases[$idx - 1]
-                                            } else {
+                                            }
+                                            else {
                                                 Write-Warning "Invalid selection, using first release"
                                                 $selectedRelease = $releases[0]
                                             }
-                                        } else {
+                                        }
+                                        else {
                                             Write-Warning "Invalid input, using first release"
                                             $selectedRelease = $releases[0]
                                         }
@@ -540,20 +661,22 @@ function Invoke-MuFoManual {
                                         # Update the album object with new release selection
                                         Write-Host "✓ Selected release: $($selectedRelease.id) - $($selectedRelease.title)" -ForegroundColor Green
                                         $ProviderAlbum = @{
-                                            id = [string]$selectedRelease.id
-                                            name = $selectedRelease.title
-                                            type = 'release'
+                                            id                  = [string]$selectedRelease.id
+                                            name                = $selectedRelease.title
+                                            type                = 'release'
                                             _resolvedFromMaster = $ProviderAlbum._resolvedFromMaster
-                                            _masterReleases = $releases
-                                            _masterName = $ProviderAlbum._masterName
+                                            _masterReleases     = $releases
+                                            _masterName         = $ProviderAlbum._masterName
                                         }
                                         # Retry fetching tracks with new release
                                         continue stageLoop
-                                    } else {
+                                    }
+                                    else {
                                         $stage = 'B'
                                         continue stageLoop
                                     }
-                                } elseif ($skipChoice -eq 'cp') {
+                                }
+                                elseif ($skipChoice -eq 'cp') {
                                     Write-Host "`nCurrent provider: $Provider" -ForegroundColor Cyan
                                     Write-Host "Available providers: (S)potify, (Q)obuz, (D)iscogs, (M)usicBrainz" -ForegroundColor Gray
                                     $newProvider = Read-Host "Enter provider (full name or first letter)"
@@ -563,11 +686,13 @@ function Invoke-MuFoManual {
                                         $Provider = $matched
                                         Write-Host "Switched to provider: $Provider" -ForegroundColor Green
                                         $stage = 'A'
-                                    } else {
+                                    }
+                                    else {
                                         Write-Warning "Invalid provider: $newProvider"
                                     }
                                     continue stageLoop
-                                } else {
+                                }
+                                else {
                                     break
                                 }
                             }
@@ -592,7 +717,8 @@ function Invoke-MuFoManual {
                                     $script:ManualAlbumArtist = Invoke-AlbumArtistBuilder -AlbumName $ProviderAlbum.name -Tracks $tracksForAlbum -CurrentAlbumArtist $ProviderArtist.name
                                     if ($script:ManualAlbumArtist) {
                                         Write-Host "✓ Album artist set to: $script:ManualAlbumArtist" -ForegroundColor Green
-                                    } else {
+                                    }
+                                    else {
                                         Write-Host "Skipped - will use automatic detection" -ForegroundColor Gray
                                     }
                                     Write-Host ""
@@ -661,15 +787,15 @@ function Invoke-MuFoManual {
                                 if ($useWhatIf) { $HostColor = 'Cyan' } else { $HostColor = 'Red' }
                                 $whatIfStatus = if ($useWhatIf) { "ON" } else { "OFF" }
                                 $optionsLine = "`nOptions: SortBy (o)rder, Tit(l)e, (d)uration, (t)rackNumber, (n)ame, (h)ybrid, (m)anual, (r)everse | Save: (st)Tags, (sf)Folder, (sa)All | (aa)AlbumArtist, (b)ack, (cp)ChangeProvider, (w)hatIf:$whatIfStatus, (s)kip"
-                                $commandList = @('o','d','t','n','l','h','m','r','st','sf','sa','aa','b','cp','w','whatif','s')
+                                $commandList = @('o', 'd', 't', 'n', 'l', 'h', 'm', 'r', 'st', 'sf', 'sa', 'aa', 'b', 'cp', 'w', 'whatif', 's')
                                 $paramshow = @{
-                                    PairedTracks   = $pairedTracks
-                                    AlbumName      = $ProviderAlbum.name
-                                    SpotifyArtist  = $ProviderArtist
-                                    OptionsText    = $optionsLine
-                                    ValidCommands  = $commandList
-                                    PromptColor    = $HostColor
-                                    ProviderName   = $Provider
+                                    PairedTracks  = $pairedTracks
+                                    AlbumName     = $ProviderAlbum.name
+                                    SpotifyArtist = $ProviderArtist
+                                    OptionsText   = $optionsLine
+                                    ValidCommands = $commandList
+                                    PromptColor   = $HostColor
+                                    ProviderName  = $Provider
                                 }
                                 if ($reverseSource) { $paramshow.Reverse = $true }
                                 Clear-Host
@@ -698,16 +824,20 @@ function Invoke-MuFoManual {
                                         if ($script:ManualAlbumArtist) {
                                             Write-Host "`n✓ Album artist set to: $script:ManualAlbumArtist" -ForegroundColor Green
                                             $refreshTracks = $true
-                                        } else {
+                                        }
+                                        else {
                                             Write-Host "`nSkipped - album artist unchanged" -ForegroundColor Gray
                                         }
-                                    } else {
+                                    }
+                                    else {
                                         Write-Warning "No tracks available for album artist builder"
                                     }
                                     continue
                                 }
                                 '^b$' { 
                                     $script:ManualAlbumArtist = $null
+                                    # $AlbumId = $ProviderAlbum.id
+                                    $loadStageBResults = $false    # NEW: Don't refetch, reuse cache
                                     $stage = 'B'
                                     $exitdo = $true
                                     break 
@@ -726,7 +856,8 @@ function Invoke-MuFoManual {
                                         $stage = 'A'
                                         $exitdo = $true
                                         break
-                                    } else {
+                                    }
+                                    else {
                                         Write-Warning "Invalid provider: $newProvider. Staying with $Provider."
                                         continue
                                     }
@@ -751,7 +882,8 @@ function Invoke-MuFoManual {
                                     $artistNameForFolder = if ($script:ManualAlbumArtist) {
                                         Write-Verbose "Using ManualAlbumArtist for folder name: $script:ManualAlbumArtist"
                                         $script:ManualAlbumArtist
-                                    } else {
+                                    }
+                                    else {
                                         Get-IfExists $ProviderArtist 'name'
                                     }
                                     $safeArtistName = Approve-PathSegment -Segment $artistNameForFolder -Replacement '_' -CollapseRepeating -Transliterate
@@ -763,66 +895,67 @@ function Invoke-MuFoManual {
                                         NewAlbumName = $safeAlbumName
                                     }
                                     # call Move-AlbumFolder and pass -WhatIf from the caller (if requested)
-                                    $moveResult = Move-AlbumFolder @mvArgs -WhatIf:$useWhatIf
-    
-                                    if ($moveResult -and $moveResult.Success) {
-                                        # If the move would not change the path, don't prompt or attempt to re-open.
-                                        if ($useWhatIf) {
-                                            Write-Host "WhatIf: album would be moved:" -ForegroundColor Yellow
-                                            Write-Host -NoNewline -ForegroundColor Green "Old: "
-                                            Write-Host $oldpath
-                                            Write-Host -NoNewline -ForegroundColor Green "New: "
-                                            Write-Host $moveResult.NewAlbumPath
-                                            if ($moveResult.NewAlbumPath -ne $oldpath -and -not ($NonInteractive -or $goC) -and -not $useWhatIf) {
-                                                # Only pause for an explicit interactive run. In preview/WhatIf or when
-                                                # NonInteractive/goC is set, skip the blocking prompt so unattended
-                                                # runs don't hang.
-                                                Read-Host -Prompt "Press Enter to continue"
-                                            }
-                                            else {
-                                                Write-Verbose "NonInteractive/goC/WhatIf or no-path-change: skipping pause after move."
-                                            }
-                                            # Stay in doTracks loop to avoid re-fetching tracks
-                                            continue doTracks
-                                        }
-                                        else {
-                                            # If the new path is identical to the current one, avoid reloading
-                                            if ($moveResult.NewAlbumPath -eq $oldpath) {
-                                                Write-Verbose "Move result indicates no change to album path; continuing."
-                                                # Stay in doTracks loop to avoid re-fetching tracks
-                                                continue doTracks
-                                            }
-                                            $album = Get-Item -LiteralPath $moveResult.NewAlbumPath
-                                            # Reload audio files from new location
-                                            $audioFiles = Get-ChildItem -LiteralPath $album.FullName -File -Recurse | Where-Object { $_.Extension -match '\.(mp3|flac|wav|m4a|aac|ogg|ape)' }
-                                            $audioFiles = foreach ($f in $audioFiles) {
-                                                try {
-                                                    $tagFile = [TagLib.File]::Create($f.FullName)
-                                                    [PSCustomObject]@{
-                                                        FilePath    = $f.FullName
-                                                        DiscNumber  = $tagFile.Tag.Disc
-                                                        TrackNumber = $tagFile.Tag.Track
-                                                        Title       = $tagFile.Tag.Title
-                                                        TagFile     = $tagFile
-                                                        Composer    = if ($tagFile.Tag.Composers) { $tagFile.Tag.Composers -join '; ' } else { 'Unknown Composer' }
-                                                        Artist      = if ($tagFile.Tag.Performers) { $tagFile.Tag.Performers -join '; ' } else { 'Unknown Artist' }
-                                                        Name        = if ($tagFile.Tag.Title) { $tagFile.Tag.Title } else { $f.BaseName }
-                                                        Duration    = $tagFile.Properties.Duration.TotalMilliseconds
-                                                    }
-                                                }
-                                                catch {
-                                                    Write-Warning "Skipping corrupted or invalid audio file: $($f.FullName) - Error: $($_.Exception.Message)"
-                                                    continue
-                                                }
-                                            }
-                                            $refreshTracks = $true
-                                            # Stay in doTracks loop to avoid re-fetching tracks
-                                            continue doTracks
-                                        }
-                                    }
-                                    else {
-                                        Write-Warning "Move failed or was skipped. Move result: $moveResult"
-                                    }
+                                    $moveResult = Invoke-MoveAlbumWithRetry -mvArgs $mvArgs -useWhatIf $useWhatIf
+                                    & $handleMoveSuccess -moveResult $moveResult -useWhatIf $useWhatIf -oldpath $oldpath -album $album -audioFiles $audioFiles -refreshTracks $refreshTracks
+                                    continue doTracks                         
+                                    # if ($moveResult -and $moveResult.Success) {
+                                    #     # If the move would not change the path, don't prompt or attempt to re-open.
+                                    #     if ($useWhatIf) {
+                                    #         Write-Host "WhatIf: album would be moved:" -ForegroundColor Yellow
+                                    #         Write-Host -NoNewline -ForegroundColor Green "Old: "
+                                    #         Write-Host $oldpath
+                                    #         Write-Host -NoNewline -ForegroundColor Green "New: "
+                                    #         Write-Host $moveResult.NewAlbumPath
+                                    #         if ($moveResult.NewAlbumPath -ne $oldpath -and -not ($NonInteractive -or $goC) -and -not $useWhatIf) {
+                                    #             # Only pause for an explicit interactive run. In preview/WhatIf or when
+                                    #             # NonInteractive/goC is set, skip the blocking prompt so unattended
+                                    #             # runs don't hang.
+                                    #             Read-Host -Prompt "Press Enter to continue"
+                                    #         }
+                                    #         else {
+                                    #             Write-Verbose "NonInteractive/goC/WhatIf or no-path-change: skipping pause after move."
+                                    #         }
+                                    #         # Stay in doTracks loop to avoid re-fetching tracks
+                                    #         continue doTracks
+                                    #     }
+                                    #     else {
+                                    #         # If the new path is identical to the current one, avoid reloading
+                                    #         if ($moveResult.NewAlbumPath -eq $oldpath) {
+                                    #             Write-Verbose "Move result indicates no change to album path; continuing."
+                                    #             # Stay in doTracks loop to avoid re-fetching tracks
+                                    #             continue doTracks
+                                    #         }
+                                    #         $album = Get-Item -LiteralPath $moveResult.NewAlbumPath
+                                    #         # Reload audio files from new location
+                                    #         $audioFiles = Get-ChildItem -LiteralPath $album.FullName -File -Recurse | Where-Object { $_.Extension -match '\.(mp3|flac|wav|m4a|aac|ogg|ape)' }
+                                    #         $audioFiles = foreach ($f in $audioFiles) {
+                                    #             try {
+                                    #                 $tagFile = [TagLib.File]::Create($f.FullName)
+                                    #                 [PSCustomObject]@{
+                                    #                     FilePath    = $f.FullName
+                                    #                     DiscNumber  = $tagFile.Tag.Disc
+                                    #                     TrackNumber = $tagFile.Tag.Track
+                                    #                     Title       = $tagFile.Tag.Title
+                                    #                     TagFile     = $tagFile
+                                    #                     Composer    = if ($tagFile.Tag.Composers) { $tagFile.Tag.Composers -join '; ' } else { 'Unknown Composer' }
+                                    #                     Artist      = if ($tagFile.Tag.Performers) { $tagFile.Tag.Performers -join '; ' } else { 'Unknown Artist' }
+                                    #                     Name        = if ($tagFile.Tag.Title) { $tagFile.Tag.Title } else { $f.BaseName }
+                                    #                     Duration    = $tagFile.Properties.Duration.TotalMilliseconds
+                                    #                 }
+                                    #             }
+                                    #             catch {
+                                    #                 Write-Warning "Skipping corrupted or invalid audio file: $($f.FullName) - Error: $($_.Exception.Message)"
+                                    #                 continue
+                                    #             }
+                                    #         }
+                                    #         $refreshTracks = $true
+                                    #         # Stay in doTracks loop to avoid re-fetching tracks
+                                    #         continue doTracks
+                                    #     }
+                                    # }
+                                    # else {
+                                    #     Write-Warning "Move failed or was skipped. Move result: $moveResult"
+                                    # }
                                 }
                                 '^st\s+(?<range>.+)$' {
                                     if (-not $pairedTracks -or $pairedTracks.Count -eq 0) {
@@ -899,8 +1032,8 @@ function Invoke-MuFoManual {
                                             if ($null -ne $pair.AudioFile) {
                                                 $filePath = $pair.AudioFile.FilePath
                                                 $tagsParams = @{
-                                                    Artist = $ProviderArtist
-                                                    Album = $ProviderAlbum
+                                                    Artist       = $ProviderArtist
+                                                    Album        = $ProviderAlbum
                                                     SpotifyTrack = $pair.SpotifyTrack
                                                 }
                                                 if ($script:ManualAlbumArtist) {
@@ -911,9 +1044,11 @@ function Invoke-MuFoManual {
                                                     # Ensure it's a string
                                                     $albumArtistString = if ($script:ManualAlbumArtist -is [string]) {
                                                         $script:ManualAlbumArtist
-                                                    } elseif ($script:ManualAlbumArtist -is [array]) {
+                                                    }
+                                                    elseif ($script:ManualAlbumArtist -is [array]) {
                                                         $script:ManualAlbumArtist -join '; '
-                                                    } else {
+                                                    }
+                                                    else {
                                                         $script:ManualAlbumArtist.ToString()
                                                     }
                                                     $tagsParams['ManualAlbumArtist'] = $albumArtistString
@@ -1001,8 +1136,8 @@ function Invoke-MuFoManual {
                                         if ($null -ne $pair.AudioFile) {
                                             $filePath = $pair.AudioFile.FilePath
                                             $tagsParams = @{
-                                                Artist = $ProviderArtist
-                                                Album = $ProviderAlbum
+                                                Artist       = $ProviderArtist
+                                                Album        = $ProviderAlbum
                                                 SpotifyTrack = $pair.SpotifyTrack
                                             }
                                             if ($script:ManualAlbumArtist) {
@@ -1013,9 +1148,11 @@ function Invoke-MuFoManual {
                                                 # Ensure it's a string
                                                 $albumArtistString = if ($script:ManualAlbumArtist -is [string]) {
                                                     $script:ManualAlbumArtist
-                                                } elseif ($script:ManualAlbumArtist -is [array]) {
+                                                }
+                                                elseif ($script:ManualAlbumArtist -is [array]) {
                                                     $script:ManualAlbumArtist -join '; '
-                                                } else {
+                                                }
+                                                else {
                                                     $script:ManualAlbumArtist.ToString()
                                                 }
                                                 $tagsParams['ManualAlbumArtist'] = $albumArtistString
@@ -1060,7 +1197,8 @@ function Invoke-MuFoManual {
                                     $artistNameForFolder = if ($script:ManualAlbumArtist) {
                                         Write-Verbose "Using ManualAlbumArtist for folder name: $script:ManualAlbumArtist"
                                         $script:ManualAlbumArtist
-                                    } else {
+                                    }
+                                    else {
                                         Get-IfExists $ProviderArtist 'name'
                                     }
                                     $safeArtistName = Approve-PathSegment -Segment $artistNameForFolder -Replacement '_' -CollapseRepeating -Transliterate
@@ -1072,63 +1210,64 @@ function Invoke-MuFoManual {
                                         NewAlbumName = $safeAlbumName
                                     }
     
-                                    $moveResult = Move-AlbumFolder @mvArgs -WhatIf:$useWhatIf
-
-                                    if ($moveResult -and $moveResult.Success) {
-                                        if ($useWhatIf) {
-                                            Write-Host "WhatIf: album would be moved:" -ForegroundColor Yellow
-                                            Write-Host -NoNewline -ForegroundColor Green "Old: "
-                                            Write-Host $oldpath
-                                            Write-Host -NoNewline -ForegroundColor Green "New: "
-                                            Write-Host $moveResult.NewAlbumPath
-                                            if ($moveResult.NewAlbumPath -ne $oldpath -and -not ($NonInteractive -or $goC) -and -not $useWhatIf) {
-                                                Read-Host -Prompt "Press Enter to continue"
-                                            }
-                                            else {
-                                                Write-Verbose "NonInteractive/goC/WhatIf or no-path-change: skipping pause after move."
-                                            }
-                                            Write-Host "Album saved. Choose 's' to skip to next album, or select another option." -ForegroundColor Yellow
-                                            continue
-                                        }
-                                        else {
-                                            if ($moveResult.NewAlbumPath -eq $oldpath) {
-                                                Write-Verbose "Move result indicates no change to album path; continuing."
-                                                Write-Host "Album saved. Choose 's' to skip to next album, or select another option." -ForegroundColor Yellow
-                                                continue
-                                            }
-                                            # Folder was moved - update $album and reload audio files from new location
-                                            $album = Get-Item -LiteralPath $moveResult.NewAlbumPath
+                                    $moveResult = Invoke-MoveAlbumWithRetry -mvArgs $mvArgs -useWhatIf $useWhatIf
+                                    & $handleMoveSuccess -moveResult $moveResult -useWhatIf $useWhatIf -oldpath $oldpath -album $album -audioFiles $audioFiles -refreshTracks $refreshTracks
+                                    continue                                   
+                                    # if ($moveResult -and $moveResult.Success) {
+                                    #     if ($useWhatIf) {
+                                    #         Write-Host "WhatIf: album would be moved:" -ForegroundColor Yellow
+                                    #         Write-Host -NoNewline -ForegroundColor Green "Old: "
+                                    #         Write-Host $oldpath
+                                    #         Write-Host -NoNewline -ForegroundColor Green "New: "
+                                    #         Write-Host $moveResult.NewAlbumPath
+                                    #         if ($moveResult.NewAlbumPath -ne $oldpath -and -not ($NonInteractive -or $goC) -and -not $useWhatIf) {
+                                    #             Read-Host -Prompt "Press Enter to continue"
+                                    #         }
+                                    #         else {
+                                    #             Write-Verbose "NonInteractive/goC/WhatIf or no-path-change: skipping pause after move."
+                                    #         }
+                                    #         Write-Host "Album saved. Choose 's' to skip to next album, or select another option." -ForegroundColor Yellow
+                                    #         continue
+                                    #     }
+                                    #     else {
+                                    #         if ($moveResult.NewAlbumPath -eq $oldpath) {
+                                    #             Write-Verbose "Move result indicates no change to album path; continuing."
+                                    #             Write-Host "Album saved. Choose 's' to skip to next album, or select another option." -ForegroundColor Yellow
+                                    #             continue
+                                    #         }
+                                    #         # Folder was moved - update $album and reload audio files from new location
+                                    #         $album = Get-Item -LiteralPath $moveResult.NewAlbumPath
                                             
-                                            # Reload audio files with fresh TagLib handles from the NEW album path
-                                            $audioFiles = Get-ChildItem -LiteralPath $album.FullName -File -Recurse | Where-Object { $_.Extension -match '\.(mp3|flac|wav|m4a|aac|ogg|ape)' }
-                                            $audioFiles = foreach ($f in $audioFiles) {
-                                                try {
-                                                    $tagFile = [TagLib.File]::Create($f.FullName)
-                                                    [PSCustomObject]@{
-                                                        FilePath    = $f.FullName
-                                                        DiscNumber  = $tagFile.Tag.Disc
-                                                        TrackNumber = $tagFile.Tag.Track
-                                                        Title       = $tagFile.Tag.Title
-                                                        TagFile     = $tagFile
-                                                        Composer    = if ($tagFile.Tag.Composers) { $tagFile.Tag.Composers -join '; ' } else { 'Unknown Composer' }
-                                                        Artist      = if ($tagFile.Tag.Performers) { $tagFile.Tag.Performers -join '; ' } else { 'Unknown Artist' }
-                                                        Name        = if ($tagFile.Tag.Title) { $tagFile.Tag.Title } else { $f.BaseName }
-                                                        Duration    = $tagFile.Properties.Duration.TotalMilliseconds
-                                                    }
-                                                }
-                                                catch {
-                                                    Write-Warning "Skipping corrupted or invalid audio file: $($f.FullName) - Error: $($_.Exception.Message)"
-                                                    continue
-                                                }
-                                            }
-                                            $refreshTracks = $true
-                                            Write-Host "Album saved and folder moved. Choose 's' to skip to next album, or select another option." -ForegroundColor Yellow
-                                            continue 
-                                        }
-                                    }
-                                    else {
-                                        Write-Warning "Move failed or was skipped. Move result: $moveResult"
-                                    }
+                                    #         # Reload audio files with fresh TagLib handles from the NEW album path
+                                    #         $audioFiles = Get-ChildItem -LiteralPath $album.FullName -File -Recurse | Where-Object { $_.Extension -match '\.(mp3|flac|wav|m4a|aac|ogg|ape)' }
+                                    #         $audioFiles = foreach ($f in $audioFiles) {
+                                    #             try {
+                                    #                 $tagFile = [TagLib.File]::Create($f.FullName)
+                                    #                 [PSCustomObject]@{
+                                    #                     FilePath    = $f.FullName
+                                    #                     DiscNumber  = $tagFile.Tag.Disc
+                                    #                     TrackNumber = $tagFile.Tag.Track
+                                    #                     Title       = $tagFile.Tag.Title
+                                    #                     TagFile     = $tagFile
+                                    #                     Composer    = if ($tagFile.Tag.Composers) { $tagFile.Tag.Composers -join '; ' } else { 'Unknown Composer' }
+                                    #                     Artist      = if ($tagFile.Tag.Performers) { $tagFile.Tag.Performers -join '; ' } else { 'Unknown Artist' }
+                                    #                     Name        = if ($tagFile.Tag.Title) { $tagFile.Tag.Title } else { $f.BaseName }
+                                    #                     Duration    = $tagFile.Properties.Duration.TotalMilliseconds
+                                    #                 }
+                                    #             }
+                                    #             catch {
+                                    #                 Write-Warning "Skipping corrupted or invalid audio file: $($f.FullName) - Error: $($_.Exception.Message)"
+                                    #                 continue
+                                    #             }
+                                    #         }
+                                    #         $refreshTracks = $true
+                                    #         Write-Host "Album saved and folder moved. Choose 's' to skip to next album, or select another option." -ForegroundColor Yellow
+                                    #         continue 
+                                    #     }
+                                    # }
+                                    # else {
+                                    #     Write-Warning "Move failed or was skipped. Move result: $moveResult"
+                                    # }
                                 }
     
                                 '^(\d+(?:\.\.\d+|\-\d+)) (\+?\w+) (.+)$' {
