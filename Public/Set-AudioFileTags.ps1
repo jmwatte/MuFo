@@ -449,8 +449,10 @@ function Set-AudioFileTags {
                                 }
                             }
                             'Artists' { 
-                                if ($newValue) {
+                                 if ($newValue) {
                                     $tag.Performers = $newValue
+                                } else {
+                                    $tag.Performers = @()
                                 }
                             }
                             'AlbumArtist' { 
@@ -461,6 +463,8 @@ function Set-AudioFileTags {
                             'AlbumArtists' { 
                                 if ($newValue) {
                                     $tag.AlbumArtists = $newValue
+                                } else {
+                                    $tag.AlbumArtists = @()
                                 }
                             }
                             'Album' { $tag.Album = $newValue }
@@ -468,7 +472,7 @@ function Set-AudioFileTags {
                                 if ($newValue) {
                                     $tag.Year = [uint32]$newValue
                                 } else {
-                                    $tag.Year = 0
+                                    $tag.Year = 0000
                                 }
                             }
                             'Track' { 

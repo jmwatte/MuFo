@@ -179,7 +179,7 @@ function Get-AudioFileTags {
             }
         } elseif (Test-Path -LiteralPath $Path -PathType Container) {
             # Directory - scan for audio files, excluding system/library folders and non-audio files
-            $files = Get-ChildItem -LiteralPath $Path -File | 
+            $files = Get-ChildItem -LiteralPath $Path -File -Recurse | 
                      Where-Object { 
                          $_.Extension.ToLower() -in $supportedExtensions -and
                          $_.FullName -notlike "*\lib\*" -and

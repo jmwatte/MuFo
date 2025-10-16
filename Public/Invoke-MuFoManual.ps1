@@ -640,6 +640,7 @@ function Invoke-MuFoManual {
                                 $refreshTracks = $false
 
                                 if ($goC -and -not $goCDisplayShown) {
+                                    Clear-Host
                                     $autoReader = { param($prompt) 'q' }
                                     $autoShowParams = @{
                                         PairedTracks  = $pairedTracks
@@ -671,7 +672,7 @@ function Invoke-MuFoManual {
                                     ProviderName   = $Provider
                                 }
                                 if ($reverseSource) { $paramshow.Reverse = $true }
-                                
+                                Clear-Host
                                 $inputF = Show-Tracks @paramshow
 
                                 if ($null -eq $inputF) { continue }

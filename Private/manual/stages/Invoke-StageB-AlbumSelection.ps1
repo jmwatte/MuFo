@@ -375,6 +375,24 @@ function Invoke-StageB-AlbumSelection {
             '^id:(.+)$' {
                 $id = $matches[1].Trim()
                 if ($Provider -eq 'Discogs') { $id = & $NormalizeDiscogsId $id }
+                 if ($Provider -eq 'MusicBrainz') {
+                    Write-Host "Fetching MusicBrainz release information..." -ForegroundColor Cyan
+                    try {
+                        $release = Invoke-MusicBrainzRequest -Endpoint 'release' -Id $id -Inc 'artist-credits'
+                        if ($release) {
+                            $selectedAlbum = @{
+                                id = $id
+                                name = if (Get-IfExists $release 'title') { $release.title } else { $id }
+                                release_date = if (Get-IfExists $release 'date') { $release.date } else { $null }
+                            }
+                            Write-Host "✓ Found release: $($selectedAlbum.name)" -ForegroundColor Green
+                        } else {
+                            Write-Warning "Could not fetch release information for ID: $id"
+                        }
+                    } catch {
+                        Write-Warning "Failed to fetch MusicBrainz release information: $_"
+                    }
+                }
                 return @{
                     NextStage = 'C'
                     SelectedAlbum = @{ id = $id; name = $id }

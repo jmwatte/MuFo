@@ -21,7 +21,7 @@ function Get-MBAlbumTracks {
     )
 
     try {
-        Write-Verbose "Fetching MusicBrainz release: $Id"
+        Write-Host "🔍 Fetching MusicBrainz release: $Id..." -ForegroundColor Cyan
         
         # Request release with media (tracks), artist credits, and genres/tags
         # Include release-groups to get album-level genre information
@@ -37,6 +37,8 @@ function Get-MBAlbumTracks {
             Write-Warning "No release found for ID: $Id"
             return @()
         }
+        
+        Write-Host "✓ Found release: $($release.title)" -ForegroundColor Green
         
         # Extract genres from release-group (album-level genres)
         $albumGenres = @()
@@ -102,10 +104,18 @@ function Get-MBAlbumTracks {
         }
         
         $allTracks = @()
+        $totalTracks = 0
+        foreach ($medium in $media) {
+            $tracks = if (Get-IfExists $medium 'tracks') { $medium.tracks } else { @() }
+            $totalTracks += $tracks.Count
+        }
+        
+        Write-Host "📀 Processing $totalTracks tracks..." -ForegroundColor Cyan
         
         # Cache for work details to avoid redundant API calls
         # Classical albums often have multiple tracks linking to the same work (movements)
         $workCache = @{}
+        $processedTracks = 0
         
         foreach ($medium in $media) {
             $discNumber = if (Get-IfExists $medium 'position') { $medium.position } else { 1 }
@@ -117,6 +127,13 @@ function Get-MBAlbumTracks {
                 if (-not $recording) {
                     Write-Verbose "Track missing recording data, skipping"
                     continue
+                }
+                
+                $processedTracks++
+                
+                # Show progress for every 10 tracks or first/last
+                if ($processedTracks % 10 -eq 0 -or $processedTracks -eq 1 -or $processedTracks -eq $totalTracks) {
+                    Write-Host "  Processing track $processedTracks/$totalTracks..." -ForegroundColor Gray
                 }
                 
                 # Extract artist credits
@@ -301,9 +318,9 @@ function Get-MBAlbumTracks {
             }
         }
         
-        Write-Verbose "Found $($allTracks.Count) tracks for release $Id"
+        Write-Host "✓ Completed processing $($allTracks.Count) tracks" -ForegroundColor Green
         if ($workCache.Count -gt 0) {
-            Write-Verbose "Work cache: fetched $($workCache.Count) unique works (avoided redundant API calls for repeated works)"
+            Write-Host "  (Fetched $($workCache.Count) unique works for composer information)" -ForegroundColor Gray
         }
         return $allTracks
     }
